@@ -827,7 +827,7 @@ public class JobPanel extends JPanel {
     }
 
     private void updateTitle() {
-        String title = String.format("OpenPnP - %s%s", job.isDirty() ? "*" : "", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        String title = String.format("Pono - %s%s", job.isDirty() ? "*" : "", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName()));
         mainFrame.setTitle(title);
         if (jobViewer != null) {

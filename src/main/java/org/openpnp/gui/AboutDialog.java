@@ -72,7 +72,7 @@ public class AboutDialog extends JDialog {
     }
 
     private void createUi() {
-        setTitle(String.format("About OpenPnP %s", Main.getVersionString()));
+        setTitle(String.format("About Pono %s", Main.getVersionString()));
         setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         setBounds(100, 100, 347, 360);
         getContentPane().setLayout(new BorderLayout());
@@ -92,7 +92,7 @@ public class AboutDialog extends JDialog {
         contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
         getContentPane().add(contentPanel, BorderLayout.CENTER);
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
-        JLabel lblOpenpnp = new JLabel("OpenPnP");
+        JLabel lblOpenpnp = new JLabel("Pono");
         lblOpenpnp.setAlignmentX(Component.CENTER_ALIGNMENT);
         lblOpenpnp.setFont(new Font("Lucida Grande", Font.BOLD, 32));
         contentPanel.add(lblOpenpnp);
@@ -100,6 +100,16 @@ public class AboutDialog extends JDialog {
         lblCopyright.setFont(new Font("Lucida Grande", Font.PLAIN, 10));
         lblCopyright.setAlignmentX(Component.CENTER_ALIGNMENT);
         contentPanel.add(lblCopyright);
+        // GPL v3 §5(a): a modified work must carry a prominent notice that it was modified, with a date.
+        // Two short labels: the dialog is 347 px wide and a JLabel truncates rather than wraps.
+        JLabel lblModified = new JLabel("Modified version of OpenPnP 2.6 (2026), GPL v3");
+        lblModified.setFont(new Font("Lucida Grande", Font.PLAIN, 10));
+        lblModified.setAlignmentX(Component.CENTER_ALIGNMENT);
+        contentPanel.add(lblModified);
+        JLabel lblModifiedBy = new JLabel("Pono changes © Purapura-pp");
+        lblModifiedBy.setFont(new Font("Lucida Grande", Font.PLAIN, 10));
+        lblModifiedBy.setAlignmentX(Component.CENTER_ALIGNMENT);
+        contentPanel.add(lblModifiedBy);
         JLabel lblVersion = new JLabel("Version: " + Main.getVersion());
         lblVersion.setFont(new Font("Lucida Grande", Font.PLAIN, 10));
         lblVersion.setAlignmentX(Component.CENTER_ALIGNMENT);
