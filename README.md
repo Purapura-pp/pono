@@ -1,6 +1,6 @@
 # Pono
 
-Open Source SMT Pick and Place Software — *pōnō*, Latin for "I place".
+Open Source SMT Pick and Place Software
 
 > **Pono 是 [OpenPnP](https://github.com/openpnp/openpnp) 2.6 的修改版**，依 GNU GPL v3 发布。
 > 分叉自上游提交 `5bd404cfc7`（2026-02-27），当前版本 `2.6-pono.1`（2026-09）。
