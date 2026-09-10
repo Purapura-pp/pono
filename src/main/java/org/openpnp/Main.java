@@ -20,8 +20,13 @@
 package org.openpnp;
 
 import java.awt.EventQueue;
+import java.awt.Font;
+import java.awt.GraphicsEnvironment;
 import java.io.File;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
@@ -30,6 +35,7 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.components.ThemeInfo;
 import org.openpnp.gui.components.ThemeSettingsPanel;
+import org.openpnp.gui.theme.PonoThemes;
 import org.openpnp.logging.ConsoleWriter;
 import org.openpnp.logging.SystemLogger;
 import org.openpnp.model.Configuration;
@@ -38,6 +44,8 @@ import org.pmw.tinylog.Level;
 import org.pmw.tinylog.Logger;
 import org.pmw.tinylog.writers.RollingFileWriter;
 import org.apache.commons.io.FileUtils;
+
+import com.formdev.flatlaf.FlatLaf;
 
 import javassist.CannotCompileException;
 import javassist.ClassPool;
@@ -186,7 +194,15 @@ public class Main {
         final Configuration configuration = Configuration.get();
         Locale.setDefault(Configuration.get().getLocale());
 
+        // Numeric readouts such as the DRO need digits of equal width.
+        FlatLaf.setPreferredMonospacedFontFamily(preferredMonospacedFontFamily());
+
         ThemeInfo theme = configuration.getThemeInfo();
+        if (theme == null) {
+            // Nothing stored yet. Without this, setTheme(null, ...) returns immediately and
+            // the user is left on the system look and feel installed further up.
+            theme = PonoThemes.followSystem();
+        }
         new ThemeSettingsPanel().setTheme(theme, configuration.getFontSize(), configuration.isAlternateRows());
         ThemeDialog.getInstance().setOldTheme(theme);
         ToolTipManager.sharedInstance().setDismissDelay(60000);
@@ -204,5 +220,21 @@ public class Main {
                 }
             }
         });
+    }
+
+    /**
+     * @return the first of Pono's preferred monospaced families that is actually installed,
+     *         falling back to whatever the platform calls monospaced. Handing FlatLaf a
+     *         family that is not present leaves the readouts proportionally spaced.
+     */
+    private static String preferredMonospacedFontFamily() {
+        Set<String> installed = new HashSet<>(Arrays.asList(
+                GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames()));
+        for (String family : new String[] { "Cascadia Mono", "JetBrains Mono", "Consolas" }) {
+            if (installed.contains(family)) {
+                return family;
+            }
+        }
+        return Font.MONOSPACED;
     }
 }

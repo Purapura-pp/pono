@@ -32,6 +32,7 @@ import javax.swing.UIManager;
 
 import org.openpnp.Translations;
 import org.openpnp.gui.support.FlexibleColor;
+import org.openpnp.gui.theme.PonoThemes;
 import org.openpnp.model.Configuration;
 import org.pmw.tinylog.Logger;
 
@@ -248,6 +249,11 @@ public class ThemeSettingsPanel extends JPanel {
 
         themes.clear();
 
+        themes.add(new ThemeInfo(Translations.getString("Theme.Section.Pono"), null, false, null, null)); //$NON-NLS-1$
+        themes.add(PonoThemes.followSystem());
+        themes.add(PonoThemes.light());
+        themes.add(PonoThemes.dark());
+
         themes.add(new ThemeInfo(Translations.getString("Theme.Section.System"), null, false, null, null)); //$NON-NLS-1$
         UIManager.LookAndFeelInfo[] lookAndFeels = UIManager.getInstalledLookAndFeels();
         for (UIManager.LookAndFeelInfo lookAndFeel : lookAndFeels) {
@@ -327,16 +333,19 @@ public class ThemeSettingsPanel extends JPanel {
         }
         // change look and feel
         if (themeInfo.lafClassName != null) {
+            // Resolved on every apply, not once when stored, so that the follow-the-system
+            // entry picks up an OS appearance change without rewriting the preference.
+            String lafClassName = PonoThemes.resolveLafClassName(themeInfo.lafClassName);
             FlatAnimatedLafChange.showSnapshot();
-            if (!themeInfo.lafClassName.equals(UIManager.getLookAndFeel().getClass().getName())) {
-                if (themeInfo.lafClassName.equals("com.sun.java.swing.plaf.gtk.GTKLookAndFeel")) {
+            if (!lafClassName.equals(UIManager.getLookAndFeel().getClass().getName())) {
+                if (lafClassName.equals("com.sun.java.swing.plaf.gtk.GTKLookAndFeel")) {
                     UIManager.put("Slider.paintValue", Boolean.FALSE);
                 }
                 try {
-                    UIManager.setLookAndFeel(themeInfo.lafClassName);
+                    UIManager.setLookAndFeel(lafClassName);
                 } catch (Exception ignore) {
                     Logger.error(ignore, "Failed to apply look and feel {}, keeping the current one.",
-                            themeInfo.lafClassName);
+                            lafClassName);
                 }
             }
         } else if (themeInfo.themeFile != null) {
