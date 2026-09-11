@@ -301,7 +301,7 @@ public class MachineDiagnosticsIssuesTest {
         Solutions.Issue issue = issue(results, HOMING_SCATTERS);
 
         assertFalse(issue.canBeAccepted(), "this one has nothing of its own to apply");
-        assertTrue(issue.getSolution().contains("Enable Visual Homing"),
+        assertTrue(issue.getUntranslatedSolution().contains("Enable Visual Homing"),
                 "it has to name the solution that does the work");
     }
 
@@ -323,7 +323,7 @@ public class MachineDiagnosticsIssuesTest {
         Solutions.Issue issue = issue(results, SCALE_DISAGREES);
 
         assertFalse(issue.canBeAccepted());
-        assertTrue(issue.getExtendedDescription().contains("X"),
+        assertTrue(issue.getExtendedDescription().contains("+1.20%"),
                 "the worse of the two directions is the one worth describing");
     }
 

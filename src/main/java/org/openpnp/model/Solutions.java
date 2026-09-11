@@ -313,6 +313,11 @@ public class Solutions {
         public String getUntranslatedIssue() {
             return issue;
         }
+
+        /** The solution as the source wrote it, for the same reason as getUntranslatedIssue. */
+        public String getUntranslatedSolution() {
+            return solution;
+        }
         public Severity getSeverity() {
             return severity;
         }

@@ -1,6 +1,7 @@
 package org.openpnp.machine.reference.wizards;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -15,7 +16,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpnp.machine.reference.ReferenceMachine;
+import org.openpnp.machine.reference.solutions.MachineDiagnostics.TestGroup;
 import org.openpnp.model.Configuration;
+import org.openpnp.model.Solutions;
 
 /**
  * Builds the diagnostics page against the default machine and reads every cell it produces.
@@ -65,12 +68,28 @@ public class MachineDiagnosticsWizardTest {
             assertFalse(cell.startsWith("!") && cell.endsWith("!"),
                     "a cell shows a missing translation key: " + cell);
         }
+        // Element names and the test group enum, rather than any interface wording: the page is
+        // shown in the machine's display language, and this runs on whatever the developer's is.
         assertTrue(cells.contains("Top"), "the default machine's camera was not described");
         assertTrue(cells.contains("N1"), "the default machine's nozzle was not described");
-        assertTrue(cells.contains("Primary calibration fiducial on H1"),
-                "a calibration row did not get the element's name put into it");
-        assertTrue(cells.contains("never measured"),
-                "the calibration status did not say that nothing has been measured yet");
+        assertTrue(cells.stream().anyMatch(cell -> cell.contains("H1") && cell.length() > 2),
+                "no row put the head's name into a phrase, so the phrasing took no argument");
+        JTable calibration = healthTable(tablesIn(wizard));
+        assertNotNull(calibration, "the page has no section reporting on health");
+        assertTrue(calibration.getRowCount() >= TestGroup.values().length,
+                "the calibration status did not reach a row per test group");
+    }
+
+    /** The section reporting health, found by the column that carries a severity. */
+    private static JTable healthTable(List<JTable> tables) {
+        for (JTable table : tables) {
+            for (int column = 0; column < table.getColumnCount(); column++) {
+                if (Solutions.Severity.class.equals(table.getColumnClass(column))) {
+                    return table;
+                }
+            }
+        }
+        return null;
     }
 
     /** Every table on the page, wherever it sits in the panels the page is built from. */

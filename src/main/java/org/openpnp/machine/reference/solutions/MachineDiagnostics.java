@@ -539,7 +539,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     "Feed rate per second",
                     "The feed rate the axis will be planned with.",
                     String.format("The controller reported a maximum feed rate of %.0f %s/s for "
-                            + "this axis %s, and the axis is set to be planned at %.0f %s/s. The "
+                            + "this axis on %s, and the axis is set to be planned at %.0f %s/s. The "
                             + "controller caps every move at its own figure without reporting "
                             + "that it did, so the planner's move times, and the speed factors "
                             + "it scales against them, are computed for a machine that is not "
@@ -557,7 +557,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     "Acceleration per second squared",
                     "The acceleration the axis will be planned with.",
                     String.format("The controller reported a maximum acceleration of %.0f %s/s² "
-                            + "for this axis %s, and the axis is set to be planned at %.0f %s/s². "
+                            + "for this axis on %s, and the axis is set to be planned at %.0f "
+                            + "%s/s². "
                             + "Every move is capped at the controller's figure, so the planned "
                             + "ramps are shorter than the real ones and the machine is still "
                             + "moving when the plan says it has arrived.", acceleration, unit,
@@ -579,7 +580,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         "Resolution",
                         "The smallest difference in coordinate the axis is asked to make.",
                         String.format("The controller reported %.4f steps per unit for this axis "
-                                + "%s, so its smallest step is %.5f %s, while the axis "
+                                + "on %s, so its smallest step is %.5f %s, while the axis "
                                 + "resolution is set to %.5f %s. Resolution is what decides "
                                 + "whether a coordinate counts as a move at all, so a value "
                                 + "below one step sends moves the machine cannot make and "
@@ -611,7 +612,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
                     "Feed rate per second",
                     "The feed rate the axis will be planned with.",
-                    String.format("Move times measured %s fit a cruise velocity of %.0f %s/s, "
+                    String.format("Move times measured on %s fit a cruise velocity of %.0f %s/s, "
                             + "against the %.0f %s/s the axis is planned with. Whatever is "
                             + "holding it back - the controller, the driver, the mechanics - the "
                             + "planner is timing moves that take longer than it thinks.", when,
@@ -629,7 +630,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
                     "Acceleration per second squared",
                     "The acceleration the axis will be planned with.",
-                    String.format("Move times measured %s fit an acceleration of %.0f %s/s², "
+                    String.format("Move times measured on %s fit an acceleration of %.0f %s/s², "
                             + "against the %.0f %s/s² the axis is planned with. The planner puts "
                             + "the start of the deceleration where the configured figure says it "
                             + "should be, so on the real machine the ramp is still running "
@@ -663,7 +664,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
                 "Backlash offset",
                 "How far past the target the axis drives before approaching it.",
-                String.format("The axis measured up to %.4f mm of backlash %s, with compensation "
+                String.format("The axis measured up to %.4f mm of backlash on %s, with compensation "
                         + "switched off, and %s is set to drive %.4f mm past the target before "
                         + "approaching it. That does not clear the slack, so the approach begins "
                         + "inside it and every position still carries the backlash. The offered "
@@ -692,7 +693,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     "The camera waits a fixed time that ends before the image has stopped moving.",
                     "Wait as long as the image was measured taking to settle.",
                     Solutions.Severity.Error,
-                    String.format("The image was still moving %.0f ms after a %.0f mm move %s, "
+                    String.format("The image was still moving %.0f ms after a %.0f mm move on %s, "
                             + "and the camera waits %d ms before it captures. Everything that "
                             + "looks through this camera - the calibrations, fiducial location, "
                             + "part alignment - is therefore measuring a moving image, and no "
@@ -705,7 +706,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     "The camera waits considerably longer than the image takes to settle.",
                     "Shorten the wait to what the image was measured needing.",
                     Solutions.Severity.Suggestion,
-                    String.format("The image settled %.0f ms after a %.0f mm move %s, and the "
+                    String.format("The image settled %.0f ms after a %.0f mm move on %s, and the "
                             + "camera waits %d ms before it captures. The difference is spent on "
                             + "every capture the machine makes, which over a job of thousands of "
                             + "placements is time spent waiting for something that has already "
@@ -741,7 +742,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "of view.",
                     "Calibrate the camera with the advanced camera calibration offered here.",
                     Solutions.Severity.Warning, WIKI_CALIBRATION_SOLUTIONS,
-                    String.format("A fiducial swept across the field of view %s moved %+.2f%% "
+                    String.format("A fiducial swept across the field of view on %s moved %+.2f%% "
                             + "further in %s than Units per Pixel accounts for, leaving %.4f mm "
                             + "rms of distortion under the scale error. Units per Pixel scales "
                             + "every vision correction the machine makes, so the error is carried "
@@ -774,9 +775,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 "Homing does not put the machine origin back in the same place.",
                 "Set up visual homing, with the Enable Visual Homing solution offered here.",
                 Solutions.Severity.Warning, WIKI_VISUAL_HOMING,
-                String.format("Homing %d times and measuring the same fiducial after each one %s "
-                        + "put the origin within %.4f mm of itself. Visual homing is off, so that "
-                        + "is the repeatability of the endstops, and it shifts every coordinate "
+                String.format("Homing %d times on %s and measuring the same fiducial after each "
+                        + "one put the origin within %.4f mm of itself. Visual homing is off, so "
+                        + "that is the repeatability of the endstops, and it shifts every coordinate "
                         + "the machine holds - fiducials, feeders, nozzle offsets - by that much "
                         + "between one power-up and the next. Visual homing takes the origin from "
                         + "a fiducial instead, which is the solution offered in this list.",
@@ -809,7 +810,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
                 "Backlash offset",
                 "How far the commanded angle is shifted in the direction the axis is turning.",
-                String.format("Approaching the same angle from either side %s left %.3f degrees "
+                String.format("Approaching the same angle from either side on %s left %.3f degrees "
                         + "between the two, measured on the bottom camera through the part "
                         + "itself, and no compensation is set. At the corner of a 5 mm part that "
                         + "angle is %.3f mm of placement error, which is why it shows up first "
@@ -998,16 +999,20 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
-     * When the group that measured this last ran, as a clause to drop into a description. The
-     * age of a measurement is what tells the reader whether to trust it against a machine they
-     * have worked on since.
+     * When the group that measured this last ran. The age of a measurement is what tells the
+     * reader whether to trust it against a machine they have worked on since.
+     * <p>
+     * A date and nothing else, so that the word around it - "on" - belongs to the sentence and
+     * can be translated with it, rather than arriving as an English fragment in the middle of a
+     * translated paragraph.
      */
     private static String measuredWhen(MachineDiagnosticsResults results, TestGroup group) {
         MachineDiagnosticsResults.Run run = results.getRun(group);
         if (run == null) {
-            return "in the last diagnostics run";
+            // Only reachable for conclusions stored before the runs were recorded alongside.
+            return "an earlier run";
         }
-        return "on " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(run.getWhen());
+        return new SimpleDateFormat("yyyy-MM-dd HH:mm").format(run.getWhen());
     }
 
     private Configuration getConfiguration() throws Exception {
