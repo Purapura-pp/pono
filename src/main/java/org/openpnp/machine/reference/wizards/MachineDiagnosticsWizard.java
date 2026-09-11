@@ -19,16 +19,22 @@
 
 package org.openpnp.machine.reference.wizards;
 
-import java.awt.Color;
+import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -41,20 +47,48 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.TitledBorder;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
+import org.openpnp.gui.MainFrame;
+import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.SimpleGraphView;
 import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.DoubleConverter;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.IntegerConverter;
 import org.openpnp.gui.support.LongConverter;
+import org.openpnp.gui.tablemodel.SolutionsTableModel;
+import org.openpnp.machine.reference.ReferenceHead;
 import org.openpnp.machine.reference.ReferenceMachine;
+import org.openpnp.machine.reference.ReferenceNozzleTip;
+import org.openpnp.machine.reference.ReferenceNozzleTipCalibration;
+import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
+import org.openpnp.machine.reference.camera.AbstractSettlingCamera;
+import org.openpnp.machine.reference.camera.ReferenceCamera;
+import org.openpnp.machine.reference.driver.AbstractReferenceDriver;
+import org.openpnp.machine.reference.driver.GcodeDriver;
 import org.openpnp.machine.reference.solutions.MachineDiagnostics;
 import org.openpnp.machine.reference.solutions.MachineDiagnostics.TestGroup;
+import org.openpnp.machine.reference.solutions.MachineDiagnosticsResults;
+import org.openpnp.model.Length;
+import org.openpnp.model.LengthUnit;
+import org.openpnp.model.Location;
+import org.openpnp.model.Solutions;
+import org.openpnp.spi.Axis;
+import org.openpnp.spi.Camera;
+import org.openpnp.spi.Driver;
+import org.openpnp.spi.Head;
+import org.openpnp.spi.HeadMountable;
+import org.openpnp.spi.Nozzle;
+import org.openpnp.spi.NozzleTip;
+import org.openpnp.spi.PropertySheetHolder;
 import org.openpnp.spi.base.AbstractMachine;
 import org.openpnp.util.UiUtils;
 
@@ -73,7 +107,19 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private final ReferenceMachine machine;
     private final MachineDiagnostics diagnostics;
 
+    /** A setting an element does not have, or a value it was never given. */
+    private static final String NONE = "-"; //$NON-NLS-1$
+
+    private static final DateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm"); //$NON-NLS-1$
+
     private final Map<TestGroup, JCheckBox> testChecks = new LinkedHashMap<>();
+    private ElementSection axes;
+    private ElementSection drivers;
+    private ElementSection cameras;
+    private ElementSection nozzles;
+    private ElementSection calibration;
+    private SolutionsTableModel issuesModel;
+    private AutoSelectTextTable issuesTable;
     private JButton btnRun;
     private JButton btnStop;
     private JButton btnOpenReport;
@@ -117,6 +163,9 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     public MachineDiagnosticsWizard(ReferenceMachine machine) {
         this.machine = machine;
         this.diagnostics = machine.getMachineDiagnostics();
+        createOverviewPanel();
+        createCalibrationPanel();
+        createIssuesPanel();
         createTestsPanel();
         createParametersPanel();
         createProgressPanel();
@@ -129,6 +178,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         super.addNotify();
         diagnostics.addPropertyChangeListener(resultListener);
         applyResult(null);
+        describeMachine();
     }
 
     @Override
@@ -161,6 +211,21 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 || "lastReportDirectory".equals(property)) {
             adaptDialog();
         }
+        if ("lastResults".equals(property)) {
+            describeMachine();
+        }
+    }
+
+    /**
+     * Fill the read-only sections from the machine as it stands. Rebuilt rather than bound,
+     * because there is nothing to edit here to lose and a machine is small enough to walk.
+     */
+    private void describeMachine() {
+        describeAxes();
+        describeDrivers();
+        describeCameras();
+        describeNozzles();
+        describeCalibration();
     }
 
     private void adaptDialog() {
@@ -244,12 +309,558 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         }
     };
 
-    private void createTestsPanel() {
+    // What the machine is defined as, which is what everything below was measured against. Read
+    // only: every one of these fields is already edited in the Machine Setup tree, and a second
+    // editor for the same field is two sets of validation that drift apart.
+
+    private void createOverviewPanel() {
+        axes = new ElementSection("Axes", "Name", "Type", "Letter", "Driver", "SoftLimits",
+                "SafeZone", "Moves");
+        drivers = new ElementSection("Drivers", "Name", "Kind", "Communications", "MotionControl",
+                "MoveComplete", "PositionReport");
+        cameras = new ElementSection("Cameras", "Name", "Looking", "UnitsPerPixel", "Settling",
+                "LensCalibration");
+        nozzles = new ElementSection("Nozzles", "Name", "NozzleTip", "HeadOffsets",
+                "RotationMode");
+    }
+
+    private void describeAxes() {
+        axes.clear();
+        for (Axis axis : machine.getAxes()) {
+            String letter = NONE;
+            String driver = NONE;
+            String softLimits = NONE;
+            String safeZone = NONE;
+            if (axis instanceof ReferenceControllerAxis) {
+                ReferenceControllerAxis controllerAxis = (ReferenceControllerAxis) axis;
+                letter = controllerAxis.getLetter();
+                driver = controllerAxis.getDriver() != null
+                        ? controllerAxis.getDriver().getName() : NONE;
+                softLimits = range(
+                        controllerAxis.isSoftLimitLowEnabled() ? controllerAxis.getSoftLimitLow()
+                                : null,
+                        controllerAxis.isSoftLimitHighEnabled() ? controllerAxis.getSoftLimitHigh()
+                                : null);
+                safeZone = range(
+                        controllerAxis.isSafeZoneLowEnabled() ? controllerAxis.getSafeZoneLow()
+                                : null,
+                        controllerAxis.isSafeZoneHighEnabled() ? controllerAxis.getSafeZoneHigh()
+                                : null);
+            }
+            axes.add(axis, axis.getName(), axis.getType(), letter, driver, softLimits, safeZone,
+                    movedBy(axis));
+        }
+    }
+
+    /** The nozzles and cameras that this axis moves, which is what makes it matter. */
+    private String movedBy(Axis axis) {
+        List<String> movables = new ArrayList<>();
+        for (Head head : machine.getHeads()) {
+            for (HeadMountable movable : head.getHeadMountables()) {
+                if (movable.getMappedAxes(machine).contains(axis)) {
+                    movables.add(movable.getName());
+                }
+            }
+        }
+        return movables.isEmpty() ? NONE : String.join(", ", movables);
+    }
+
+    private void describeDrivers() {
+        drivers.clear();
+        for (Driver driver : machine.getDrivers()) {
+            String communications = NONE;
+            if (driver instanceof AbstractReferenceDriver) {
+                communications = String.valueOf(
+                        ((AbstractReferenceDriver) driver).getCommunicationsType());
+            }
+            String moveComplete = NONE;
+            String positionReport = NONE;
+            if (driver instanceof GcodeDriver) {
+                GcodeDriver gcodeDriver = (GcodeDriver) driver;
+                moveComplete = oneLine(gcodeDriver.getCommand(null,
+                        GcodeDriver.CommandType.MOVE_TO_COMPLETE_COMMAND));
+                positionReport = oneLine(gcodeDriver.getCommand(null,
+                        GcodeDriver.CommandType.POSITION_REPORT_REGEX));
+            }
+            drivers.add(driver, driver.getName(), driver.getClass().getSimpleName(), communications,
+                    driver.getMotionControlType(), moveComplete, positionReport);
+        }
+    }
+
+    private void describeCameras() {
+        cameras.clear();
+        for (Camera camera : machine.getAllCameras()) {
+            String settling = NONE;
+            if (camera instanceof AbstractSettlingCamera) {
+                AbstractSettlingCamera settlingCamera = (AbstractSettlingCamera) camera;
+                settling = settlingCamera.getSettleMethod()
+                        + (settlingCamera.getSettleMethod()
+                                == AbstractSettlingCamera.SettleMethod.FixedTime
+                                        ? ", " + settlingCamera.getSettleTimeMs() + " ms" : "");
+            }
+            cameras.add(camera instanceof PropertySheetHolder ? camera : null, camera.getName(),
+                    camera.getLooking(), camera.getUnitsPerPixel(), settling,
+                    lensCalibration(camera));
+        }
+    }
+
+    private String lensCalibration(Camera camera) {
+        if (!(camera instanceof ReferenceCamera)) {
+            return NONE;
+        }
+        ReferenceCamera referenceCamera = (ReferenceCamera) camera;
+        if (referenceCamera.getAdvancedCalibration().isEnabled()) {
+            return String.format("%s (rms %.3f)",
+                    Translations.getString("MachineDiagnosticsWizard.State.Advanced"), //$NON-NLS-1$
+                    referenceCamera.getAdvancedCalibration().getRmsError());
+        }
+        if (referenceCamera.getCalibration().isEnabled()) {
+            return Translations.getString("MachineDiagnosticsWizard.State.On"); //$NON-NLS-1$
+        }
+        return Translations.getString("MachineDiagnosticsWizard.State.Off"); //$NON-NLS-1$
+    }
+
+    private void describeNozzles() {
+        nozzles.clear();
+        for (Head head : machine.getHeads()) {
+            for (Nozzle nozzle : head.getNozzles()) {
+                nozzles.add(nozzle, nozzle.getName(),
+                        nozzle.getNozzleTip() != null ? nozzle.getNozzleTip().getName() : NONE,
+                        nozzle.getHeadOffsets(), nozzle.getRotationMode());
+            }
+        }
+    }
+
+    // How the calibrations stand. Health rather than settings: a row says what state a
+    // calibration is in and opens where it is done, and the fixes themselves are Issues and
+    // Solutions' business.
+
+    private void createCalibrationPanel() {
+        calibration = new ElementSection("Calibration", "What", "Health", "State");
+    }
+
+    private void describeCalibration() {
+        calibration.clear();
+        MachineDiagnosticsResults results = diagnostics.getLastResults();
+        for (Head head : machine.getHeads()) {
+            if (head instanceof ReferenceHead) {
+                describeHeadCalibration((ReferenceHead) head);
+            }
+        }
+        for (Camera camera : machine.getAllCameras()) {
+            describeCameraCalibration(camera);
+        }
+        for (Head head : machine.getHeads()) {
+            for (Nozzle nozzle : head.getNozzles()) {
+                boolean set = nozzle.getHeadOffsets().getLinearLengthTo(
+                        new Location(nozzle.getHeadOffsets().getUnits())).getValue() > 0;
+                addCalibrationRow(nozzle, "NozzleOffsets",
+                        set ? Solutions.Severity.Information : Solutions.Severity.Warning,
+                        set ? nozzle.getHeadOffsets().toString() : notSet(), nozzle.getName());
+            }
+        }
+        for (NozzleTip nozzleTip : machine.getNozzleTips()) {
+            describeNozzleTipCalibration(nozzleTip);
+        }
+        for (Axis axis : machine.getAxes()) {
+            if (axis instanceof ReferenceControllerAxis
+                    && (axis.getType() == Axis.Type.X || axis.getType() == Axis.Type.Y)) {
+                describeBacklash((ReferenceControllerAxis) axis, results);
+            }
+        }
+        for (TestGroup group : TestGroup.values()) {
+            MachineDiagnosticsResults.Run run = results != null ? results.getRun(group) : null;
+            addCalibrationRow(null, "LastRun", Solutions.Severity.Information,
+                    run == null ? Translations.getString(
+                            "MachineDiagnosticsWizard.State.Never") //$NON-NLS-1$
+                            : DATE_FORMAT.format(run.getWhen()),
+                    Translations.getString("MachineDiagnosticsWizard.Test." + group.name())); //$NON-NLS-1$
+        }
+    }
+
+    private void describeHeadCalibration(ReferenceHead head) {
+        Location primary = head.getCalibrationPrimaryFiducialLocation();
+        boolean primarySet = primary != null && !(primary.getX() == 0 && primary.getY() == 0);
+        addCalibrationRow(head, "PrimaryFiducial",
+                primarySet ? Solutions.Severity.Information : Solutions.Severity.Warning,
+                primarySet ? primary.toString() : notSet(), head.getName());
+        Location secondary = head.getCalibrationSecondaryFiducialLocation();
+        boolean secondarySet = secondary != null && !(secondary.getX() == 0 && secondary.getY() == 0);
+        addCalibrationRow(head, "SecondaryFiducial",
+                secondarySet ? Solutions.Severity.Information : Solutions.Severity.Suggestion,
+                secondarySet ? secondary.toString() : notSet(), head.getName());
+        if (head.getVisualHomingMethod() == ReferenceHead.VisualHomingMethod.None) {
+            addCalibrationRow(head, "VisualHoming", Solutions.Severity.Suggestion,
+                    Translations.getString("MachineDiagnosticsWizard.State.Off"), //$NON-NLS-1$
+                    head.getName());
+        }
+        else {
+            Location homing = head.getHomingFiducialLocation();
+            Length apart = primarySet && homing != null ? primary.getLinearLengthTo(homing) : null;
+            addCalibrationRow(head, "VisualHoming",
+                    apart != null && apart.convertToUnits(LengthUnit.Millimeters).getValue() > 0.2
+                            ? Solutions.Severity.Warning : Solutions.Severity.Information,
+                    apart == null ? String.valueOf(head.getVisualHomingMethod())
+                            : String.format("%s, %.4f mm %s", head.getVisualHomingMethod(),
+                                    apart.convertToUnits(LengthUnit.Millimeters).getValue(),
+                                    Translations.getString(
+                                            "MachineDiagnosticsWizard.State.FromPrimary")), //$NON-NLS-1$
+                    head.getName());
+        }
+    }
+
+    private void describeCameraCalibration(Camera camera) {
+        PropertySheetHolder target = camera instanceof PropertySheetHolder ? camera : null;
+        boolean calibrated = camera instanceof ReferenceCamera
+                && (((ReferenceCamera) camera).getCalibration().isEnabled()
+                        || ((ReferenceCamera) camera).getAdvancedCalibration().isEnabled());
+        addCalibrationRow(target, "LensCalibration",
+                calibrated ? Solutions.Severity.Information : Solutions.Severity.Suggestion,
+                lensCalibration(camera), camera.getName());
+        boolean initialized = camera.getUnitsPerPixel().isInitialized();
+        addCalibrationRow(target, "UnitsPerPixel",
+                initialized ? Solutions.Severity.Information : Solutions.Severity.Warning,
+                initialized ? camera.getUnitsPerPixel().toString() : notSet(), camera.getName());
+    }
+
+    private void describeNozzleTipCalibration(NozzleTip nozzleTip) {
+        if (!(nozzleTip instanceof ReferenceNozzleTip)) {
+            return;
+        }
+        ReferenceNozzleTipCalibration runout = ((ReferenceNozzleTip) nozzleTip).getCalibration();
+        addCalibrationRow(nozzleTip, "RunOut",
+                runout.isEnabled() ? Solutions.Severity.Information : Solutions.Severity.Suggestion,
+                runout.isEnabled()
+                        ? String.format("%s, %s", runout.getRunoutCompensationAlgorithm(),
+                                runout.getRecalibrationTrigger())
+                        : Translations.getString("MachineDiagnosticsWizard.State.Off"), //$NON-NLS-1$
+                nozzleTip.getName());
+    }
+
+    private void describeBacklash(ReferenceControllerAxis axis,
+            MachineDiagnosticsResults results) {
+        Double measured = null;
+        if (results != null) {
+            for (MachineDiagnosticsResults.Positioning positioning : results.getPositioning()) {
+                if (positioning.getAxisId().equals(axis.getId())) {
+                    measured = positioning.getBacklashMaxMm();
+                }
+            }
+        }
+        String state = String.format("%s, %s", axis.getBacklashCompensationMethod(),
+                axis.getBacklashOffset());
+        Solutions.Severity health = Solutions.Severity.Information;
+        if (measured != null) {
+            state += String.format(", %s %.4f mm", Translations.getString(
+                    "MachineDiagnosticsWizard.State.Measured"), measured); //$NON-NLS-1$
+            if (measured > axis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters)
+                    .getValue()) {
+                health = Solutions.Severity.Warning;
+            }
+        }
+        addCalibrationRow(axis, "Backlash", health, state, axis.getName());
+    }
+
+    /**
+     * @param element What the row is about, which the button opens. Null for a row that describes
+     *        no single element, such as when a test group last ran.
+     * @param subject The element's name, put into the row's description rather than into a column
+     *        of its own, so that the phrasing can put it where the language wants it.
+     */
+    private void addCalibrationRow(PropertySheetHolder element, String key,
+            Solutions.Severity health, String state, String subject) {
+        calibration.add(element, String.format(Translations.getString(
+                "MachineDiagnosticsWizard.Calibration." + key), subject), health, state); //$NON-NLS-1$
+    }
+
+    // What the measurements turned into, which is the point of taking them.
+
+    private void createIssuesPanel() {
+        JPanel panel = titledPanel("IssuesPanel");
+        panel.setLayout(new BorderLayout(0, 0));
+        issuesModel = new SolutionsTableModel(machine.getSolutions());
+        issuesTable = new AutoSelectTextTable(issuesModel);
+        TableRowSorter<SolutionsTableModel> sorter = new TableRowSorter<>(issuesModel);
+        // Only what these checks found. The machine's other issues have a page of their own; what
+        // belongs here is the loop from a measurement to the setting it disagrees with.
+        sorter.setRowFilter(new RowFilter<SolutionsTableModel, Integer>() {
+            @Override
+            public boolean include(Entry<? extends SolutionsTableModel, ? extends Integer> entry) {
+                return entry.getModel().getIssue(entry.getIdentifier())
+                        instanceof MachineDiagnostics.Finding;
+            }
+        });
+        issuesTable.setRowSorter(sorter);
+        SolutionsTableModel.applyTableUi(issuesTable);
+        issuesTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        JScrollPane scroll = new JScrollPane(issuesTable);
+        scroll.setPreferredSize(new Dimension(600, 140));
+        panel.add(scroll, BorderLayout.CENTER);
+        JPanel buttons = new JPanel();
+        buttons.add(new JButton(lookAgainAction));
+        buttons.add(new JButton(acceptAction));
+        buttons.add(new JButton(dismissAction));
+        buttons.add(new JButton(reopenAction));
+        panel.add(buttons, BorderLayout.SOUTH);
+    }
+
+    private List<Solutions.Issue> selectedIssues() {
+        List<Solutions.Issue> issues = new ArrayList<>();
+        for (int row : issuesTable.getSelectedRows()) {
+            issues.add(issuesModel.getIssue(issuesTable.convertRowIndexToModel(row)));
+        }
+        return issues;
+    }
+
+    private Action lookAgainAction = new AbstractAction(Translations.getString(
+            "MachineDiagnosticsWizard.Action.LookAgain"), Icons.solutions) { //$NON-NLS-1$
+        {
+            putValue(Action.SHORT_DESCRIPTION, Translations.getString(
+                    "MachineDiagnosticsWizard.Action.LookAgain.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            reportIssues();
+        }
+    };
+
+    private Action acceptAction = new AbstractAction(Translations.getString(
+            "MachineDiagnosticsWizard.Action.Accept"), Icons.accept) { //$NON-NLS-1$
+        {
+            putValue(Action.SHORT_DESCRIPTION, Translations.getString(
+                    "MachineDiagnosticsWizard.Action.Accept.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            UiUtils.messageBoxOnException(() -> {
+                for (Solutions.Issue issue : selectedIssues()) {
+                    if (issue.canBeAccepted()) {
+                        if (issue.getState() != Solutions.State.Solved) {
+                            issue.setStateCall(Solutions.State.Solved);
+                        }
+                    }
+                    // An issue with nothing of its own to apply is handled as a dismissal, the
+                    // way the Issues and Solutions page handles one.
+                    else if (issue.getState() != Solutions.State.Dismissed) {
+                        issue.setStateCall(Solutions.State.Dismissed);
+                    }
+                }
+                describeMachine();
+            });
+        }
+    };
+
+    private Action dismissAction = new AbstractAction(Translations.getString(
+            "MachineDiagnosticsWizard.Action.Dismiss"), Icons.dismiss) { //$NON-NLS-1$
+        {
+            putValue(Action.SHORT_DESCRIPTION, Translations.getString(
+                    "MachineDiagnosticsWizard.Action.Dismiss.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            UiUtils.messageBoxOnException(() -> {
+                for (Solutions.Issue issue : selectedIssues()) {
+                    if (issue.getState() != Solutions.State.Dismissed) {
+                        issue.setStateCall(Solutions.State.Dismissed);
+                    }
+                }
+            });
+        }
+    };
+
+    private Action reopenAction = new AbstractAction(Translations.getString(
+            "MachineDiagnosticsWizard.Action.Reopen"), Icons.undo) { //$NON-NLS-1$
+        {
+            putValue(Action.SHORT_DESCRIPTION, Translations.getString(
+                    "MachineDiagnosticsWizard.Action.Reopen.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            UiUtils.messageBoxOnException(() -> {
+                for (Solutions.Issue issue : selectedIssues()) {
+                    if (issue.getState() != Solutions.State.Open) {
+                        issue.setStateCall(Solutions.State.Open);
+                    }
+                }
+                describeMachine();
+            });
+        }
+    };
+
+    /**
+     * A titled panel of the kind this page is made of, added in the order it is created.
+     */
+    private JPanel titledPanel(String key) {
         JPanel panel = new JPanel();
-        panel.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
-                Translations.getString("MachineDiagnosticsWizard.TestsPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
+        panel.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"), //$NON-NLS-1$
+                Translations.getString(
+                        "MachineDiagnosticsWizard." + key + ".Border.title"), //$NON-NLS-1$
+                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         contentPanel.add(panel);
+        return panel;
+    }
+
+    /** A value a setting was never given, said in words rather than left blank. */
+    private static String notSet() {
+        return Translations.getString("MachineDiagnosticsWizard.State.NotSet"); //$NON-NLS-1$
+    }
+
+    private static String range(Length low, Length high) {
+        if (low == null && high == null) {
+            return NONE;
+        }
+        return (low == null ? NONE : low.toString()) + " .. "
+                + (high == null ? NONE : high.toString());
+    }
+
+    /** A G-code command as one line, so that a multi-line one does not stretch its row. */
+    private static String oneLine(String command) {
+        return command == null ? NONE : command.replace("\n", " | ").trim(); //$NON-NLS-1$
+    }
+
+    /**
+     * A read-only table of machine elements, and the button that opens the selected one where it
+     * is set. The rows stand for the elements they describe, so that this page can hand the user
+     * over to the wizard that edits an element rather than editing the same fields itself.
+     */
+    private class ElementSection {
+        private final ElementTableModel model;
+        private final AutoSelectTextTable table;
+
+        ElementSection(String key, String... columnKeys) {
+            String[] columns = new String[columnKeys.length];
+            for (int i = 0; i < columnKeys.length; i++) {
+                columns[i] = Translations.getString("MachineDiagnosticsWizard.Column." //$NON-NLS-1$
+                        + columnKeys[i]);
+            }
+            model = new ElementTableModel(columns);
+            table = new AutoSelectTextTable(model);
+            SolutionsTableModel.applyTableUi(table);
+            table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            table.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (e.getClickCount() == 2) {
+                        edit();
+                    }
+                }
+            });
+            JPanel panel = titledPanel(key);
+            panel.setLayout(new BorderLayout(0, 0));
+            JScrollPane scroll = new JScrollPane(table);
+            scroll.setPreferredSize(new Dimension(600, 90));
+            panel.add(scroll, BorderLayout.CENTER);
+            JPanel buttons = new JPanel();
+            buttons.add(new JButton(new AbstractAction(Translations.getString(
+                    "MachineDiagnosticsWizard.Action.Edit"), Icons.navigateNext) { //$NON-NLS-1$
+                {
+                    putValue(Action.SHORT_DESCRIPTION, Translations.getString(
+                            "MachineDiagnosticsWizard.Action.Edit.Description")); //$NON-NLS-1$
+                }
+
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    edit();
+                }
+            }));
+            panel.add(buttons, BorderLayout.SOUTH);
+        }
+
+        void clear() {
+            model.clear();
+        }
+
+        void add(PropertySheetHolder element, Object... values) {
+            model.add(element, values);
+        }
+
+        /** Open what the selected row is about, in the tree that edits it. */
+        private void edit() {
+            int row = table.getSelectedRow();
+            PropertySheetHolder element = row < 0 ? null
+                    : model.getElement(table.convertRowIndexToModel(row));
+            MainFrame frame = MainFrame.get();
+            if (element == null || frame == null) {
+                return;
+            }
+            frame.showTab(Translations.getString(
+                    "MainFrame.RightComponent.tabs.MachineSetup")); //$NON-NLS-1$
+            frame.getMachineSetupTab().selectPropertySheetHolder(element);
+        }
+    }
+
+    /** The rows of an {@link ElementSection}, each remembering the element it describes. */
+    private static class ElementTableModel extends AbstractTableModel {
+        private final String[] columns;
+        private final List<PropertySheetHolder> elements = new ArrayList<>();
+        private final List<Object[]> rows = new ArrayList<>();
+
+        ElementTableModel(String[] columns) {
+            this.columns = columns;
+        }
+
+        void clear() {
+            elements.clear();
+            rows.clear();
+            fireTableDataChanged();
+        }
+
+        void add(PropertySheetHolder element, Object[] values) {
+            elements.add(element);
+            rows.add(values);
+            fireTableRowsInserted(rows.size() - 1, rows.size() - 1);
+        }
+
+        PropertySheetHolder getElement(int row) {
+            return elements.get(row);
+        }
+
+        @Override
+        public int getRowCount() {
+            return rows.size();
+        }
+
+        @Override
+        public int getColumnCount() {
+            return columns.length;
+        }
+
+        @Override
+        public String getColumnName(int column) {
+            return columns[column];
+        }
+
+        @Override
+        public Class<?> getColumnClass(int column) {
+            // The health column carries a Severity, which the Issues and Solutions renderer
+            // colours; everything else is read as text.
+            for (Object[] row : rows) {
+                if (row[column] != null) {
+                    return row[column] instanceof Solutions.Severity ? Solutions.Severity.class
+                            : String.class;
+                }
+            }
+            return String.class;
+        }
+
+        @Override
+        public boolean isCellEditable(int row, int column) {
+            return false;
+        }
+
+        @Override
+        public Object getValueAt(int row, int column) {
+            Object value = rows.get(row)[column];
+            return value instanceof Solutions.Severity ? value : String.valueOf(value);
+        }
+    }
+
+    private void createTestsPanel() {
+        JPanel panel = titledPanel("TestsPanel");
         panel.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("max(120dlu;default)"),
@@ -298,11 +909,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     }
 
     private void createParametersPanel() {
-        JPanel panel = new JPanel();
-        panel.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
-                Translations.getString("MachineDiagnosticsWizard.ParametersPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
-        contentPanel.add(panel);
+        JPanel panel = titledPanel("ParametersPanel");
         ColumnSpec[] columns = new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("max(90dlu;default)"),
@@ -369,11 +976,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     }
 
     private void createProgressPanel() {
-        JPanel panel = new JPanel();
-        panel.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
-                Translations.getString("MachineDiagnosticsWizard.ProgressPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
-        contentPanel.add(panel);
+        JPanel panel = titledPanel("ProgressPanel");
         panel.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), },
@@ -389,11 +992,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     }
 
     private void createGraphsPanel() {
-        JPanel panel = new JPanel();
-        panel.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
-                Translations.getString("MachineDiagnosticsWizard.GraphsPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
-        contentPanel.add(panel);
+        JPanel panel = titledPanel("GraphsPanel");
         panel.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("max(90dlu;default)"),

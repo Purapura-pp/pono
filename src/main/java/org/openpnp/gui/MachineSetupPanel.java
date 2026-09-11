@@ -211,6 +211,45 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
     @Override
     public void wizardCancelled(Wizard wizard) {}
 
+    /**
+     * Select the node that edits this element, expanding the tree as far as needed to show it.
+     * <p>
+     * A page that shows what an element is - the diagnostics overview, a report - can hand the
+     * user over to where it is set, rather than growing a second editor for the same fields.
+     *
+     * @return false if the element is not in the tree, which is what happens when it was removed
+     *         while a page naming it was open.
+     */
+    public boolean selectPropertySheetHolder(PropertySheetHolder holder) {
+        if (treeModel == null || holder == null) {
+            return false;
+        }
+        TreePath path = find((PropertySheetHolderTreeNode) treeModel.getRoot(), holder);
+        if (path == null) {
+            return false;
+        }
+        tree.scrollPathToVisible(path);
+        tree.setSelectionPath(path);
+        return true;
+    }
+
+    private TreePath find(PropertySheetHolderTreeNode node, PropertySheetHolder holder) {
+        if (node.getPropertySheetHolder() == holder) {
+            List<TreeNode> ancestry = new ArrayList<>();
+            for (TreeNode walk = node; walk != null; walk = walk.getParent()) {
+                ancestry.add(0, walk);
+            }
+            return new TreePath(ancestry.toArray());
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            TreePath found = find((PropertySheetHolderTreeNode) node.getChildAt(i), holder);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
     public void selectCurrentTreePath() {
         disableLastSelectedListener = true;
 

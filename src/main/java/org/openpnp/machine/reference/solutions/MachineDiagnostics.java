@@ -311,7 +311,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         if (!calibration.isEnabled() || requiredMeasurements(calibration) > MINIMUM_USEFUL_FIT) {
             return;
         }
-        solutions.add(new Solutions.Issue(nozzleTip,
+        solutions.add(new DiagnosticIssue(nozzleTip,
                 "Nozzle tip run-out calibration accepts too few measurements to be meaningful.",
                 "Reduce the misdetections it tolerates.",
                 Solutions.Severity.Warning,
@@ -384,7 +384,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 if (stage.getSuperSampling() > 1) {
                     continue;
                 }
-                solutions.add(new Solutions.Issue(entry.getKey(),
+                solutions.add(new DiagnosticIssue(entry.getKey(),
                         "Circular symmetry detection is limited to whole pixels.",
                         "Switch super sampling on.",
                         Solutions.Severity.Suggestion,
@@ -458,24 +458,19 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 || primary.getLinearLengthTo(homing).compareTo(HOMING_FIDUCIAL_TOLERANCE) <= 0) {
             return;
         }
-        solutions.add(new Solutions.PlainIssue(head,
+        solutions.add(new PointerIssue(head,
                 "The homing fiducial and the primary calibration fiducial are not the same place.",
                 "Re-capture the homing fiducial at the primary calibration fiducial, or confirm "
                         + "that they are deliberately different.",
-                Solutions.Severity.Warning,
-                "https://github.com/openpnp/openpnp/wiki/Visual-Homing") {
-            @Override
-            protected String extendedDescription() {
-                return "Visual homing takes the position it finds at the homing fiducial as the "
-                        + "machine origin, and the camera calibrations were measured against the "
-                        + "primary calibration fiducial. These two are "
-                        + primary.getLinearLengthTo(homing)
-                                .convertToUnits(LengthUnit.Millimeters).getValue()
-                        + " mm apart, so every calibrated offset carries that difference. This is "
-                        + "reported rather than corrected, because which of the two positions is "
-                        + "the right one is not something the machine can know.";
-            }
-        });
+                Solutions.Severity.Warning, WIKI_VISUAL_HOMING,
+                String.format("Visual homing takes the position it finds at the homing fiducial "
+                        + "as the machine origin, and the camera calibrations were measured "
+                        + "against the primary calibration fiducial. These two are %.4f mm apart, "
+                        + "so every calibrated offset carries that difference. This is reported "
+                        + "rather than corrected, because which of the two positions is the right "
+                        + "one is not something the machine can know.",
+                        primary.getLinearLengthTo(homing)
+                                .convertToUnits(LengthUnit.Millimeters).getValue())));
     }
 
     /**
@@ -741,25 +736,20 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             if (camera == null || Math.abs(scan.getScaleError()) <= SCALE_ERROR_TOLERANCE) {
                 continue;
             }
-            solutions.add(new Solutions.PlainIssue(camera,
+            solutions.add(new PointerIssue(camera,
                     "Units per Pixel does not agree with what the camera sees across its field "
                             + "of view.",
                     "Calibrate the camera with the advanced camera calibration offered here.",
-                    Solutions.Severity.Warning, WIKI_CALIBRATION_SOLUTIONS) {
-                @Override
-                protected String extendedDescription() {
-                    return String.format("A fiducial swept across the field of view %s moved "
-                            + "%+.2f%% further in %s than Units per Pixel accounts for, leaving "
-                            + "%.4f mm rms of distortion under the scale error. Units per Pixel "
-                            + "scales every vision correction the machine makes, so the error is "
-                            + "carried into placement over the whole board. This is not "
-                            + "corrected here: the advanced camera calibration in this list "
-                            + "measures the scale together with the camera's tilt and the lens "
-                            + "distortion, which is what the residual says is also present.",
-                            when, scan.getScaleError() * 100, scan.getAxis(),
-                            scan.getResidualMm());
-                }
-            });
+                    Solutions.Severity.Warning, WIKI_CALIBRATION_SOLUTIONS,
+                    String.format("A fiducial swept across the field of view %s moved %+.2f%% "
+                            + "further in %s than Units per Pixel accounts for, leaving %.4f mm "
+                            + "rms of distortion under the scale error. Units per Pixel scales "
+                            + "every vision correction the machine makes, so the error is carried "
+                            + "into placement over the whole board. This is not corrected here: "
+                            + "the advanced camera calibration in this list measures the scale "
+                            + "together with the camera's tilt and the lens distortion, which is "
+                            + "what the residual says is also present.", when,
+                            scan.getScaleError() * 100, scan.getAxis(), scan.getResidualMm())));
         }
     }
 
@@ -780,22 +770,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         != ReferenceHead.VisualHomingMethod.None) {
             return;
         }
-        String when = measuredWhen(results, TestGroup.Homing);
-        solutions.add(new Solutions.PlainIssue(head,
+        solutions.add(new PointerIssue(head,
                 "Homing does not put the machine origin back in the same place.",
                 "Set up visual homing, with the Enable Visual Homing solution offered here.",
-                Solutions.Severity.Warning, WIKI_VISUAL_HOMING) {
-            @Override
-            protected String extendedDescription() {
-                return String.format("Homing %d times and measuring the same fiducial after each "
-                        + "one %s put the origin within %.4f mm of itself. Visual homing is off, "
-                        + "so that is the repeatability of the endstops, and it shifts every "
-                        + "coordinate the machine holds - fiducials, feeders, nozzle offsets - "
-                        + "by that much between one power-up and the next. Visual homing takes "
-                        + "the origin from a fiducial instead, which is the solution offered in "
-                        + "this list.", homing.getCycles(), when, homing.getSpreadMm());
-            }
-        });
+                Solutions.Severity.Warning, WIKI_VISUAL_HOMING,
+                String.format("Homing %d times and measuring the same fiducial after each one %s "
+                        + "put the origin within %.4f mm of itself. Visual homing is off, so that "
+                        + "is the repeatability of the endstops, and it shifts every coordinate "
+                        + "the machine holds - fiducials, feeders, nozzle offsets - by that much "
+                        + "between one power-up and the next. Visual homing takes the origin from "
+                        + "a fiducial instead, which is the solution offered in this list.",
+                        homing.getCycles(), measuredWhen(results, TestGroup.Homing),
+                        homing.getSpreadMm())));
     }
 
     /**
@@ -845,6 +831,42 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 }));
     }
 
+    /**
+     * Marks an issue as one of these checks, so that the diagnostics page can show what it found
+     * among everything else the machine reports. The page is the one place that needs to tell
+     * them apart; Issues and Solutions deliberately does not care where an issue came from.
+     */
+    public interface Finding {
+    }
+
+    /** An issue one of these checks raised, which is the whole of what the marker means. */
+    private abstract static class DiagnosticIssue extends Solutions.Issue implements Finding {
+        DiagnosticIssue(Solutions.Subject subject, String issue, String solution,
+                Solutions.Severity severity, String uri) {
+            super(subject, issue, solution, severity, uri);
+        }
+    }
+
+    /**
+     * A finding with no fix of its own, because the fix is a calibration Issues and Solutions
+     * already offers. It says what was measured and names the solution that does the work, so
+     * that there is one place performing each calibration rather than two that can drift apart.
+     */
+    private static class PointerIssue extends Solutions.PlainIssue implements Finding {
+        private final String explanation;
+
+        PointerIssue(Solutions.Subject subject, String issue, String solution,
+                Solutions.Severity severity, String uri, String explanation) {
+            super(subject, issue, solution, severity, uri);
+            this.explanation = explanation;
+        }
+
+        @Override
+        protected String extendedDescription() {
+            return explanation;
+        }
+    }
+
     /** What an issue does with the length it offers, when accepted and when that is undone. */
     private interface LengthSetting {
         void set(Length value, boolean solved) throws Exception;
@@ -854,7 +876,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * An issue whose solution is one measured length going into one setting. The value is
      * adjustable before accepting, accepting writes it, and undoing puts back what was there.
      */
-    private static class LengthSettingIssue extends Solutions.Issue {
+    private static class LengthSettingIssue extends DiagnosticIssue {
         private final String label;
         private final String toolTip;
         private final String explanation;
@@ -906,7 +928,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * The settle time issues, which differ from the length ones only in that a wait is a number
      * of milliseconds and the camera keeps it as one.
      */
-    private static class SettleTimeIssue extends Solutions.Issue {
+    private static class SettleTimeIssue extends DiagnosticIssue {
         private final AbstractSettlingCamera camera;
         private final String explanation;
         private final long previous;
