@@ -50,6 +50,8 @@ import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.model.Part;
+import org.openpnp.model.Solutions;
+import org.openpnp.model.Solutions.Milestone;
 import org.openpnp.machine.reference.solutions.MachineDiagnosticsMath.GcodeSettingLine;
 import org.openpnp.machine.reference.solutions.MachineDiagnosticsMath.LinearFit;
 import org.openpnp.machine.reference.solutions.MachineDiagnosticsMath.MotionFit;
@@ -97,7 +99,13 @@ import org.simpleframework.xml.Element;
  * Every test group is independent: one that cannot run, because the machine lacks what it needs,
  * or that fails, is recorded as such and the rest still run.
  */
-public class MachineDiagnostics extends AbstractModelObject {
+public class MachineDiagnostics extends AbstractModelObject implements Solutions.Subject {
+    /** Three points always describe a circle, so a run-out fit from three proves nothing. */
+    private static final int MINIMUM_USEFUL_FIT = 3;
+    /** Tolerating one lets a single bad frame through without hiding a real eccentricity. */
+    private static final int DEFAULT_ALLOW_MISDETECTIONS = 1;
+    /** Below this the two fiducials are the same place as far as any calibration can tell. */
+    private static final Length HOMING_FIDUCIAL_TOLERANCE = new Length(0.2, LengthUnit.Millimeters);
 
     public enum TestGroup {
         Firmware,
@@ -167,6 +175,11 @@ public class MachineDiagnostics extends AbstractModelObject {
     private String firmwareCommands = "M115\nM503\nM114\nM119";
 
     private Configuration configuration;
+    /**
+     * Deliberately not serialized: the machine owns this object, so naming it back would put a
+     * cycle in machine.xml. Issues and Solutions hands it over on every findIssues.
+     */
+    private ReferenceMachine machine;
     private volatile boolean aborting;
     private volatile boolean running;
     private final StringBuilder logText = new StringBuilder();
@@ -198,6 +211,226 @@ public class MachineDiagnostics extends AbstractModelObject {
      */
     public void configurationLoaded(Configuration configuration) {
         this.configuration = configuration;
+    }
+
+    /**
+     * Handed the machine when Issues and Solutions asks this for issues, the same way the five
+     * solutions classes are. {@link #run} takes the machine as a parameter instead, because it is
+     * called from the wizard, which has one.
+     */
+    public MachineDiagnostics setMachine(ReferenceMachine machine) {
+        this.machine = machine;
+        return this;
+    }
+
+    /**
+     * Settings that are wrong on their own terms, without needing anything measured: each is read
+     * straight off the configuration, so they are re-evaluated on every Find Issues.
+     * <p>
+     * The wording of an issue must not carry a number. The fingerprint that remembers a dismissal
+     * is a hash of the subject, the issue and the solution, so a number in the text would give the
+     * same finding a new identity every time the value changed, and the dismissal would be
+     * forgotten. Numbers belong in the extended description and in the properties.
+     */
+    @Override
+    public void findIssues(Solutions solutions) {
+        if (machine == null || !solutions.isTargeting(Milestone.Calibration)) {
+            return;
+        }
+        for (NozzleTip nozzleTip : machine.getNozzleTips()) {
+            if (nozzleTip instanceof ReferenceNozzleTip) {
+                findRunOutFitIssues(solutions, (ReferenceNozzleTip) nozzleTip);
+            }
+        }
+        findSuperSamplingIssues(solutions);
+        for (Head head : machine.getHeads()) {
+            if (head instanceof ReferenceHead) {
+                findHomingFiducialIssues(solutions, (ReferenceHead) head);
+            }
+        }
+    }
+
+    /**
+     * A run-out model fitted to three points is a circle through three points: it cannot fail, and
+     * it cannot tell a real eccentricity from noise. The calibration accepts as few as
+     * {@code max(3, angleSubdivisions + 1 - allowMisdetections)} measurements, so once
+     * allowMisdetections is raised far enough that expression collapses onto its own floor and the
+     * calibration reports success from three. Found on the LumenPnP configuration, where six
+     * nozzle tips allowed five misdetections out of six angles.
+     */
+    private void findRunOutFitIssues(Solutions solutions, ReferenceNozzleTip nozzleTip) {
+        ReferenceNozzleTipCalibration calibration = nozzleTip.getCalibration();
+        if (!calibration.isEnabled() || requiredMeasurements(calibration) > MINIMUM_USEFUL_FIT) {
+            return;
+        }
+        solutions.add(new Solutions.Issue(nozzleTip,
+                "Nozzle tip run-out calibration accepts too few measurements to be meaningful.",
+                "Reduce the misdetections it tolerates.",
+                Solutions.Severity.Warning,
+                "https://github.com/openpnp/openpnp/wiki/Nozzle-Tip-Calibration") {
+            private final int oldAllowMisdetections = calibration.getAllowMisdetections();
+
+            @Override
+            protected String extendedDescription() {
+                return "The calibration measures at " + (calibration.getAngleSubdivisions() + 1)
+                        + " angles and tolerates " + oldAllowMisdetections
+                        + " misdetections, so it will fit the run-out model to as few as "
+                        + requiredMeasurements(calibration) + " points. Three points always yield "
+                        + "a circle, whatever the measurements were, so the fit stops being "
+                        + "evidence of anything. Accepting sets the tolerance so that a "
+                        + "substantially complete set of angles is required.";
+            }
+
+            @Override
+            public Solutions.Issue.CustomProperty[] getProperties() {
+                return new Solutions.Issue.CustomProperty[] {
+                        new Solutions.Issue.IntegerProperty("Misdetections tolerated",
+                                "How many of the angles may fail to be detected before the "
+                                        + "calibration gives up.",
+                                0, Math.max(0, calibration.getAngleSubdivisions() - 2)) {
+                            @Override
+                            public int get() {
+                                return calibration.getAllowMisdetections();
+                            }
+
+                            @Override
+                            public void set(int value) {
+                                calibration.setAllowMisdetections(value);
+                            }
+                        },
+                };
+            }
+
+            @Override
+            public void setState(Solutions.State state) throws Exception {
+                if (state == Solutions.State.Solved) {
+                    calibration.setAllowMisdetections(DEFAULT_ALLOW_MISDETECTIONS);
+                }
+                else {
+                    calibration.setAllowMisdetections(oldAllowMisdetections);
+                }
+                super.setState(state);
+            }
+        });
+    }
+
+    /**
+     * @return the smallest number of successful measurements the calibration will fit a run-out
+     *         model to, mirroring the check in ReferenceNozzleTipCalibration.
+     */
+    private static int requiredMeasurements(ReferenceNozzleTipCalibration calibration) {
+        return Math.max(MINIMUM_USEFUL_FIT,
+                calibration.getAngleSubdivisions() + 1 - calibration.getAllowMisdetections());
+    }
+
+    /**
+     * Circular symmetry locates a fiducial or a nozzle tip to the nearest pixel when super
+     * sampling is off, which puts a floor under every calibration built on it. The target is the
+     * value Issues and Solutions already uses for its own symmetry detection, rather than a second
+     * number of our own.
+     */
+    private void findSuperSamplingIssues(Solutions solutions) {
+        int target = machine.getVisionSolutions().getSuperSampling();
+        if (target <= 1) {
+            return;
+        }
+        for (Map.Entry<Solutions.Subject, CvPipeline> entry : symmetryPipelines().entrySet()) {
+            for (DetectCircularSymmetry stage : symmetryStages(entry.getValue())) {
+                if (stage.getSuperSampling() > 1) {
+                    continue;
+                }
+                solutions.add(new Solutions.Issue(entry.getKey(),
+                        "Circular symmetry detection is limited to whole pixels.",
+                        "Switch super sampling on.",
+                        Solutions.Severity.Suggestion,
+                        "https://github.com/openpnp/openpnp/wiki/Vision-Solutions") {
+                    @Override
+                    protected String extendedDescription() {
+                        return "The pipeline's DetectCircularSymmetry stage has super sampling "
+                                + "set to " + stage.getSuperSampling() + ", so it reports a "
+                                + "position to the nearest whole pixel and every calibration "
+                                + "built on it inherits that as its floor. Accepting sets it to "
+                                + target + ", which is what the vision solutions use for their own "
+                                + "detection.";
+                    }
+
+                    @Override
+                    public void setState(Solutions.State state) throws Exception {
+                        stage.setSuperSampling(state == Solutions.State.Solved ? target : 1);
+                        super.setState(state);
+                    }
+                });
+            }
+        }
+    }
+
+    /** The pipelines whose symmetry detection the calibrations depend on. */
+    private Map<Solutions.Subject, CvPipeline> symmetryPipelines() {
+        Map<Solutions.Subject, CvPipeline> pipelines = new LinkedHashMap<>();
+        if (machine.getFiducialLocator() instanceof ReferenceFiducialLocator) {
+            ReferenceFiducialLocator locator = (ReferenceFiducialLocator) machine.getFiducialLocator();
+            if (locator.getPipeline() != null) {
+                // The locator is not a Solutions.Subject and it is machine level anyway, so the
+                // machine stands in as the subject of anything found in its pipeline.
+                pipelines.put(machine, locator.getPipeline());
+            }
+        }
+        for (NozzleTip nozzleTip : machine.getNozzleTips()) {
+            if (nozzleTip instanceof ReferenceNozzleTip) {
+                ReferenceNozzleTip referenceNozzleTip = (ReferenceNozzleTip) nozzleTip;
+                CvPipeline pipeline = referenceNozzleTip.getCalibration().getPipeline();
+                if (referenceNozzleTip.getCalibration().isEnabled() && pipeline != null) {
+                    pipelines.put(referenceNozzleTip, pipeline);
+                }
+            }
+        }
+        return pipelines;
+    }
+
+    private static List<DetectCircularSymmetry> symmetryStages(CvPipeline pipeline) {
+        List<DetectCircularSymmetry> stages = new ArrayList<>();
+        pipeline.getStages().forEach(stage -> {
+            if (stage instanceof DetectCircularSymmetry) {
+                stages.add((DetectCircularSymmetry) stage);
+            }
+        });
+        return stages;
+    }
+
+    /**
+     * Visual homing drives to the homing fiducial and takes the position it finds there as the
+     * origin, so if that fiducial is not the one the calibrations were measured against, every
+     * calibrated offset is shifted by the distance between them. There is no automatic fix: only
+     * the user knows which of the two positions is the correct one.
+     */
+    private void findHomingFiducialIssues(Solutions solutions, ReferenceHead head) {
+        if (head.getVisualHomingMethod() == ReferenceHead.VisualHomingMethod.None) {
+            return;
+        }
+        Location homing = head.getHomingFiducialLocation();
+        Location primary = head.getCalibrationPrimaryFiducialLocation();
+        if (homing == null || primary == null
+                || primary.getLinearLengthTo(homing).compareTo(HOMING_FIDUCIAL_TOLERANCE) <= 0) {
+            return;
+        }
+        solutions.add(new Solutions.PlainIssue(head,
+                "The homing fiducial and the primary calibration fiducial are not the same place.",
+                "Re-capture the homing fiducial at the primary calibration fiducial, or confirm "
+                        + "that they are deliberately different.",
+                Solutions.Severity.Warning,
+                "https://github.com/openpnp/openpnp/wiki/Visual-Homing") {
+            @Override
+            protected String extendedDescription() {
+                return "Visual homing takes the position it finds at the homing fiducial as the "
+                        + "machine origin, and the camera calibrations were measured against the "
+                        + "primary calibration fiducial. These two are "
+                        + primary.getLinearLengthTo(homing)
+                                .convertToUnits(LengthUnit.Millimeters).getValue()
+                        + " mm apart, so every calibrated offset carries that difference. This is "
+                        + "reported rather than corrected, because which of the two positions is "
+                        + "the right one is not something the machine can know.";
+            }
+        });
     }
 
     private Configuration getConfiguration() throws Exception {

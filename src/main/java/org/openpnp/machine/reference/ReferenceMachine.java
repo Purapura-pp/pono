@@ -674,6 +674,7 @@ public class ReferenceMachine extends AbstractMachine {
         visualSolutions.setMachine(this).findIssues(solutions);
         calibrationSolutions.setMachine(this).findIssues(solutions);
         scriptingSolutions.setMachine(this).findIssues(solutions);
+        machineDiagnostics.setMachine(this).findIssues(solutions);
 
         if (solutions.isTargeting(Milestone.Advanced)) {
             if (getMotionPlanner() instanceof NullMotionPlanner) {
