@@ -14,7 +14,6 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.prefs.Preferences;
 import java.util.stream.Collectors;
 import org.pmw.tinylog.Logger;
 
@@ -25,8 +24,6 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
@@ -36,9 +33,10 @@ import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
 import org.openpnp.gui.components.AutoSelectTextTable;
-import org.openpnp.gui.support.AbstractConfigurationWizard;
+import org.openpnp.gui.shell.PropertySheetPresenter;
 import org.openpnp.gui.support.Helpers;
 import org.openpnp.gui.support.Icons;
+import org.openpnp.spi.PropertySheetHolder.PropertySheet;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
 import org.openpnp.gui.support.Wizard;
@@ -60,8 +58,6 @@ import org.simpleframework.xml.Serializer;
 public class VisionSettingsPanel extends JPanel implements WizardContainer {
 
     private static final String PREF_DIVIDER_POSITION = "VisionSettingsPanel.dividerPosition";
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
-    private Preferences prefs = Preferences.userNodeForPackage(VisionSettingsPanel.class);
 
     private final Configuration configuration;
     private final Frame frame;
@@ -83,15 +79,6 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
         tableModel = new VisionSettingsTableModel(configuration);
         tableSorter = new TableRowSorter<>(tableModel);
 
-        JSplitPane splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setContinuousLayout(true);
-        splitPane.setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", evt -> prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation()));
-        add(splitPane, BorderLayout.CENTER);
-
-        JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-
         table = new AutoSelectTextTable(tableModel);
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
@@ -111,23 +98,24 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
                 if (selectedVisionSettings != null) {
                     this.selectedVisionSettings = selectedVisionSettings;
                 }
-                
-                for (Component comp : tabbedPane.getComponents()) {
-                    if (comp instanceof AbstractConfigurationWizard) {
-                        ((AbstractConfigurationWizard) comp).dispose();
-                    }
-                }
-                tabbedPane.removeAll();
 
+                // One wizard, whichever kind of vision settings this is.
+                List<PropertySheet> sheets = new ArrayList<>();
                 if (selectedVisionSettings != null) {
                     Wizard wizard = configurationWizardFor(selectedVisionSettings);
                     if (wizard != null) {
-                        tabbedPane.add(wizard.getWizardName(), (JPanel) wizard);
-                        wizard.setWizardContainer(VisionSettingsPanel.this);
+                        sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
+                                (JPanel) wizard));
                     }
                 }
-                revalidate();
-                repaint();
+                MainFrame.get().getInspector().show(selectedVisionSettings,
+                        VisionSettingsPanel.this,
+                        selectedVisionSettings == null ? null : selectedVisionSettings.getName(),
+                        selectedVisionSettings == null
+                                ? null
+                                : MainFrame.get().getInspector()
+                                        .typeOf(selectedVisionSettings),
+                        Icons.captureCamera, sheets);
             });
         });
         tableModel.addTableModelListener(e -> {
@@ -138,8 +126,8 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
         });
         filterTable();
 
-        splitPane.setLeftComponent(new JScrollPane(table));
-        splitPane.setRightComponent(tabbedPane);
+        // The wizard of the selected settings is shown by the window's one properties column now.
+        add(new JScrollPane(table), BorderLayout.CENTER);
     }
 
     private void createAndAddToolbar() {
