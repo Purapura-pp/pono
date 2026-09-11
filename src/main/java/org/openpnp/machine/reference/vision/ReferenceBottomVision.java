@@ -589,7 +589,12 @@ public class ReferenceBottomVision extends AbstractPartAlignment
         }
     }
 
-    private RotatedRect processPipelineAndGetResult(CvPipeline pipeline, Camera camera,
+    /**
+     * Run the pipeline over all its shots and return the rectangle it found, without any of the
+     * iterating that {@link #findOffsets} does around it. Public so that diagnostics can measure
+     * a single uncorrected detection, which is what the iteration is designed to hide.
+     */
+    public RotatedRect processPipelineAndGetResult(CvPipeline pipeline, Camera camera,
             Part part, Nozzle nozzle, Location wantedLocation, Location adjustedNozzleLocation, BottomVisionSettings bottomVisionSettings) throws Exception {
         preparePipeline(pipeline, bottomVisionSettings.getPipelineParameterAssignments(), camera, part.getPackage(), 
                 nozzle, nozzle.getNozzleTip(), wantedLocation, adjustedNozzleLocation, bottomVisionSettings);

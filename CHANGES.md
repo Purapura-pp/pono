@@ -3,6 +3,10 @@ a complete change list, only those that may directly interest or affect users.
 
 # Version 2.7
 
+## New Features
+
+* A Diagnostics page under Machine Setup measures what the machine actually does and writes the result out as a report. Issues and Solutions calibrates - it measures in order to set something - so it never reports the things no calibration step needs: the acceleration and velocity the controller really reaches as against the ones the axes are configured for, how far apart repeated approaches to one point land with compensation left exactly as configured, whether the machine follows a commanded step of one axis resolution at all or sticks and then breaks free, whether Units per Pixel is to scale across the whole field of view, when the camera image actually stops moving after a move, how far the origin wanders between homing cycles, and the play in the nozzle rotation. It also records the controller's own settings beside the ones OpenPnP plans with, since a controller limit below the axis setting caps every move without saying so. The seven groups are selected individually; the two that move nothing, the controller settings and the configuration snapshot, are the ones on by default. Nothing is changed in the configuration: backlash compensation is switched off for the measurements that have to see the machine's own behaviour and put back afterwards. The report, and a CSV per measurement series, go to a timestamped folder under the configuration directory.
+
 ## Security
 
 * The ScriptRun vision pipeline stage now only runs scripts located inside the OpenPnP scripts directory. Pipelines are routinely shared and pasted between users, and the stage previously ran whatever script path the pipeline named - including one on a network share - with no confirmation, and did so unattended once the pipeline was assigned to a feeder. If you use ScriptRun, move your script into the scripts directory and update the stage's file setting. A path relative to the scripts directory is now also accepted.

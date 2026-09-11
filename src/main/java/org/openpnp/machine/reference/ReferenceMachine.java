@@ -88,11 +88,13 @@ import org.openpnp.machine.reference.signaler.ActuatorSignaler;
 import org.openpnp.machine.reference.signaler.SoundSignaler;
 import org.openpnp.machine.reference.solutions.CalibrationSolutions;
 import org.openpnp.machine.reference.solutions.KinematicSolutions;
+import org.openpnp.machine.reference.solutions.MachineDiagnostics;
 import org.openpnp.machine.reference.solutions.NozzleTipSolutions;
 import org.openpnp.machine.reference.solutions.ScriptingSolutions;
 import org.openpnp.machine.reference.solutions.VisionSolutions;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision;
 import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
+import org.openpnp.machine.reference.wizards.MachineDiagnosticsWizard;
 import org.openpnp.machine.reference.wizards.ReferenceMachineConfigurationWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -221,6 +223,7 @@ public class ReferenceMachine extends AbstractMachine {
             ((AbstractDriver)driver).migrateDriver(ReferenceMachine.this);
             driver = null;
         }
+        machineDiagnostics.configurationLoaded(configuration);
         super.configurationLoaded(configuration);
     }
 
@@ -421,10 +424,15 @@ public class ReferenceMachine extends AbstractMachine {
 
     @Override
     public PropertySheet[] getPropertySheets() {
-        return Collect.concat(new PropertySheet[] { 
-                    new PropertySheetWizardAdapter(getConfigurationWizard()),
-                },
-                getMotionPlanner().getPropertySheets());
+        return Collect.concat(
+                Collect.concat(new PropertySheet[] { 
+                            new PropertySheetWizardAdapter(getConfigurationWizard()),
+                        },
+                        getMotionPlanner().getPropertySheets()),
+                new PropertySheet[] {
+                    new PropertySheetWizardAdapter(new MachineDiagnosticsWizard(this),
+                            Translations.getString("ReferenceMachine.MachineDiagnosticsWizard.title")), //$NON-NLS-1$
+                });
     }
 
     public void registerFeederClass(Class<? extends Feeder> cls) {
@@ -648,6 +656,13 @@ public class ReferenceMachine extends AbstractMachine {
 
     public CalibrationSolutions getCalibrationSolutions() {
         return calibrationSolutions;
+    }
+
+    @Element(required = false)
+    private MachineDiagnostics machineDiagnostics = new MachineDiagnostics();
+
+    public MachineDiagnostics getMachineDiagnostics() {
+        return machineDiagnostics;
     }
 
     private ScriptingSolutions scriptingSolutions = new ScriptingSolutions();
