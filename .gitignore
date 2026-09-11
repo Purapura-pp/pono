@@ -17,5 +17,6 @@ hs_err*
 .vscode/
 .cursor/
 /src/main/resources/org/openpnp/translations.properties.bak
+/src/test/resources/configuration-get-baseline.txt-updated
 .DS_Store
 __pycache__/
