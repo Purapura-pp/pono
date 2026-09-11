@@ -36,7 +36,6 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.prefs.Preferences;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -48,8 +47,6 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
@@ -64,9 +61,10 @@ import javax.swing.table.TableRowSorter;
 import org.openpnp.Translations;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.CameraView;
-import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.Helpers;
+import org.openpnp.gui.shell.PropertySheetPresenter;
+import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
@@ -91,6 +89,7 @@ import org.openpnp.spi.Camera;
 import org.openpnp.spi.FiducialLocator;
 import org.openpnp.spi.Machine;
 import org.openpnp.spi.PartAlignment;
+import org.openpnp.spi.PropertySheetHolder.PropertySheet;
 import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Serializer;
 
@@ -99,8 +98,6 @@ public class PackagesPanel extends JPanel implements WizardContainer {
 
 
     private static final String PREF_DIVIDER_POSITION = "PackagesPanel.dividerPosition";
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
-    private Preferences prefs = Preferences.userNodeForPackage(PackagesPanel.class);
 
     final private Configuration configuration;
     final private Frame frame;
@@ -111,7 +108,6 @@ public class PackagesPanel extends JPanel implements WizardContainer {
     private JTable table;
     private ActionGroup singleSelectionActionGroup;
     private ActionGroup multiSelectionActionGroup;
-    private JTabbedPane tabbedPane;
     private Package selectedPackage;
 
     public PackagesPanel(Configuration configuration, Frame frame) {
@@ -161,20 +157,6 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         panel_1.add(searchTextField);
         searchTextField.setColumns(15);
 
-        JSplitPane splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setContinuousLayout(true);
-        splitPane
-                .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() {
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
-        add(splitPane, BorderLayout.CENTER);
-
-        tabbedPane = new JTabbedPane(JTabbedPane.TOP);
 
         table = new AutoSelectTextTable(tableModel) {
             @Override
@@ -204,13 +186,21 @@ public class PackagesPanel extends JPanel implements WizardContainer {
                 new NamedTableCellRenderer<AbstractVisionSettings>());
 
         table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+            private int priorRow = -1;
+
             @Override
             public void valueChanged(ListSelectionEvent e) {
                 if (e.getValueIsAdjusting()) {
                     return;
                 }
-                
-                firePackageSelectionChanged();
+                int previous = priorRow;
+                priorRow = table.getSelectedRow();
+                if (!firePackageSelectionChanged() && previous >= 0
+                        && previous < table.getRowCount()) {
+                    // The user would not let go of unapplied edits.
+                    priorRow = previous;
+                    table.setRowSelectionInterval(previous, previous);
+                }
             }
         });
 
@@ -232,8 +222,8 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         table.setRowSorter(tableSorter);
         table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
 
-        splitPane.setLeftComponent(new JScrollPane(table));
-        splitPane.setRightComponent(tabbedPane);
+        // The wizards of the selected package are shown by the window's one properties column now.
+        add(new JScrollPane(table), BorderLayout.CENTER);
 
         toolBar.add(newPackageAction);
         toolBar.add(deletePackageAction);
@@ -451,7 +441,6 @@ public class PackagesPanel extends JPanel implements WizardContainer {
             }
         }
     };
-    private int selectedTab;
 
     @Override
     public void wizardCompleted(Wizard wizard) {}
@@ -459,7 +448,11 @@ public class PackagesPanel extends JPanel implements WizardContainer {
     @Override
     public void wizardCancelled(Wizard wizard) {}
 
-    public void firePackageSelectionChanged() {
+    /**
+     * @return false when the user refused to leave unapplied edits behind, so that a caller
+     *         reacting to a selection change can put the selection back.
+     */
+    public boolean firePackageSelectionChanged() {
         List<Package> selections = getSelections();
 
         if (selections.size() > 1) {
@@ -476,58 +469,45 @@ public class PackagesPanel extends JPanel implements WizardContainer {
             this.selectedPackage = selectedPackage; 
         }
 
-        if (tabbedPane.getTabCount() > 0) {
-            selectedTab = tabbedPane.getSelectedIndex();
-        }
-        
-        for (Component comp : tabbedPane.getComponents()) {
-            if (comp instanceof AbstractConfigurationWizard) {
-                ((AbstractConfigurationWizard) comp).dispose();
-            }
-        }
-        tabbedPane.removeAll();
-        
+        // A package reports no property sheets of its own: four of these wizards are built here
+        // and the rest come from the machine's part alignments and its fiducial locator.
+        List<PropertySheet> sheets = new ArrayList<>();
         if (selectedPackage != null) {
-            PackageNozzleTipsWizard packageNozzleTipsWizard = new PackageNozzleTipsWizard(selectedPackage);
-            packageNozzleTipsWizard.setWizardContainer(PackagesPanel.this);
-            tabbedPane.add(Translations.getString("PackagesPanel.NozzleTipsTab.title"), //$NON-NLS-1$
-                    packageNozzleTipsWizard);
-            
-            PackageSettingsWizard packageSettingsPanel = new PackageSettingsWizard(selectedPackage);
-            packageSettingsPanel.setWizardContainer(PackagesPanel.this);
-            tabbedPane.add(Translations.getString("PackagesPanel.SettingsTab.title"), //$NON-NLS-1$
-                    packageSettingsPanel);
-            
-            PackageVisionWizard packageVisionPanel = new PackageVisionWizard(selectedPackage);
-            packageVisionPanel.setWizardContainer(PackagesPanel.this);
-            tabbedPane.add(Translations.getString("PackagesPanel.VisionTab.title"), //$NON-NLS-1$
-                    packageVisionPanel);
-            
-            PackageCompositingWizard packageCompositingPanel = new PackageCompositingWizard(selectedPackage);
-            packageCompositingPanel.setWizardContainer(PackagesPanel.this);
-            tabbedPane.add(Translations.getString("PackagesPanel.VisionCompositingTab.title"), //$NON-NLS-1$
-                    packageCompositingPanel);
-            
+            sheets.add(PropertySheetPresenter.sheet(
+                    Translations.getString("PackagesPanel.NozzleTipsTab.title"), //$NON-NLS-1$
+                    new PackageNozzleTipsWizard(selectedPackage)));
+            sheets.add(PropertySheetPresenter.sheet(
+                    Translations.getString("PackagesPanel.SettingsTab.title"), //$NON-NLS-1$
+                    new PackageSettingsWizard(selectedPackage)));
+            sheets.add(PropertySheetPresenter.sheet(
+                    Translations.getString("PackagesPanel.VisionTab.title"), //$NON-NLS-1$
+                    new PackageVisionWizard(selectedPackage)));
+            sheets.add(PropertySheetPresenter.sheet(
+                    Translations.getString("PackagesPanel.VisionCompositingTab.title"), //$NON-NLS-1$
+                    new PackageCompositingWizard(selectedPackage)));
             Machine machine = configuration.getMachine();
             for (PartAlignment partAlignment : machine.getPartAlignments()) {
                 Wizard wizard = partAlignment.getPartConfigurationWizard(selectedPackage);
                 if (wizard != null) {
-                    tabbedPane.add(wizard.getWizardName(), (JPanel) wizard);
-                    wizard.setWizardContainer(PackagesPanel.this);
+                    sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
+                            (JPanel) wizard));
                 }
             }
-            
-            FiducialLocator fiducialLocator = machine.getFiducialLocator();
-            Wizard wizard = fiducialLocator.getPartConfigurationWizard(selectedPackage);
+            Wizard wizard =
+                    machine.getFiducialLocator().getPartConfigurationWizard(selectedPackage);
             if (wizard != null) {
-                tabbedPane.add(wizard.getWizardName(), (JPanel) wizard);
-                wizard.setWizardContainer(PackagesPanel.this);
+                sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(), (JPanel) wizard));
             }
-            
-            if (selectedTab != -1 
-                    && tabbedPane.getTabCount() > selectedTab) {
-                tabbedPane.setSelectedIndex(selectedTab);
-            }
+        }
+        Package shownPackage = getSelectedPackage();
+        if (MainFrame.get().getInspector().show(shownPackage, PackagesPanel.this,
+                shownPackage == null ? null : shownPackage.getId(),
+                Translations.getString("MainFrame.RightComponent.tabs.Packages"), //$NON-NLS-1$
+                Icons.footprintQuad, sheets) == Result.Cancelled) {
+            return false;
+        }
+
+        if (selectedPackage != null) {
             MainFrame mainFrame = MainFrame.get();
             if (mainFrame.getNavigation().getSelectedComponent() == mainFrame.getPackagesTab() 
                     && configuration.getTablesLinked() == TablesLinked.Linked) {
@@ -537,6 +517,7 @@ public class PackagesPanel extends JPanel implements WizardContainer {
 
         revalidate();
         repaint();
+        return true;
     }
 
     public void selectPackageInTable(Package packag) {
