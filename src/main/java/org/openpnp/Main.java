@@ -66,19 +66,56 @@ public class Main {
     }
 
     public static String getVersionString() {
-        String version = null;
-        try {
-            version = FileUtils.readFileToString(new File("VERSION.txt"));
+        String version = readVersionFile(new File("VERSION.txt"));
+        if (version == null) {
+            // Beside the jar as well as in the working directory: a packaged build is launched
+            // from wherever the user happened to be, and an installed one from a menu entry with
+            // no working directory worth speaking of. Both used to report no version at all.
+            version = readVersionFile(versionFileBesideTheJar());
         }
-        catch (Exception e) {
-            // VERSION.txt is only present in packaged builds, the "n/a" fallback below is used otherwise.
-        }
-
-        if (version==null) {
+        if (version == null) {
+            // VERSION.txt is only present in packaged builds; a build run from the source tree
+            // has no version of its own and says so.
             version = "n/a";
         }
-
         return version.strip();
+    }
+
+    private static String readVersionFile(File file) {
+        if (file == null || !file.isFile()) {
+            return null;
+        }
+        try {
+            return FileUtils.readFileToString(file);
+        }
+        catch (Exception e) {
+            Logger.warn(e, "Could not read the version from {}.", file);
+            return null;
+        }
+    }
+
+    /**
+     * @return VERSION.txt in the directory holding the jar, or in the directory above it, which is
+     *         where a packaged build keeps it - or null if the jar's own location is unknowable.
+     */
+    private static File versionFileBesideTheJar() {
+        try {
+            File jar = new File(
+                    Main.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+            File directory = jar.getParentFile();
+            if (directory == null) {
+                return null;
+            }
+            File beside = new File(directory, "VERSION.txt");
+            if (beside.isFile() || directory.getParentFile() == null) {
+                return beside;
+            }
+            return new File(directory.getParentFile(), "VERSION.txt");
+        }
+        catch (Exception e) {
+            Logger.warn(e, "Could not work out where this build was installed.");
+            return null;
+        }
     }
 
     public static String getBuildString() {

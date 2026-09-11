@@ -1,0 +1,33 @@
+# Runs the test suite on every JDK the project claims to support.
+#
+# This is the real gate on the source level: the pom compiles with -source/-target 11 rather than
+# --release 11, which does not stop a JDK 12+ API from being used and then failing on 11.
+name: Build
+
+on:
+  push:
+  pull_request:
+  # Also runnable by hand, which is how this is tested without pushing.
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Java ${{ matrix.java }}
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [11, 17, 21]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B test
