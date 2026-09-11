@@ -99,6 +99,8 @@ public class MachineControlsPanel extends JPanel {
 
     private JogControlsPanel jogControlsPanel;
 
+    private JXCollapsiblePane collapsePane;
+
     private Location markLocation = null;
 
     
@@ -329,7 +331,7 @@ public class MachineControlsPanel extends JPanel {
         }
         add(heading);
 
-        JXCollapsiblePane collapsePane = new JXCollapsiblePane();
+        collapsePane = new JXCollapsiblePane();
 
         JButton collapseButton =
                 new JButton(collapsePane.getActionMap().get(JXCollapsiblePane.TOGGLE_ACTION));
@@ -474,6 +476,18 @@ public class MachineControlsPanel extends JPanel {
                 MovableUtils.moveToLocationAtSafeZ(camera, targetLocation);
                 MovableUtils.fireTargetedUserAction(camera);
             });
+        }
+    };
+
+    /**
+     * Fold the jog controls away and bring them back. The card sits on the camera image now, so
+     * this is how you get the image to yourself without moving anything.
+     */
+    public Action toggleJogControlsAction =
+            new AbstractAction(Translations.getString("MachineControls.Action.ToggleJogControls")) { //$NON-NLS-1$
+        @Override
+        public void actionPerformed(ActionEvent arg0) {
+            collapsePane.setCollapsed(!collapsePane.isCollapsed());
         }
     };
 

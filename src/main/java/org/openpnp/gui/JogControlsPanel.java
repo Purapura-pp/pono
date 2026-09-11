@@ -19,6 +19,7 @@
 
 package org.openpnp.gui;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.FlowLayout;
@@ -28,7 +29,6 @@ import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.beans.PropertyChangeListener;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.Map;
 import org.pmw.tinylog.Logger;
 
@@ -41,13 +41,15 @@ import javax.swing.JLabel;
 import javax.swing.UIManager;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
-import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
+import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+import org.jdesktop.swingx.JXCollapsiblePane;
 import org.openpnp.ConfigurationListener;
 import org.openpnp.Translations;
+import org.openpnp.gui.shell.IncrementSelector;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.WrapLayout;
 import org.openpnp.model.Configuration;
@@ -85,7 +87,7 @@ public class JogControlsPanel extends JPanel {
     private final MachineControlsPanel machineControlsPanel;
     private final Configuration configuration;
     private JPanel panelActuators;
-    private JSlider sliderIncrements;
+    private IncrementSelector incrementSelector;
     private JCheckBox boardProtectionCheck;
 
     /**
@@ -124,22 +126,10 @@ public class JogControlsPanel extends JPanel {
 
     private void setUnits(LengthUnit units) {
         if (units == LengthUnit.Millimeters) {
-            Hashtable<Integer, JLabel> incrementsLabels = new Hashtable<>();
-            incrementsLabels.put(1, new JLabel("0.01")); //$NON-NLS-1$
-            incrementsLabels.put(2, new JLabel("0.1")); //$NON-NLS-1$
-            incrementsLabels.put(3, new JLabel("1.0")); //$NON-NLS-1$
-            incrementsLabels.put(4, new JLabel("10")); //$NON-NLS-1$
-            incrementsLabels.put(5, new JLabel("100")); //$NON-NLS-1$
-            sliderIncrements.setLabelTable(incrementsLabels);
+            incrementSelector.setLabels(new String[] {"0.01", "0.1", "1.0", "10", "100"}); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
         }
         else if (units == LengthUnit.Inches) {
-            Hashtable<Integer, JLabel> incrementsLabels = new Hashtable<>();
-            incrementsLabels.put(1, new JLabel("0.001")); //$NON-NLS-1$
-            incrementsLabels.put(2, new JLabel("0.01")); //$NON-NLS-1$
-            incrementsLabels.put(3, new JLabel("0.1")); //$NON-NLS-1$
-            incrementsLabels.put(4, new JLabel("1.0")); //$NON-NLS-1$
-            incrementsLabels.put(5, new JLabel("10.0")); //$NON-NLS-1$
-            sliderIncrements.setLabelTable(incrementsLabels);
+            incrementSelector.setLabels(new String[] {"0.001", "0.01", "0.1", "1.0", "10.0"}); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
         }
         else {
             throw new Error("setUnits() not implemented for " + units); //$NON-NLS-1$
@@ -148,7 +138,7 @@ public class JogControlsPanel extends JPanel {
     }
 
     public double getJogIncrement() {
-        int val = sliderIncrements.getValue();
+        int val = incrementSelector.getLevel();
         if (MainFrame.get().getShiftDown()) {
             val = Math.max(1, val - 2);   // finer movement by 2 levels
         }
@@ -250,13 +240,10 @@ public class JogControlsPanel extends JPanel {
         setFocusTraversalPolicy(focusPolicy);
         setFocusTraversalPolicyProvider(true);
 
-        JTabbedPane tabbedPane_1 = new JTabbedPane(JTabbedPane.TOP);
-        add(tabbedPane_1);
-
         JPanel panelControls = new JPanel();
-        //tabbedPane_1.addTab("Jog", null, panelControls, null); //$NON-NLS-1$
-        tabbedPane_1.addTab(Translations.getString("JogControlsPanel.Tab.Jog"), //$NON-NLS-1$
-                null, panelControls, null);
+        panelControls.setOpaque(false);
+        panelControls.setAlignmentX(LEFT_ALIGNMENT);
+        add(panelControls);
         panelControls.setLayout(new FormLayout(
                 new ColumnSpec[] {FormSpecs.RELATED_GAP_COLSPEC, FormSpecs.DEFAULT_COLSPEC,
                         FormSpecs.RELATED_GAP_COLSPEC, FormSpecs.DEFAULT_COLSPEC,
@@ -303,35 +290,6 @@ public class JogControlsPanel extends JPanel {
         lblZ.setFont(axisFont);
         panelControls.add(lblZ, "14, 2"); //$NON-NLS-1$
 
-        JLabel lblDistance = new JLabel("<html>" + Translations.getString("JogControlsPanel.Label.Distance") + "<br>[" + configuration.getSystemUnits().getShortName() + "/deg]</html>"); //$NON-NLS-1$
-        lblDistance.setFont(captionFont);
-        lblDistance.setToolTipText(Translations.getString("JogControlsPanel.Label.Distance.toolTipText")); //$NON-NLS-1$
-        panelControls.add(lblDistance, "18, 2, center, center"); //$NON-NLS-1$
-
-        JLabel lblSpeed = new JLabel("<html>" + Translations.getString("JogControlsPanel.Label.Speed") + "<br>[%]</html>"); //$NON-NLS-1$
-        lblSpeed.setFont(captionFont);
-        panelControls.add(lblSpeed, "20, 2, center, center"); //$NON-NLS-1$
-
-        sliderIncrements = new JSlider();
-        panelControls.add(sliderIncrements, "18, 3, 1, 10"); //$NON-NLS-1$
-        sliderIncrements.setOrientation(SwingConstants.VERTICAL);
-        sliderIncrements.setMajorTickSpacing(1);
-        sliderIncrements.setValue(configuration.getDistance());
-        sliderIncrements.setSnapToTicks(true);
-        sliderIncrements.setPaintLabels(true);
-        sliderIncrements.setMinimum(1);
-        sliderIncrements.setMaximum(5);
-        sliderIncrements.addChangeListener(new ChangeListener() {
-            int oldValue = configuration.getDistance();
-            @Override
-            public void stateChanged(ChangeEvent e) {
-                if (sliderIncrements.getValue() != oldValue) {
-                    oldValue = sliderIncrements.getValue();
-                    configuration.setDistance(oldValue);
-                }
-            }
-        });
-
         JButton yPlusButton = new JButton(yPlusAction);
         yPlusButton.setHideActionText(true);
         panelControls.add(yPlusButton, "8, 4"); //$NON-NLS-1$
@@ -342,13 +300,13 @@ public class JogControlsPanel extends JPanel {
 
         speedSlider = new JSlider();
         speedSlider.setValue(100);
-        speedSlider.setPaintTicks(true);
+        // No tick marks: a comb of a hundred of them was legible down the side of the panel and
+        // is not along the bottom of it, and the percentage is written out beside the slider now.
         speedSlider.setMinorTickSpacing(1);
         speedSlider.setMajorTickSpacing(25);
         speedSlider.setSnapToTicks(true);
-        speedSlider.setPaintLabels(true);
-        speedSlider.setOrientation(SwingConstants.VERTICAL);
-        panelControls.add(speedSlider, "20, 4, 1, 9"); //$NON-NLS-1$
+        speedSlider.setOrientation(SwingConstants.HORIZONTAL);
+        speedSlider.setOpaque(false);
         speedSlider.addChangeListener(new ChangeListener() {
             int oldValue = 100;
             @Override
@@ -428,8 +386,73 @@ public class JogControlsPanel extends JPanel {
         clockwiseButton.setHideActionText(true);
         panelControls.add(clockwiseButton, "10, 12"); //$NON-NLS-1$
 
+        // The distance and the speed used to be two vertical sliders standing as tall as the jog
+        // buttons beside them, for two numbers. They lie along the bottom now, where the distance
+        // reads as five distances rather than as a handle near a tick.
+        FormLayout controlsLayout = (FormLayout) panelControls.getLayout();
+        controlsLayout.appendRow(FormSpecs.RELATED_GAP_ROWSPEC);
+        controlsLayout.appendRow(FormSpecs.DEFAULT_ROWSPEC);
+        controlsLayout.appendRow(FormSpecs.RELATED_GAP_ROWSPEC);
+        controlsLayout.appendRow(FormSpecs.DEFAULT_ROWSPEC);
+
+        JLabel lblDistance = new JLabel(Translations.getString("JogControlsPanel.Label.Distance") //$NON-NLS-1$
+                + " [" + configuration.getSystemUnits().getShortName() + "/deg]"); //$NON-NLS-1$ //$NON-NLS-2$
+        lblDistance.setFont(captionFont);
+        lblDistance.setToolTipText(Translations.getString("JogControlsPanel.Label.Distance.toolTipText")); //$NON-NLS-1$
+        panelControls.add(lblDistance, "2, 14, 5, 1, left, center"); //$NON-NLS-1$
+
+        incrementSelector = new IncrementSelector();
+        incrementSelector.setLevel(configuration.getDistance());
+        incrementSelector.setToolTipText(Translations.getString("JogControlsPanel.Label.Distance.toolTipText")); //$NON-NLS-1$
+        panelControls.add(incrementSelector, "8, 14, 15, 1, fill, center"); //$NON-NLS-1$
+        incrementSelector.addChangeListener(new ChangeListener() {
+            @Override
+            public void stateChanged(ChangeEvent e) {
+                configuration.setDistance(incrementSelector.getLevel());
+            }
+        });
+
+        JLabel lblSpeed = new JLabel(Translations.getString("JogControlsPanel.Label.Speed") + " [%]"); //$NON-NLS-1$ //$NON-NLS-2$
+        lblSpeed.setFont(captionFont);
+        panelControls.add(lblSpeed, "2, 16, 5, 1, left, center"); //$NON-NLS-1$
+        panelControls.add(speedSlider, "8, 16, 13, 1, fill, center"); //$NON-NLS-1$
+
+        // The percentage the slider no longer prints under itself, which is the one label on it
+        // anybody reads.
+        JLabel lblSpeedValue = new JLabel();
+        lblSpeedValue.setFont(captionFont);
+        lblSpeedValue.setHorizontalAlignment(SwingConstants.RIGHT);
+        panelControls.add(lblSpeedValue, "22, 16, right, center"); //$NON-NLS-1$
+        speedSlider.addChangeListener(e -> lblSpeedValue
+                .setText(speedSlider.getValue() + "%")); //$NON-NLS-1$
+        lblSpeedValue.setText(speedSlider.getValue() + "%"); //$NON-NLS-1$
+
+        JXCollapsiblePane morePane = new JXCollapsiblePane();
+        JPanel moreContent = new JPanel();
+        moreContent.setLayout(new BoxLayout(moreContent, BoxLayout.Y_AXIS));
+        morePane.add(moreContent);
+
+        JButton moreButton = new JButton(morePane.getActionMap().get(JXCollapsiblePane.TOGGLE_ACTION));
+        moreButton.setText(Translations.getString("JogControlsPanel.Label.More")); //$NON-NLS-1$
+        moreButton.setBorderPainted(false);
+        moreButton.setContentAreaFilled(false);
+        moreButton.setHorizontalAlignment(SwingConstants.LEFT);
+        moreButton.setAlignmentX(LEFT_ALIGNMENT);
+        Action moreAction = moreButton.getAction();
+        moreAction.putValue(JXCollapsiblePane.COLLAPSE_ICON,
+                UIManager.getIcon("Tree.expandedIcon")); //$NON-NLS-1$
+        moreAction.putValue(JXCollapsiblePane.EXPAND_ICON,
+                UIManager.getIcon("Tree.collapsedIcon")); //$NON-NLS-1$
+        add(moreButton);
+
+        morePane.setAlignmentX(LEFT_ALIGNMENT);
+        add(morePane);
+        morePane.setCollapsed(true);
+
         JPanel panelSpecial = new JPanel();
-        tabbedPane_1.addTab(Translations.getString("JogControlsPanel.Tab.Special"), null, panelSpecial, null); //$NON-NLS-1$
+        panelSpecial.setAlignmentX(LEFT_ALIGNMENT);
+        moreContent.add(sectionHeading(Translations.getString("JogControlsPanel.Tab.Special"))); //$NON-NLS-1$
+        moreContent.add(panelSpecial);
         FlowLayout flowLayout_1 = (FlowLayout) panelSpecial.getLayout();
         flowLayout_1.setAlignment(FlowLayout.LEFT);
 
@@ -446,13 +469,15 @@ public class JogControlsPanel extends JPanel {
         panelSpecial.add(btnRecycle);
 
         panelActuators = new JPanel();
-        tabbedPane_1.addTab(Translations.getString("JogControlsPanel.Tab.Actuators"), //$NON-NLS-1$
-                null, panelActuators, null);
+        panelActuators.setAlignmentX(LEFT_ALIGNMENT);
+        moreContent.add(sectionHeading(Translations.getString("JogControlsPanel.Tab.Actuators"))); //$NON-NLS-1$
+        moreContent.add(panelActuators);
         panelActuators.setLayout(new WrapLayout(WrapLayout.LEFT));
 
         JPanel panelSafety = new JPanel();
-        tabbedPane_1.addTab(Translations.getString("JogControlsPanel.Tab.Safety"), //$NON-NLS-1$
-                null, panelSafety, null);
+        panelSafety.setAlignmentX(LEFT_ALIGNMENT);
+        moreContent.add(sectionHeading(Translations.getString("JogControlsPanel.Tab.Safety"))); //$NON-NLS-1$
+        moreContent.add(panelSafety);
         panelSafety.setLayout(new FlowLayout(FlowLayout.LEFT, 5, 5));
 
         boardProtectionCheck = new JCheckBox(
@@ -463,35 +488,50 @@ public class JogControlsPanel extends JPanel {
         panelSafety.add(boardProtectionCheck, "1, 1"); //$NON-NLS-1$
     }
 
+    /**
+     * A heading for one of the groups gathered under More. They were three tabs, and a tab strip
+     * inside a card that is itself inside a fold is one lid too many.
+     */
+    private JLabel sectionHeading(String text) {
+        JLabel heading = new JLabel(text);
+        heading.setAlignmentX(LEFT_ALIGNMENT);
+        heading.setBorder(new EmptyBorder(6, 2, 0, 0));
+        Color color = UIManager.getColor("Pono.textSecondary"); //$NON-NLS-1$
+        if (color != null) {
+            heading.setForeground(color);
+        }
+        return heading;
+    }
+
     private FocusTraversalPolicy focusPolicy = new FocusTraversalPolicy() {
         @Override
         public Component getComponentAfter(Container aContainer, Component aComponent) {
-            return sliderIncrements;
+            return incrementSelector.getFocusTarget();
         }
 
         @Override
         public Component getComponentBefore(Container aContainer, Component aComponent) {
-            return sliderIncrements;
+            return incrementSelector.getFocusTarget();
         }
 
         @Override
         public Component getDefaultComponent(Container aContainer) {
-            return sliderIncrements;
+            return incrementSelector.getFocusTarget();
         }
 
         @Override
         public Component getFirstComponent(Container aContainer) {
-            return sliderIncrements;
+            return incrementSelector.getFocusTarget();
         }
 
         @Override
         public Component getInitialComponent(Window window) {
-            return sliderIncrements;
+            return incrementSelector.getFocusTarget();
         }
 
         @Override
         public Component getLastComponent(Container aContainer) {
-            return sliderIncrements;
+            return incrementSelector.getFocusTarget();
         }
     };
 
@@ -690,8 +730,7 @@ public class JogControlsPanel extends JPanel {
     public Action raiseIncrementAction = new AbstractAction(Translations.getString("JogControlsPanel.Action.RaiseJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(
-                    Math.min(sliderIncrements.getMaximum(), sliderIncrements.getValue() + 1));
+            incrementSelector.setLevel(incrementSelector.getLevel() + 1);
         }
     };
 
@@ -699,8 +738,7 @@ public class JogControlsPanel extends JPanel {
     public Action lowerIncrementAction = new AbstractAction(Translations.getString("JogControlsPanel.Action.LowerJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(
-                    Math.max(sliderIncrements.getMinimum(), sliderIncrements.getValue() - 1));
+            incrementSelector.setLevel(incrementSelector.getLevel() - 1);
         }
     };
 
@@ -708,35 +746,35 @@ public class JogControlsPanel extends JPanel {
     public Action setIncrement1Action = new AbstractAction(Translations.getString("JogControlsPanel.Action.FirstJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(1);
+            incrementSelector.setLevel(1);
         }
     };
     @SuppressWarnings("serial")
     public Action setIncrement2Action = new AbstractAction(Translations.getString("JogControlsPanel.Action.SecondJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(2);
+            incrementSelector.setLevel(2);
         }
     };
     @SuppressWarnings("serial")
     public Action setIncrement3Action = new AbstractAction(Translations.getString("JogControlsPanel.Action.ThirdJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(3);
+            incrementSelector.setLevel(3);
         }
     };
     @SuppressWarnings("serial")
     public Action setIncrement4Action = new AbstractAction(Translations.getString("JogControlsPanel.Action.FourthJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(4);
+            incrementSelector.setLevel(4);
         }
     };
     @SuppressWarnings("serial")
     public Action setIncrement5Action = new AbstractAction(Translations.getString("JogControlsPanel.Action.FifthJogIncrement")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            sliderIncrements.setValue(5);
+            incrementSelector.setLevel(5);
         }
     };
 

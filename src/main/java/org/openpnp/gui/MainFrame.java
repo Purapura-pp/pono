@@ -705,6 +705,10 @@ public class MainFrame extends JFrame {
                 machineControlsPanel.getJogControlsPanel().setIncrement4Action);
         hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F5, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
                 machineControlsPanel.getJogControlsPanel().setIncrement5Action);
+        // Ctrl-Shift-J folds the jog controls off the camera image and back. A bare J would fire
+        // whenever the focus is not in a text field, which includes every table in the window.
+        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_J, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
+                machineControlsPanel.toggleJogControlsAction);
 
         isShiftDown = false;
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(
