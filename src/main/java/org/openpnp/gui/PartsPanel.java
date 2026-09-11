@@ -35,7 +35,6 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.prefs.Preferences;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -48,8 +47,6 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
@@ -63,9 +60,10 @@ import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
 import org.openpnp.gui.components.AutoSelectTextTable;
-import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.Helpers;
+import org.openpnp.gui.shell.PropertySheetPresenter;
+import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.IdentifiableListCellRenderer;
 import org.openpnp.gui.support.IdentifiableTableCellRenderer;
@@ -88,6 +86,7 @@ import org.openpnp.model.Part;
 import org.openpnp.spi.Feeder;
 import org.openpnp.spi.FiducialLocator;
 import org.openpnp.spi.PartAlignment;
+import org.openpnp.spi.PropertySheetHolder.PropertySheet;
 import org.openpnp.util.UiUtils;
 import org.openpnp.util.FeederUtils;
 import org.pmw.tinylog.Logger;
@@ -98,8 +97,6 @@ public class PartsPanel extends JPanel implements WizardContainer {
 
 
     private static final String PREF_DIVIDER_POSITION = "PartsPanel.dividerPosition";
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
-    private Preferences prefs = Preferences.userNodeForPackage(PartsPanel.class);
 
     final private Configuration configuration;
     final private Frame frame;
@@ -110,7 +107,6 @@ public class PartsPanel extends JPanel implements WizardContainer {
     private JTable table;
     private ActionGroup singleSelectionActionGroup;
     private ActionGroup multiSelectionActionGroup;
-    private JTabbedPane tabbedPane;
     private Part selectedPart;
     private int priorRowIndex = -1;
     private HashMap<Class, Integer> lastSelectedTabIndex = new HashMap<>();
@@ -166,21 +162,6 @@ public class PartsPanel extends JPanel implements WizardContainer {
         packagesCombo.setMaximumRowCount(20);
         packagesCombo.setRenderer(new IdentifiableListCellRenderer<org.openpnp.model.Package>());
 
-        JSplitPane splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setContinuousLayout(true);
-        splitPane
-                .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() {
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
-        add(splitPane, BorderLayout.CENTER);
-
-        tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-
         table = new AutoSelectTextTable(tableModel) {
             @Override
             public String getToolTipText(MouseEvent evt) {
@@ -215,8 +196,8 @@ public class PartsPanel extends JPanel implements WizardContainer {
 
         table.setRowSorter(tableSorter);
         table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
-        splitPane.setLeftComponent(new JScrollPane(table));
-        splitPane.setRightComponent(tabbedPane);
+        // The wizards of the selected part are shown by the window's one properties column now.
+        add(new JScrollPane(table), BorderLayout.CENTER);
         
         toolBar.add(newPartAction);
         toolBar.add(deletePartAction);
@@ -239,9 +220,14 @@ public class PartsPanel extends JPanel implements WizardContainer {
                     return;
                 }
                 if (table.getSelectedRow() != priorRowIndex) {
+                    int previous = priorRowIndex;
                     priorRowIndex = table.getSelectedRow();
-
-                    updateWizards();
+                    if (!updateWizards() && previous >= 0
+                            && previous < table.getRowCount()) {
+                        // The user would not let go of unapplied edits.
+                        priorRowIndex = previous;
+                        table.setRowSelectionInterval(previous, previous);
+                    }
                 }
             }
         });
@@ -467,10 +453,12 @@ public class PartsPanel extends JPanel implements WizardContainer {
             }
         }
     };
-    private int selectedTab;
-    private String priorPartId;
 
-    public void updateWizards() {
+    /**
+     * @return false when the user refused to leave unapplied edits behind, so that a caller
+     *         reacting to a selection change can put the selection back.
+     */
+    public boolean updateWizards() {
         List<Part> selections = getSelections();
 
         if (selections.size() > 1) {
@@ -483,55 +471,52 @@ public class PartsPanel extends JPanel implements WizardContainer {
         }
 
         Part selectedPart = getSelectedPart();
-        
-        if (tabbedPane.getTabCount() > 0) {
-            selectedTab = tabbedPane.getSelectedIndex();
-        }
-        
-        for (Component comp : tabbedPane.getComponents()) {
-            if (comp instanceof AbstractConfigurationWizard) {
-                ((AbstractConfigurationWizard) comp).dispose();
-            }
-        }
-        tabbedPane.removeAll();
+        this.selectedPart = selectedPart;
 
+        // A part reports no property sheets of its own: its wizards come from the machine's part
+        // alignments and its fiducial locator, so they are assembled here and handed over.
+        List<PropertySheet> sheets = new ArrayList<>();
         if (selectedPart != null) {
-            priorPartId = selectedPart.getId();
-            this.selectedPart = selectedPart;
-            Wizard wizard = new PartSettingsWizard(selectedPart);
-            wizard.setWizardContainer(PartsPanel.this);
-            tabbedPane.add(Translations.getString("PartsPanel.SettingsTab.title"), //$NON-NLS-1$
-                    (JPanel) wizard);
-
+            sheets.add(PropertySheetPresenter.sheet(
+                    Translations.getString("PartsPanel.SettingsTab.title"), //$NON-NLS-1$
+                    (JPanel) new PartSettingsWizard(selectedPart)));
             for (PartAlignment partAlignment : configuration.getMachine().getPartAlignments()) {
-                wizard = partAlignment.getPartConfigurationWizard(selectedPart);
+                Wizard wizard = partAlignment.getPartConfigurationWizard(selectedPart);
                 if (wizard != null) {
-                    wizard.setWizardContainer(PartsPanel.this);
-                    tabbedPane.addTab(wizard.getWizardName(), (JPanel) wizard);
+                    sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
+                            (JPanel) wizard));
                 }
             }
-            
-            FiducialLocator fiducialLocator =
-                    configuration.getMachine().getFiducialLocator();
-            wizard = fiducialLocator.getPartConfigurationWizard(selectedPart);
+            Wizard wizard =
+                    configuration.getMachine().getFiducialLocator()
+                            .getPartConfigurationWizard(selectedPart);
             if (wizard != null) {
-                wizard.setWizardContainer(PartsPanel.this);
-                tabbedPane.add(wizard.getWizardName(), (JPanel) wizard);
+                sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(), (JPanel) wizard));
             }
-            MainFrame mainFrame = MainFrame.get();
+        }
+        MainFrame mainFrame = MainFrame.get();
+        Result shown = mainFrame.getInspector().show(selectedPart, PartsPanel.this,
+                selectedPart == null ? null : selectedPart.getId(),
+                selectedPart == null || selectedPart.getPackage() == null
+                        ? null
+                        : selectedPart.getPackage().getId(),
+                Icons.footprintDual, sheets);
+        if (shown == Result.Busy) {
+            return true;
+        }
+        if (shown == Result.Cancelled) {
+            return false;
+        }
+
+        if (selectedPart != null) {
             if (mainFrame.getNavigation().getSelectedComponent() == mainFrame.getPartsTab() 
                     && configuration.getTablesLinked() == TablesLinked.Linked) {
                 mainFrame.getPackagesTab().selectPackageInTable(selectedPart.getPackage());
                 mainFrame.getFeedersTab().selectFeederForPart(selectedPart);
                 mainFrame.getVisionSettingsTab().selectVisionSettingsInTable(selectedPart);
             }
-            
-            if (selectedTab >= 0 && selectedTab < tabbedPane.getTabCount()) {
-                tabbedPane.setSelectedIndex(selectedTab);
-            }
         }
-        revalidate();
-        repaint();
+        return true;
     }
 
     public void selectPartInTableAndUpdateLinks(Part part) {

@@ -24,6 +24,7 @@ import java.awt.Component;
 import java.awt.Font;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.util.List;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -42,6 +43,7 @@ import org.openpnp.Translations;
 import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.spi.PropertySheetHolder;
+import org.openpnp.spi.PropertySheetHolder.PropertySheet;
 
 /**
  * The one column that shows the properties of whatever is selected, wherever it was selected.
@@ -155,16 +157,36 @@ public class InspectorPanel extends JPanel {
     public Result show(PropertySheetHolder holder, WizardContainer container, String title,
             Icon icon) {
         Result result = presenter.show(holder, container, title);
+        return headerFor(result, holder,
+                title != null || holder == null ? title : holder.getPropertySheetHolderTitle(),
+                holder == null ? null : typeOf(holder),
+                icon != null || holder == null ? icon : holder.getPropertySheetHolderIcon());
+    }
+
+    /**
+     * Show sheets that were assembled rather than reported, as a part's are: they come from the
+     * machine's part alignments and its fiducial locator, and a part reports no sheets of its own.
+     * 
+     * @param type What kind of thing this is, under its name. A package for a part, the driver's
+     *             class for a driver - whatever the table beside it would have called it.
+     */
+    public Result show(Object subject, WizardContainer container, String title, String type,
+            Icon icon, List<PropertySheet> propertySheets) {
+        Result result = presenter.show(subject, container, title, propertySheets);
+        return headerFor(result, subject, title, type, icon);
+    }
+
+    private Result headerFor(Result result, Object subject, String title, String type, Icon icon) {
         if (result != Result.Shown) {
             return result;
         }
-        if (holder == null || sheets.getTabCount() == 0) {
+        if (subject == null || sheets.getTabCount() == 0) {
             clear();
             return result;
         }
-        iconLabel.setIcon(icon != null ? icon : holder.getPropertySheetHolderIcon());
-        nameLabel.setText(title != null ? title : holder.getPropertySheetHolderTitle());
-        typeLabel.setText(typeOf(holder));
+        iconLabel.setIcon(icon);
+        nameLabel.setText(title == null ? String.valueOf(subject) : title);
+        typeLabel.setText(type == null || type.isEmpty() ? " " : type); //$NON-NLS-1$
         setBody(sheets);
         return result;
     }
@@ -210,7 +232,7 @@ public class InspectorPanel extends JPanel {
      * What kind of thing is being edited, under its name. A feeder is a strip feeder or a tray
      * feeder, and which one it is decides what the sheets below even contain.
      */
-    private String typeOf(PropertySheetHolder holder) {
+    public String typeOf(Object holder) {
         String name = holder.getClass().getSimpleName();
         return name.startsWith("Reference") ? name.substring("Reference".length()) : name; //$NON-NLS-1$ //$NON-NLS-2$
     }

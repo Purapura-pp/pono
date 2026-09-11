@@ -18,7 +18,9 @@
 package org.openpnp.gui.shell;
 
 import java.awt.Component;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.swing.JOptionPane;
@@ -80,7 +82,11 @@ public class PropertySheetPresenter {
      */
     private final Map<Class<?>, Integer> lastTabByClass = new HashMap<>();
 
-    private PropertySheetHolder shown;
+    /**
+     * What is on show. Not a {@link PropertySheetHolder}: a part's sheets are assembled from the
+     * machine's part alignments and its fiducial locator rather than reported by the part itself.
+     */
+    private Object shown;
 
     private String shownName;
 
@@ -108,6 +114,19 @@ public class PropertySheetPresenter {
      * @param name      What to call it in the question about unapplied edits.
      */
     public Result show(PropertySheetHolder holder, WizardContainer container, String name) {
+        return show(holder, container, name,
+                holder == null ? null : Arrays.asList(nonNull(holder.getPropertySheets())));
+    }
+
+    /**
+     * Show sheets that were assembled rather than reported. A part's sheets come from the
+     * machine's part alignments and its fiducial locator, and a part is not a sheet holder.
+     * 
+     * @param subject What the sheets are about. Used to remember which tab was open for this kind
+     *                of thing, and reported back by {@link #getShown()}.
+     */
+    public Result show(Object subject, WizardContainer container, String name,
+            List<PropertySheet> propertySheets) {
         if (asking) {
             return Result.Busy;
         }
@@ -116,35 +135,51 @@ public class PropertySheetPresenter {
         }
         disposeShownWizards();
         sheets.removeAll();
-        shown = holder;
+        shown = subject;
         shownName = name;
-        if (holder == null) {
+        if (subject == null || propertySheets == null) {
             return Result.Shown;
         }
-        PropertySheet[] propertySheets = holder.getPropertySheets();
-        if (propertySheets != null) {
-            for (PropertySheet propertySheet : propertySheets) {
-                JPanel panel = propertySheet.getPropertySheetPanel();
-                if (panel == null) {
-                    continue;
-                }
-                if (panel instanceof AbstractConfigurationWizard) {
-                    ((AbstractConfigurationWizard) panel).setWizardContainer(container);
-                }
-                String title = propertySheet.getPropertySheetTitle();
-                if (title == null) {
-                    title = Translations.getString("PropertySheetPresenter.Tab.Configuration"); //$NON-NLS-1$
-                }
-                sheets.addTab(title, panel);
+        for (PropertySheet propertySheet : propertySheets) {
+            JPanel panel = propertySheet.getPropertySheetPanel();
+            if (panel == null) {
+                continue;
             }
+            if (panel instanceof AbstractConfigurationWizard) {
+                ((AbstractConfigurationWizard) panel).setWizardContainer(container);
+            }
+            String title = propertySheet.getPropertySheetTitle();
+            if (title == null) {
+                title = Translations.getString("PropertySheetPresenter.Tab.Configuration"); //$NON-NLS-1$
+            }
+            sheets.addTab(title, panel);
         }
-        Integer lastTab = lastTabByClass.get(holder.getClass());
+        Integer lastTab = lastTabByClass.get(subject.getClass());
         if (lastTab != null && sheets.getTabCount() > 0) {
             // Clamped, because the same class does not always produce the same number of sheets -
             // and because clicking about quickly used to land an index past the end of the strip.
             sheets.setSelectedIndex(Math.max(0, Math.min(sheets.getTabCount() - 1, lastTab)));
         }
         return Result.Shown;
+    }
+
+    /** One sheet, for callers holding a wizard rather than something that reports sheets. */
+    public static PropertySheet sheet(String title, JPanel panel) {
+        return new PropertySheet() {
+            @Override
+            public String getPropertySheetTitle() {
+                return title;
+            }
+
+            @Override
+            public JPanel getPropertySheetPanel() {
+                return panel;
+            }
+        };
+    }
+
+    private static PropertySheet[] nonNull(PropertySheet[] propertySheets) {
+        return propertySheets == null ? new PropertySheet[0] : propertySheets;
     }
 
     /**
@@ -162,7 +197,7 @@ public class PropertySheetPresenter {
         Choice choice;
         asking = true;
         try {
-            choice = prompt.ask(shownName == null ? shown.getPropertySheetHolderTitle() : shownName);
+            choice = prompt.ask(shownName == null ? String.valueOf(shown) : shownName);
         }
         finally {
             asking = false;
@@ -195,7 +230,7 @@ public class PropertySheetPresenter {
     }
 
     /** What is on show, or null. */
-    public PropertySheetHolder getShown() {
+    public Object getShown() {
         return shown;
     }
 
