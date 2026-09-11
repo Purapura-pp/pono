@@ -774,6 +774,7 @@ public class MainFrame extends JFrame {
         // and the etched box only cost the view a few pixels on every edge.
         cameraPanel.setBorder(null);
         cameraStage = new CameraStage(cameraPanel);
+        cameraStage.overlay(cameraPanel.getCameraSelector(), Anchor.NorthWest);
         // The readout goes bottom left and the machine controls bottom right, as the mockups have
         // them; the instructions arrive at the top, over the image they are talking about.
         cameraStage.overlay(droPanel, Anchor.SouthWest);

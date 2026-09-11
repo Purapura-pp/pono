@@ -36,6 +36,8 @@ import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 
 import org.openpnp.ConfigurationListener;
+import org.openpnp.Translations;
+import org.openpnp.gui.shell.PillBar;
 import org.openpnp.gui.support.CameraItem;
 import org.openpnp.model.Configuration;
 import org.openpnp.spi.Camera;
@@ -53,7 +55,9 @@ public class CameraPanel extends JPanel {
 
     private Map<Camera, CameraView> cameraViews = new LinkedHashMap<>();
 
-    private JComboBox camerasCombo;
+    // Created with the panel rather than in createUi(), which runs later on the event queue:
+    // whoever places this control asks for it while the panel is being built.
+    private final PillBar camerasCombo = new PillBar();
     private JPanel camerasPanel;
 
     private CameraView selectedCameraView;
@@ -150,14 +154,20 @@ public class CameraPanel extends JPanel {
     private void createUi() {
         camerasPanel = new JPanel();
 
-        camerasCombo = new JComboBox();
+        // A camera's own text names its head too, which a pill has no room for and the view
+        // below it shows anyway.
+        camerasCombo.setLabeller(item -> item instanceof CameraItem
+                ? ((CameraItem) item).getCamera().getName()
+                : Translations.getString("CameraPanel.Show." //$NON-NLS-1$
+                        + String.valueOf(item).replace(" ", ""))); //$NON-NLS-1$
         camerasCombo.addActionListener(cameraSelectedAction);
 
         setLayout(new BorderLayout());
 
         camerasCombo.addItem(SHOW_NONE_ITEM);
 
-        add(camerasCombo, BorderLayout.NORTH);
+        // The selector is placed by whoever shows this panel. On the main window it floats over
+        // the image rather than taking a strip above it.
         add(camerasPanel);
     }
 
@@ -190,6 +200,14 @@ public class CameraPanel extends JPanel {
             }
         }
         return null;
+    }
+
+    /**
+     * The control that chooses which camera is shown. It is not added to this panel: the main
+     * window floats it over the image, and a wizard that only ever shows one camera leaves it out.
+     */
+    public PillBar getCameraSelector() {
+        return camerasCombo;
     }
 
     public CameraView getCameraView(Camera camera) {
