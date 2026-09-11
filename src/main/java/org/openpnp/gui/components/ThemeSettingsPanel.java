@@ -303,18 +303,14 @@ public class ThemeSettingsPanel extends JPanel {
 
         if (oldSel != null) {
             for (int i = 0; i < themes.size(); i++) {
-                ThemeInfo theme = themes.get(i);
-                if (oldSel.name.equals(theme.name) &&
-                        Objects.equals(oldSel.resourceName, theme.resourceName) &&
-                        Objects.equals(oldSel.themeFile, theme.themeFile) &&
-                        Objects.equals(oldSel.lafClassName, theme.lafClassName)) {
+                if (isSameTheme(oldSel, themes.get(i))) {
                     themesList.setSelectedIndex(i);
                     break;
                 }
             }
 
             if (themesList.getSelectedIndex() < 0) {
-                themesList.setSelectedIndex(0);
+                selectFirstTheme();
             }
         }
 
@@ -323,6 +319,36 @@ public class ThemeSettingsPanel extends JPanel {
             Rectangle bounds = themesList.getCellBounds(sel, sel);
             if (bounds != null) {
                 themesList.scrollRectToVisible(bounds);
+            }
+        }
+    }
+
+    /**
+     * A theme is identified by what it installs, not by what it is called. The Pono entries are
+     * named through Translations, so matching on the name meant that changing the display language
+     * stopped a stored preference from matching anything: the selection then fell to index 0,
+     * which is a section header that installs nothing, and saving from there left the user on
+     * whatever look and feel start up happened to have applied, with no way to tell why.
+     */
+    private static boolean isSameTheme(ThemeInfo a, ThemeInfo b) {
+        if (isSection(a) || isSection(b)) {
+            return isSection(a) && isSection(b) && Objects.equals(a.name, b.name);
+        }
+        return Objects.equals(a.lafClassName, b.lafClassName)
+                && Objects.equals(a.themeFile, b.themeFile)
+                && Objects.equals(a.resourceName, b.resourceName);
+    }
+
+    /** Names a group and installs nothing. The renderer draws it disabled. */
+    private static boolean isSection(ThemeInfo theme) {
+        return theme.lafClassName == null && theme.themeFile == null && theme.resourceName == null;
+    }
+
+    private void selectFirstTheme() {
+        for (int i = 0; i < themes.size(); i++) {
+            if (!isSection(themes.get(i))) {
+                themesList.setSelectedIndex(i);
+                return;
             }
         }
     }

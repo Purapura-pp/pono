@@ -99,7 +99,8 @@ public class Main {
             // Take the hash.
             version = version.substring(version.indexOf(".")+1);
         }
-        return "https://github.com/openpnp/openpnp/blob/"+version+"/";
+        // Pono's commits only exist in Pono's repository; the upstream one would 404 on every hash.
+        return "https://github.com/Purapura-pp/pono/blob/"+version+"/";
     }
 
     private static void configureLogging(File configurationDirectory) {

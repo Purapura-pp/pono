@@ -36,6 +36,15 @@ import org.pmw.tinylog.Logger;
 public final class SystemTheme {
     /** A probe that hangs must not hold up startup. */
     private static final long PROBE_TIMEOUT_MS = 2000;
+    /**
+     * The answer is read once per theme change and once per rebuild of the theme list, and the
+     * list is rebuilt on the event thread, so a short memo keeps a burst of those from spawning a
+     * process each. Short enough that flipping the OS appearance is picked up by the next apply.
+     */
+    private static final long CACHE_TTL_MS = 2000;
+
+    private static boolean cachedDark;
+    private static long cachedAt;
 
     private SystemTheme() {
     }
@@ -45,7 +54,17 @@ public final class SystemTheme {
      *         unreadable — unsupported OS, missing registry value, absent
      *         {@code gsettings}, timeout — reports light.
      */
-    public static boolean isDark() {
+    public static synchronized boolean isDark() {
+        long now = System.currentTimeMillis();
+        if (cachedAt != 0 && now - cachedAt < CACHE_TTL_MS) {
+            return cachedDark;
+        }
+        cachedDark = probe();
+        cachedAt = now;
+        return cachedDark;
+    }
+
+    private static boolean probe() {
         try {
             String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
             if (os.contains("win")) {
@@ -118,6 +137,15 @@ public final class SystemTheme {
             return "";
         }
         try {
+            // Waiting before reading is what makes the timeout real: reading to end of stream
+            // first would block indefinitely on a probe that never closes its output, and the
+            // timeout below would never be reached. Safe for these three commands because each
+            // writes a few hundred bytes, well inside the pipe buffer, so nothing is lost by
+            // letting them finish before it is read.
+            if (!process.waitFor(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+                    || process.exitValue() != 0) {
+                return "";
+            }
             StringBuilder output = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
@@ -126,10 +154,7 @@ public final class SystemTheme {
                     output.append(line).append('\n');
                 }
             }
-            if (!process.waitFor(PROBE_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-                return "";
-            }
-            return process.exitValue() == 0 ? output.toString() : "";
+            return output.toString();
         }
         finally {
             // A no-op once the probe has exited, and the safety net if it has not.
