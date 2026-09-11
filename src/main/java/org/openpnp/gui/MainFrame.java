@@ -131,10 +131,15 @@ public class MainFrame extends JFrame {
     private static final int PREF_WINDOW_WIDTH_DEF = 1024;
     private static final String PREF_WINDOW_HEIGHT = "MainFrame.windowHeight"; //$NON-NLS-1$
     private static final int PREF_WINDOW_HEIGHT_DEF = 768;
-    private static final String PREF_DIVIDER_POSITION = "MainFrame.dividerPosition"; //$NON-NLS-1$
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
     private static final String PREF_WINDOW_STYLE_MULTIPLE = "MainFrame.windowStyleMultiple"; //$NON-NLS-1$
     private static final boolean PREF_WINDOW_STYLE_MULTIPLE_DEF = false;
+    private static final String PREF_CAMERA_DIVIDER_POSITION = "MainFrame.cameraDividerPosition"; //$NON-NLS-1$
+    /**
+     * A share of the height rather than a number of pixels, because the floating controls are a
+     * fixed size: a fraction leaves the image room to grow with the window, where 400 pixels on a
+     * laptop is a strip of image with the jog card sitting on all of it.
+     */
+    private static final double CAMERA_HEIGHT_SHARE = 0.55;
     private static final String PREF_INSPECTOR_COLLAPSED = "MainFrame.inspectorCollapsed"; //$NON-NLS-1$
     private static final boolean PREF_INSPECTOR_COLLAPSED_DEF = false;
 
@@ -565,7 +570,10 @@ public class MainFrame extends JFrame {
         setContentPane(contentPane);
         contentPane.setLayout(new BorderLayout(0, 0));
 
-        splitPaneMachineAndTabs = new JSplitPane();
+        // The camera sits above the page rather than beside it: the tables underneath are wide
+        // rows of short fields, and the image is worth more wide than tall. This is also what
+        // gives the middle its width back now that the properties column has the right hand side.
+        splitPaneMachineAndTabs = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         splitPaneMachineAndTabs.setBorder(null);
         splitPaneMachineAndTabs.setContinuousLayout(true);
         contentPane.add(splitPaneMachineAndTabs, BorderLayout.CENTER);
@@ -734,13 +742,23 @@ public class MainFrame extends JFrame {
         navigationRail = new NavigationRail();
         splitPaneMachineAndTabs.setRightComponent(navigationRail.getPages());
 
-        splitPaneMachineAndTabs
-                .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
+        // A new key rather than MainFrame.dividerPosition: the old one holds a distance from the
+        // left edge, and reading it as a distance from the top would put the divider somewhere
+        // arbitrary for everyone upgrading. Until there is a stored one, the share above decides,
+        // which can only be applied once the split has a height.
+        int storedDivider = prefs.getInt(PREF_CAMERA_DIVIDER_POSITION, -1);
+        if (storedDivider > 0) {
+            splitPaneMachineAndTabs.setDividerLocation(storedDivider);
+        }
+        else {
+            SwingUtilities.invokeLater(
+                    () -> splitPaneMachineAndTabs.setDividerLocation(CAMERA_HEIGHT_SHARE));
+        }
         splitPaneMachineAndTabs.addPropertyChangeListener("dividerLocation", //$NON-NLS-1$
                 new PropertyChangeListener() {
                     @Override
                     public void propertyChange(PropertyChangeEvent evt) {
-                        prefs.putInt(PREF_DIVIDER_POSITION,
+                        prefs.putInt(PREF_CAMERA_DIVIDER_POSITION,
                                 splitPaneMachineAndTabs.getDividerLocation());
                     }
                 });
@@ -873,15 +891,16 @@ public class MainFrame extends JFrame {
                     prefs.getInt(PREF_CAMERA_WINDOW_WIDTH, PREF_CAMERA_WINDOW_WIDTH_DEF),
                     prefs.getInt(PREF_CAMERA_WINDOW_HEIGHT, PREF_CAMERA_WINDOW_HEIGHT_DEF));
 
-            // The camera left the split, so give the whole width to the page beside it.
+            // The camera left the split, so give the whole height to the page below it.
             splitPaneMachineAndTabs.setDividerLocation(0);
         }
         else {
             panelMachine.add(panelCameraAndInstructions, BorderLayout.CENTER);
-            // A value of 0 indicates 'multiple window style' was used before.
-            if (0 == prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF)) {
-                // Reset the Divider position back to the default value.
-                splitPaneMachineAndTabs.setDividerLocation(PREF_DIVIDER_POSITION_DEF);
+            // A value of 0 means the camera was in its own window last time, which left the
+            // divider collapsed. Give it its share back rather than no height at all.
+            if (0 == prefs.getInt(PREF_CAMERA_DIVIDER_POSITION, -1)) {
+                SwingUtilities.invokeLater(
+                        () -> splitPaneMachineAndTabs.setDividerLocation(CAMERA_HEIGHT_SHARE));
             }
         }
     }
@@ -1170,12 +1189,12 @@ public class MainFrame extends JFrame {
                    is not reflected by outer panel as expected.
                 */
                 Dimension size = splitPaneMachineAndTabs.getSize();
-                Dimension dim = splitPaneMachineAndTabs.getLeftComponent().getMinimumSize();
-                dim.width = (int) Math.min(Math.round(size.width * 0.1), 300);
-                splitPaneMachineAndTabs.getLeftComponent().setMinimumSize(dim);
-                dim = splitPaneMachineAndTabs.getRightComponent().getMinimumSize();
-                dim.width = (int) Math.min(Math.round(size.width * 0.1), 200);
-                splitPaneMachineAndTabs.getRightComponent().setMinimumSize(dim);
+                Dimension dim = splitPaneMachineAndTabs.getTopComponent().getMinimumSize();
+                dim.height = (int) Math.min(Math.round(size.height * 0.1), 200);
+                splitPaneMachineAndTabs.getTopComponent().setMinimumSize(dim);
+                dim = splitPaneMachineAndTabs.getBottomComponent().getMinimumSize();
+                dim.height = (int) Math.min(Math.round(size.height * 0.1), 150);
+                splitPaneMachineAndTabs.getBottomComponent().setMinimumSize(dim);
             }
         }
     };

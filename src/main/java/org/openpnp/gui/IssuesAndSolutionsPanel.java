@@ -41,7 +41,6 @@ import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -61,6 +60,7 @@ import org.openpnp.Translations;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.IssuePanel;
 import org.openpnp.gui.support.ActionGroup;
+import org.openpnp.gui.shell.PropertySheetPresenter;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
 import org.openpnp.gui.tablemodel.SolutionsTableModel;
@@ -77,7 +77,6 @@ import com.jgoodies.forms.layout.RowSpec;
 @SuppressWarnings("serial")
 public class IssuesAndSolutionsPanel extends JPanel {
     private static final String PREF_DIVIDER_POSITION = "IssuesAndSolutionsPanel.dividerPosition";
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
     private Preferences prefs = Preferences.userNodeForPackage(IssuesAndSolutionsPanel.class);
 
     final private Configuration configuration;
@@ -139,21 +138,10 @@ public class IssuesAndSolutionsPanel extends JPanel {
 
         toolbar.add(targetMilestone, "6, 3, fill, default");
 
-        JSplitPane splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setContinuousLayout(true);
-        splitPane
-        .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() {
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
-        add(splitPane, BorderLayout.CENTER);
-
+        // The issue on show, with its solution and the buttons that act on it, goes to the
+        // window's properties column: it is the detail of the row selected, like every other
+        // page's property sheets.
         issuePane = new JPanel();
-        splitPane.setRightComponent(issuePane);
         issuePane.setLayout(new BorderLayout(0, 0));
 
         JPanel panel = new JPanel();
@@ -247,8 +235,7 @@ public class IssuesAndSolutionsPanel extends JPanel {
                 table.getColumnModel().getColumn(2).setPreferredWidth(300);
                 table.getColumnModel().getColumn(3).setPreferredWidth(300);
                 table.getColumnModel().getColumn(4).setPreferredWidth(50);
-                JScrollPane scrollPane = new JScrollPane(table);
-                splitPane.setLeftComponent(scrollPane);
+                add(new JScrollPane(table), BorderLayout.CENTER);
                 solutionsTableModel.addTableModelListener(new TableModelListener() {
 
                     @Override
@@ -363,12 +350,23 @@ public class IssuesAndSolutionsPanel extends JPanel {
             issuePanel = null;
             issuePane.revalidate();
         }
-        if (issues.size() == 1) {
-            issuePanel = new IssuePanel(issues.get(0), machine);
+        Solutions.Issue issue = issues.size() == 1 ? issues.get(0) : null;
+        if (issue != null) {
+            issuePanel = new IssuePanel(issue, machine);
             issuePane.add(issuePanel, BorderLayout.CENTER);
         }
         issuePane.revalidate();
         issuePane.repaint();
+        // No wizard container: an issue's solution is not a configuration wizard, it is this
+        // page's own panel with its own buttons.
+        frame.getInspector().show(issue, null,
+                issue == null ? null : issue.getSubject().getSubjectText(),
+                issue == null ? null : issue.getSeverity().name(),
+                issue == null ? null : issue.getSubject().getSubjectIcon(),
+                issue == null ? null
+                        : List.of(PropertySheetPresenter.sheet(
+                                Translations.getString("MainFrame.RightComponent.tabs.IssuesAndSolutions"), //$NON-NLS-1$
+                                issuePane)));
         updateIssueIndicator();
     }
 
