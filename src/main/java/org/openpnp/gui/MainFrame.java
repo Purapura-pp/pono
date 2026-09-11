@@ -70,7 +70,6 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextPane;
@@ -98,6 +97,7 @@ import org.openpnp.gui.support.OSXAdapter;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.SwingUserInteraction;
+import org.openpnp.gui.shell.TopBarPanel;
 import org.openpnp.model.Board;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
@@ -745,6 +745,9 @@ public class MainFrame extends JFrame {
                 updateMenuState(tabs.getSelectedComponent());
             }});
         
+        topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel);
+        contentPane.add(topBarPanel, BorderLayout.NORTH);
+
         panelStatusAndDros = new JPanel();
         panelStatusAndDros.setBorder(null);
         contentPane.add(panelStatusAndDros, BorderLayout.SOUTH);
@@ -768,14 +771,8 @@ public class MainFrame extends JFrame {
         panelStatusAndDros.add(lblPlacements, "4, 1"); //$NON-NLS-1$
         
         
-        // Placements Progress Bar
-        prgbrPlacements = new JProgressBar();
-        prgbrPlacements.setMinimum(0);
-        prgbrPlacements.setMaximum(100);
-        prgbrPlacements.setStringPainted(true);
-        prgbrPlacements.setPreferredSize(new Dimension(200, 16));
-        prgbrPlacements.setValue(0);
-        panelStatusAndDros.add(prgbrPlacements, "6, 1"); //$NON-NLS-1$
+        // The progress bar moved to the top bar; column 6 of this layout goes with the rest of
+        // this panel when the flat status bar replaces it.
 
         
         // DRO 
@@ -1145,7 +1142,9 @@ public class MainFrame extends JFrame {
             lblPlacements.setText(String.format(Translations.getString(
                     "MainFrame.StatusPanel.PlacementsLabel.initial.format.text"), //$NON-NLS-1$
                     totalPlacementsCompleted, totalPlacements, boardPlacementsCompleted, boardPlacements));
-        	prgbrPlacements.setValue((int)(((float)totalPlacementsCompleted / (float)totalPlacements) * 100.0f));
+            topBarPanel.setProgress(totalPlacements > 0
+                    ? (int) (((float) totalPlacementsCompleted / (float) totalPlacements) * 100.0f)
+                    : 0);
         });
     }
 
@@ -1421,6 +1420,6 @@ public class MainFrame extends JFrame {
     private JLabel droLbl;
     private JLabel lblStatus;
     private JLabel lblPlacements;
-    private JProgressBar prgbrPlacements;
+    private TopBarPanel topBarPanel;
     private JLabel labelIcon;
 }

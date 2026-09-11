@@ -141,6 +141,9 @@ public class JobPanel extends JPanel {
 
     private static final String UNTITLED_JOB_FILENAME = "Untitled.job.xml"; //$NON-NLS-1$
 
+    /** Fired whenever {@link #getJobDisplayName()} changes, for the top bar to follow. */
+    public static final String PROPERTY_JOB_DISPLAY_NAME = "jobDisplayName"; //$NON-NLS-1$
+
     private static final String PREF_RECENT_FILES = "JobPanel.recentFiles"; //$NON-NLS-1$
     private static final int PREF_RECENT_FILES_MAX = 10;
 
@@ -375,16 +378,8 @@ public class JobPanel extends JPanel {
         toolBarBoards.setFloatable(false);
         pnlBoards.add(toolBarBoards, BorderLayout.NORTH);
 
-        JButton btnStartPauseResumeJob = new JButton(startPauseResumeJobAction);
-        btnStartPauseResumeJob.setHideActionText(true);
-        toolBarBoards.add(btnStartPauseResumeJob);
-        JButton btnStepJob = new JButton(stepJobAction);
-        btnStepJob.setHideActionText(true);
-        toolBarBoards.add(btnStepJob);
-        JButton btnStopJob = new JButton(stopJobAction);
-        btnStopJob.setHideActionText(true);
-        toolBarBoards.add(btnStopJob);
-        toolBarBoards.addSeparator();
+        // Start, step and stop are in the top bar, which belongs to the window rather than to
+        // this tab. The Job menu and the Ctrl+Shift+R/S/A shortcuts are unaffected.
         JButton btnDeferErrors = new JButton(deferErrorsAction);
         btnDeferErrors.setHideActionText(true);
         toolBarBoards.add(btnDeferErrors);
@@ -826,13 +821,29 @@ public class JobPanel extends JPanel {
         }
     }
 
+    /**
+     * The open job's file name, marked when it has unsaved changes. Used by the window title and
+     * by the top bar, which is why it is not assembled inline any more.
+     */
+    public String getJobDisplayName() {
+        // The window is built before the configuration is loaded, so the top bar can ask before
+        // there is a job to describe.
+        if (job == null) {
+            return UNTITLED_JOB_FILENAME;
+        }
+        return (job.isDirty() ? "*" : "") //$NON-NLS-1$ //$NON-NLS-2$
+                + (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName());
+    }
+
     private void updateTitle() {
-        String title = String.format("Pono - %s%s", job.isDirty() ? "*" : "", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName()));
+        String name = getJobDisplayName();
+        String title = String.format("Pono - %s", name); //$NON-NLS-1$
         mainFrame.setTitle(title);
         if (jobViewer != null) {
             jobViewer.setTitle(title);
         }
+        // Already fired for every file and dirty change, since those are what drive this method.
+        firePropertyChange(PROPERTY_JOB_DISPLAY_NAME, null, name);
     }
     
     private boolean checkJobStopped() {
