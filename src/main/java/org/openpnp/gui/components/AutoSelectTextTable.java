@@ -1,6 +1,7 @@
 package org.openpnp.gui.components;
 
 import java.awt.Component;
+import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
@@ -90,12 +91,16 @@ public class AutoSelectTextTable extends JTable {
     public AutoSelectTextTable(TableModel dm, TableColumnModel cm, ListSelectionModel sm) {
         super(dm, cm, sm);
         
-        //Add a keystroke to de-select all rows of the table (in Windows this would be Ctrl-Shift-A)
-        InputMap im = getInputMap(JTable.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
-        //Should use getMenuShortcutKeyMaskEx here but it is not supported in Java 8
-        final int CMD_BTN = Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
-        im.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.SHIFT_DOWN_MASK | CMD_BTN),
-                "clearSelection" );
+        // Add a keystroke to de-select all rows of the table (on Windows this is Ctrl-Shift-A).
+        // The menu shortcut key comes from the toolkit, which refuses to answer when there is no
+        // screen - so no table in this program could be built on a machine without one, which is
+        // every build machine. The binding is of no use there anyway.
+        if (!GraphicsEnvironment.isHeadless()) {
+            InputMap im = getInputMap(JTable.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+            int menuShortcut = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+            im.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, InputEvent.SHIFT_DOWN_MASK | menuShortcut),
+                    "clearSelection");
+        }
     }
 
     /**
