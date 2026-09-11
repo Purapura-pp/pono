@@ -616,12 +616,14 @@ public abstract class AbstractMotionPlanner extends AbstractMachineElement imple
                     backlashCompensatedNewLocation,
                     optionFlags);
 
-            // Second move to the actual target at backlashCompensatedSpeed. 
+            // Second move to the actual target at backlashCompensatedSpeed. Marked, so that a
+            // planner can recognise it as the compensating segment and fuse it into what follows;
+            // the Javadoc above has always invited that, but nothing said which segment it was.
             addMotion(hm, 
                     backlashCompensatedSpeed,
                     backlashCompensatedNewLocation, 
                     newLocation, 
-                    optionFlags);
+                    optionFlags | MotionOption.BacklashFinalApproach.flag());
         }
         else {
             addMotion(hm, speed, 

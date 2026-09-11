@@ -31,6 +31,7 @@ import javax.swing.UIManager;
 
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
+import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
 import org.openpnp.machine.reference.driver.wizards.ReferenceAdvancedMotionPlannerConfigurationWizard;
 import org.openpnp.machine.reference.driver.wizards.ReferenceAdvancedMotionPlannerDiagnosticsWizard;
 import org.openpnp.model.AbstractMotionPath;
@@ -47,6 +48,7 @@ import org.openpnp.spi.Axis;
 import org.openpnp.spi.ControllerAxis;
 import org.openpnp.spi.Driver;
 import org.openpnp.spi.HeadMountable;
+import org.openpnp.spi.Machine;
 import org.openpnp.Translations;
 import org.openpnp.util.MovableUtils;
 import org.openpnp.util.NanosecondTime;
@@ -64,6 +66,8 @@ public class ReferenceAdvancedMotionPlanner extends AbstractMotionPlanner {
     private boolean allowContinuousMotion = false;
     @Attribute(required = false)
     private boolean allowUncoordinated = false;
+    @Attribute(required = false)
+    private boolean fuseBacklashFinalApproach = false;
     @Attribute(required = false)
     private boolean diagnosticsEnabled = false;
     @Attribute(required = false)
@@ -136,6 +140,14 @@ public class ReferenceAdvancedMotionPlanner extends AbstractMotionPlanner {
 
     public void setAllowUncoordinated(boolean allowUncoordinated) {
         this.allowUncoordinated = allowUncoordinated;
+    }
+
+    public boolean isFuseBacklashFinalApproach() {
+        return fuseBacklashFinalApproach;
+    }
+
+    public void setFuseBacklashFinalApproach(boolean fuseBacklashFinalApproach) {
+        this.fuseBacklashFinalApproach = fuseBacklashFinalApproach;
     }
 
     @Override
@@ -377,8 +389,120 @@ public class ReferenceAdvancedMotionPlanner extends AbstractMotionPlanner {
     @Override
     protected void optimizeExecutionPlan(List<Motion> executionPlan,
             CompletionType completionType) throws Exception {
+        if (fuseBacklashFinalApproach) {
+            fuseBacklashFinalApproaches(executionPlan);
+        }
         PlannerPath path = new PlannerPath(executionPlan);
         path.solve();
+    }
+
+    /**
+     * Fuse the final approach of a two-part backlash compensation into the motion that follows it.
+     * <p>
+     * The compensating segment moves only the axes being compensated - X and Y, over a fraction of
+     * a millimetre - and what follows a move to a pick or a place is the Z descent, which moves
+     * only Z. Planned separately they cost a still-stand and a line of G-code each. As one
+     * coordinated line the compensating move hides inside the descent, and because the reversal
+     * happens where the two meet, the axis still arrives from the side it was compensated for,
+     * more gently than before: its speed is now the descent's, scaled by how little of the
+     * combined distance it covers.
+     * <p>
+     * Every condition below refuses the fusion rather than working around it. This runs on every
+     * planned path, and a fusion that is wrong about which axes move would place a part somewhere
+     * other than where the job says.
+     */
+    protected void fuseBacklashFinalApproaches(List<Motion> executionPlan) {
+        for (int i = 0; i + 1 < executionPlan.size(); i++) {
+            Motion approach = executionPlan.get(i);
+            Motion next = executionPlan.get(i + 1);
+            if (!approach.hasOption(MotionOption.BacklashFinalApproach)) {
+                continue;
+            }
+            Motion fused = fuse(approach, next);
+            if (fused == null) {
+                continue;
+            }
+            executionPlan.set(i, fused);
+            executionPlan.remove(i + 1);
+            // The fused motion no longer carries the marker, so it cannot chain into the next one.
+        }
+    }
+
+    /**
+     * @return The two motions as one, or null if any of the conditions for fusing them is not met.
+     */
+    protected Motion fuse(Motion approach, Motion next) {
+        if (next.hasOption(MotionOption.JogMotion)
+                || next.hasOption(MotionOption.Stillstand)
+                || next.hasOption(MotionOption.BacklashFinalApproach)) {
+            // A jog is open ended, a still-stand is not a move at all, and two compensating
+            // segments in a row would mean the second compensates axes the first just placed.
+            return null;
+        }
+        HeadMountable hm = next.getHeadMountable();
+        if (hm == null || approach.getHeadMountable() == null
+                || approach.getHeadMountable().getHead() != hm.getHead()) {
+            // Different heads are planned independently and may be interlocked.
+            return null;
+        }
+        AxesLocation compensated = approach.getLocation0().motionSegmentTo(approach.getLocation1());
+        AxesLocation following = next.getLocation0().motionSegmentTo(next.getLocation1());
+        if (compensated.isEmpty() || following.isEmpty()) {
+            return null;
+        }
+        for (ControllerAxis axis : compensated.getControllerAxes()) {
+            if (following.contains(axis)) {
+                // The move that follows takes a compensated axis off the side it was just
+                // approached from, which is the whole point of the compensation.
+                return null;
+            }
+        }
+        Machine machine = getMachine();
+        if (compensated.getAxesDrivers(machine).size() > 1
+                || !compensated.getAxesDrivers(machine).equals(following.getAxesDrivers(machine))) {
+            // Motion across drivers is interlocked rather than blended, so it never reaches here;
+            // refusing it explicitly keeps that assumption from being a silent one.
+            return null;
+        }
+        Motion fused = new Motion(hm, approach.getLocation0(), next.getLocation1(),
+                next.getNominalSpeed(), fusedOptions(next));
+        if (fused.getEuclideanDistance() <= 0) {
+            return null;
+        }
+        // In a coordinated move every axis takes the same time, so the compensated axes travel at
+        // the tool speed scaled by their share of the distance. Fusing is only an improvement
+        // while that share leaves them no faster than the slow approach the user configured.
+        if (approach.getEuclideanDistance() / fused.getEuclideanDistance()
+                > backlashSpeedFactor(compensated)) {
+            return null;
+        }
+        return fused;
+    }
+
+    /** The slowest approach any of the compensated axes asks for, as a fraction of full speed. */
+    private static double backlashSpeedFactor(AxesLocation compensated) {
+        double factor = 1;
+        for (ControllerAxis axis : compensated.getControllerAxes()) {
+            if (axis instanceof ReferenceControllerAxis) {
+                factor = Math.min(factor,
+                        ((ReferenceControllerAxis) axis).getBacklashSpeedFactor());
+            }
+        }
+        return factor;
+    }
+
+    /**
+     * The options the fused motion carries. It has to be a coordinated straight line, so that the
+     * reversal happens at the junction rather than being smeared across the descent, and it leaves
+     * the Safe Zone by definition.
+     */
+    private static int fusedOptions(Motion next) {
+        return next.getOptions() & ~(MotionOption.UncoordinatedMotion.flag()
+                | MotionOption.LimitToSafeZone.flag()
+                | MotionOption.SynchronizeStraighten.flag()
+                | MotionOption.SynchronizeEarlyBird.flag()
+                | MotionOption.SynchronizeLastMinute.flag()
+                | MotionOption.BacklashFinalApproach.flag());
     }
 
     protected void startNewMotionGraph() {

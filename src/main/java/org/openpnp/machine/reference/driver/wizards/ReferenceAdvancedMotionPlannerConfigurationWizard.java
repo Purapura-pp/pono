@@ -59,6 +59,7 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
     private JPanel panelSettings;
     private JCheckBox allowContinuousMotion;
     private JCheckBox allowUncoordinated;
+    private JCheckBox fuseBacklashFinalApproach;
 
     private JPanel panel;
     private JLabel lblX;
@@ -155,6 +156,8 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
                 FormSpecs.RELATED_GAP_ROWSPEC,
                 FormSpecs.DEFAULT_ROWSPEC,
                 FormSpecs.RELATED_GAP_ROWSPEC,
+                FormSpecs.DEFAULT_ROWSPEC,
+                FormSpecs.RELATED_GAP_ROWSPEC,
                 FormSpecs.DEFAULT_ROWSPEC,}));
 
         JLabel lblContinuousMotion = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.AllowContinousMotionLabel.text")); //$NON-NLS-1$
@@ -171,19 +174,26 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
         allowUncoordinated = new JCheckBox("");
         panelSettings.add(allowUncoordinated, "4, 4");
 
+        JLabel lblFuseBacklash = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.FuseBacklashFinalApproachLabel.text")); //$NON-NLS-1$
+        lblFuseBacklash.setToolTipText(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.FuseBacklashFinalApproachLabel.toolTipText")); //$NON-NLS-1$
+        panelSettings.add(lblFuseBacklash, "2, 6, right, default");
+
+        fuseBacklashFinalApproach = new JCheckBox("");
+        panelSettings.add(fuseBacklashFinalApproach, "4, 6");
+
         lblRetime = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.InterpolationRetimingLabel.text")); //$NON-NLS-1$
         lblRetime.setToolTipText(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.InterpolationRetimingLabel.toolTipText")); //$NON-NLS-1$
-        panelSettings.add(lblRetime, "2, 6, right, default");
+        panelSettings.add(lblRetime, "2, 8, right, default");
 
         interpolationRetiming = new JCheckBox("");
-        panelSettings.add(interpolationRetiming, "4, 6, left, top");
+        panelSettings.add(interpolationRetiming, "4, 8, left, top");
         
         lblMinimumSpeed = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.MinimumSpeedLabel.text")); //$NON-NLS-1$
         lblMinimumSpeed.setToolTipText(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.MotionPlannerPanel.MinimumSpeedLabel.toolTipText")); //$NON-NLS-1$
-        panelSettings.add(lblMinimumSpeed, "2, 8, right, default");
+        panelSettings.add(lblMinimumSpeed, "2, 10, right, default");
         
         minimumSpeed = new JTextField();
-        panelSettings.add(minimumSpeed, "4, 8, fill, default");
+        panelSettings.add(minimumSpeed, "4, 10, fill, default");
         minimumSpeed.setColumns(10);
 
         panel = new JPanel();
@@ -444,6 +454,8 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
 
         addWrappedBinding(motionPlanner, "allowContinuousMotion", allowContinuousMotion, "selected");
         addWrappedBinding(motionPlanner, "allowUncoordinated", allowUncoordinated, "selected");
+        addWrappedBinding(motionPlanner, "fuseBacklashFinalApproach", fuseBacklashFinalApproach,
+                "selected");
         addWrappedBinding(motionPlanner, "interpolationRetiming", interpolationRetiming, "selected");
         addWrappedBinding(motionPlanner, "minimumSpeed", minimumSpeed, "text", percentConverter);
 

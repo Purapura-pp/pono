@@ -100,7 +100,14 @@ public class Motion {
         SubordinateX,
         SubordinateY,
         SubordinateZ,
-        SubordinateRotation;
+        SubordinateRotation,
+        /**
+         * The second segment of a two-part backlash compensation: the one-sided retraction, or the
+         * sneak-up at reduced speed. A planner may fuse it into the motion that follows, provided
+         * that motion does not touch the axes being compensated, which keeps the approach side and
+         * saves the still-stand between the two.
+         */
+        BacklashFinalApproach;
 
         public int flag() {
             return 1 << this.ordinal();
