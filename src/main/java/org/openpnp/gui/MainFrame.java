@@ -96,8 +96,11 @@ import org.openpnp.gui.support.OSXAdapter;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.SwingUserInteraction;
+import org.openpnp.gui.shell.CameraStage;
 import org.openpnp.gui.shell.DroPanel;
 import org.openpnp.gui.shell.NavigationRail;
+import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
+import org.openpnp.gui.shell.OverlayCard;
 import org.openpnp.gui.shell.StatusBarPanel;
 import org.openpnp.gui.shell.TopBarPanel;
 import org.openpnp.model.Board;
@@ -141,14 +144,6 @@ public class MainFrame extends JFrame {
     private static final String PREF_CAMERA_WINDOW_HEIGHT = "CameraFrame.windowHeight"; //$NON-NLS-1$
     private static final int PREF_CAMERA_WINDOW_HEIGHT_DEF = 600;
 
-    private static final String PREF_MACHINECONTROLS_WINDOW_X = "MachineControlsFrame.windowX"; //$NON-NLS-1$
-    private static final int PREF_MACHINECONTROLS_WINDOW_X_DEF = 0;
-    private static final String PREF_MACHINECONTROLS_WINDOW_Y = "MachineControlsFrame.windowY"; //$NON-NLS-1$
-    private static final int PREF_MACHINECONTROLS_WINDOW_Y_DEF = 0;
-    private static final String PREF_MACHINECONTROLS_WINDOW_WIDTH = "MachineControlsFrame.windowWidth"; //$NON-NLS-1$
-    private static final int PREF_MACHINECONTROLS_WINDOW_WIDTH_DEF = 490;
-    private static final String PREF_MACHINECONTROLS_WINDOW_HEIGHT = "MachineControlsFrame.windowHeight"; //$NON-NLS-1$
-    private static final int PREF_MACHINECONTROLS_WINDOW_HEIGHT_DEF = 340;
     private static final int MINIMUM_WINDOW_SIZE = 50;
 
     private final Configuration configuration;
@@ -169,7 +164,6 @@ public class MainFrame extends JFrame {
     private IssuesAndSolutionsPanel issuesAndSolutionsPanel;
     private VisionSettingsPanel visionSettingsPanel;
     private JDialog frameCamera;
-    private JDialog frameMachineControls;
     private Map<KeyStroke, Action> hotkeyActionMap;
     private AbstractConfigurationWizard wizardWithActiveProcess = null;
     private UndoManager undoManager = new UndoManager();
@@ -259,6 +253,9 @@ public class MainFrame extends JFrame {
 
     private JPanel contentPane;
     private NavigationRail navigationRail;
+    private CameraStage cameraStage;
+    private OverlayCard instructionsCard;
+    private DroPanel droPanel;
     private JSplitPane splitPaneMachineAndTabs;
     private JLabel lblInstructionsTitle;
     private JPanel panelInstructions;
@@ -589,14 +586,15 @@ public class MainFrame extends JFrame {
         });
         cameraPanel = new CameraPanel();
 
+        // The stage is the camera image with everything that belongs to it floating on top. It is
+        // what the multiple-windows mode pops out, hence the wrapper panel it lives in.
         panelCameraAndInstructions = new JPanel();
+        panelCameraAndInstructions.setLayout(new BorderLayout(0, 0));
         panelMachine.add(panelCameraAndInstructions, BorderLayout.CENTER);
 
         panelInstructions = new JPanel();
         panelInstructions.setVisible(false);
-        panelCameraAndInstructions.setLayout(new BorderLayout(0, 0));
         panelInstructions.setBorder(new EmptyBorder(4, 4, 4, 4));
-        panelCameraAndInstructions.add(panelInstructions, BorderLayout.SOUTH);
         panelInstructions.setLayout(new BorderLayout(0, 0));
 
         // The wizard sets this per step, which is what the etched border's title used to carry.
@@ -653,7 +651,7 @@ public class MainFrame extends JFrame {
         panelInstructions.add(labelIcon, BorderLayout.WEST);
 
         machineControlsPanel = new MachineControlsPanel(configuration, jobPanel);
-        panelMachine.add(machineControlsPanel, BorderLayout.SOUTH);
+        droPanel = new DroPanel(configuration);
 
         mnCommands.add(new JMenuItem(machineControlsPanel.homeAction));
         mnCommands.add(new JMenuItem(machineControlsPanel.startStopMachineAction));
@@ -771,9 +769,16 @@ public class MainFrame extends JFrame {
         // No title on the camera: the camera selector inside it already says which one this is,
         // and the etched box only cost the view a few pixels on every edge.
         cameraPanel.setBorder(null);
-        panelCameraAndInstructions.add(cameraPanel, BorderLayout.CENTER);
+        cameraStage = new CameraStage(cameraPanel);
+        // The readout goes bottom left and the machine controls bottom right, as the mockups have
+        // them; the instructions arrive at the top, over the image they are talking about.
+        cameraStage.overlay(droPanel, Anchor.SouthWest);
+        cameraStage.overlay(machineControlsPanel, Anchor.SouthEast);
+        instructionsCard = cameraStage.overlay(panelInstructions, Anchor.North);
+        instructionsCard.setVisible(false);
+        panelCameraAndInstructions.add(cameraStage, BorderLayout.CENTER);
 
-        splitPaneMachineAndTabs.setResizeWeight(0.1);
+        splitPaneMachineAndTabs.setResizeWeight(0.5);
 
         addImporterMenuOptions();
 
@@ -813,16 +818,16 @@ public class MainFrame extends JFrame {
 
     // 20161222 - ldpgh/lutz_dd
     /**
-     * Add multiple windows (aka JFrame) to OpenPnp for the camera (frameCamera) and the machine
-     * controls (frameMachineControls).
-     *
-     * ATTENTION ... the current implementation in MainFrame.java requires a refactoring on the
-     * long-term to separate JFrame from JPanels
+     * Pop the camera out into a window of its own, for a second monitor.
+     * <p>
+     * The machine controls used to get a window of their own as well. They float over the camera
+     * image now, so they travel with it and there is nothing left to put in a second window; the
+     * preference keys that sized it are gone with it.
      */
     public void splitWindows() {
         if (windowStyleMultiple) {
             // pin panelCameraAndInstructions to a separate JFrame
-            frameCamera = new JDialog(this, "OpenPnp - Camera", false); //$NON-NLS-1$
+            frameCamera = new JDialog(this, "Pono - Camera", false); //$NON-NLS-1$
             // as of today no smart way found to get an adjusted size
             // ... so main window size is used for the camera window
             frameCamera.getContentPane().add(panelCameraAndInstructions);
@@ -842,29 +847,7 @@ public class MainFrame extends JFrame {
                     prefs.getInt(PREF_CAMERA_WINDOW_WIDTH, PREF_CAMERA_WINDOW_WIDTH_DEF),
                     prefs.getInt(PREF_CAMERA_WINDOW_HEIGHT, PREF_CAMERA_WINDOW_HEIGHT_DEF));
 
-            // pin machineControlsPanel to a separate JFrame
-            frameMachineControls = new JDialog(this, "OpenPnp - Machine Controls", false); //$NON-NLS-1$
-            // as of today no smart way found to get an adjusted size
-            // ... so hardcoded values used (usually not a good idea)
-            frameMachineControls.getContentPane().add(machineControlsPanel);
-            frameMachineControls.setVisible(true);
-            frameMachineControls.pack();
-            frameMachineControls.addComponentListener(machineControlsWindowListener);
-
-            if (prefs.getInt(PREF_MACHINECONTROLS_WINDOW_WIDTH, 50) < 50) {
-                prefs.putInt(PREF_MACHINECONTROLS_WINDOW_WIDTH, PREF_MACHINECONTROLS_WINDOW_WIDTH_DEF);
-            }
-
-            if (prefs.getInt(PREF_MACHINECONTROLS_WINDOW_HEIGHT, 50) < 50) {
-                prefs.putInt(PREF_MACHINECONTROLS_WINDOW_HEIGHT, PREF_MACHINECONTROLS_WINDOW_HEIGHT_DEF);
-            }
-
-            frameMachineControls.setBounds(prefs.getInt(PREF_MACHINECONTROLS_WINDOW_X, PREF_MACHINECONTROLS_WINDOW_X_DEF),
-                    prefs.getInt(PREF_MACHINECONTROLS_WINDOW_Y, PREF_MACHINECONTROLS_WINDOW_Y_DEF),
-                    prefs.getInt(PREF_MACHINECONTROLS_WINDOW_WIDTH, PREF_MACHINECONTROLS_WINDOW_WIDTH_DEF),
-                    prefs.getInt(PREF_MACHINECONTROLS_WINDOW_HEIGHT, PREF_MACHINECONTROLS_WINDOW_HEIGHT_DEF));
-            // move the splitPaneDivider to position 0 to fill the gap of the
-            // relocated panels 'panelCameraAndInstructions' & 'machineControlsPanel'
+            // The camera left the split, so give the whole width to the page beside it.
             splitPaneMachineAndTabs.setDividerLocation(0);
         }
         else {
@@ -888,7 +871,7 @@ public class MainFrame extends JFrame {
     }
 
     public DroPanel getDroPanel() {
-        return statusBarPanel.getDroPanel();
+        return droPanel;
     }
 
     private void addImporterMenuOptions() {
@@ -983,8 +966,10 @@ public class MainFrame extends JFrame {
         instructionsCancelActionListener = cancelActionListener;
         instructionsProceedActionListener = proceedActionListener;
         panelInstructions.setVisible(true);
-        doLayout();
-        panelInstructions.repaint();
+        // The card is what the overlay lays out, so it is the one that has to appear.
+        instructionsCard.setVisible(true);
+        cameraStage.revalidate();
+        instructionsCard.repaint();
         if (scheduledExecutor == null) {
             scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
             scheduledExecutor.scheduleAtFixedRate(new Runnable() {
@@ -1001,7 +986,9 @@ public class MainFrame extends JFrame {
             scheduledExecutor = null;
         }
         panelInstructions.setVisible(false);
-        doLayout();
+        instructionsCard.setVisible(false);
+        cameraStage.revalidate();
+        cameraStage.repaint();
     }
 
     public boolean registerForMacOSXEvents() {
@@ -1181,19 +1168,6 @@ public class MainFrame extends JFrame {
         }
     };
 
-    private ComponentListener machineControlsWindowListener = new ComponentAdapter() {
-        @Override
-        public void componentMoved(ComponentEvent e) {
-            prefs.putInt(PREF_MACHINECONTROLS_WINDOW_X, frameMachineControls.getLocation().x);
-            prefs.putInt(PREF_MACHINECONTROLS_WINDOW_Y, frameMachineControls.getLocation().y);
-        }
-
-        @Override
-        public void componentResized(ComponentEvent e) {
-            prefs.putInt(PREF_MACHINECONTROLS_WINDOW_WIDTH, frameMachineControls.getSize().width);
-            prefs.putInt(PREF_MACHINECONTROLS_WINDOW_HEIGHT, frameMachineControls.getSize().height);
-        }
-    };
     
     private Action inchesUnitSelected = new AbstractAction(LengthUnit.Inches.name()) {
         {

@@ -34,7 +34,8 @@ import org.openpnp.model.Configuration;
 
 /**
  * The strip along the bottom: what the machine is doing, how far the job has got, the units the
- * numbers are in, the version, and the axis readouts.
+ * numbers are in, and the version. The axis readout started here and has moved onto the camera
+ * image, where it is beside the thing it describes.
  * <p>
  * The three pieces it replaces each sat in a lowered bevel border, which drew three boxes around
  * text that is only ever read, and the units and version were nowhere in the window at all - so a
@@ -48,10 +49,8 @@ public class StatusBarPanel extends JPanel {
             Translations.getString("MainFrame.StatusPanel.PlacementsLabel.initial.text")); //$NON-NLS-1$
     private final JLabel unitsLabel = new JLabel();
     private final JLabel versionLabel = new JLabel(Main.getVersionString());
-    private final DroPanel droPanel;
 
     public StatusBarPanel(Configuration configuration) {
-        droPanel = new DroPanel(configuration);
         setLayout(new GridBagLayout());
         setBorder(new EmptyBorder(new Insets(2, 2, 0, 2)));
 
@@ -71,10 +70,8 @@ public class StatusBarPanel extends JPanel {
         gc.gridx = 2;
         add(unitsLabel, gc);
         gc.gridx = 3;
-        add(versionLabel, gc);
-        gc.gridx = 4;
         gc.insets = new Insets(0, 0, 0, 0);
-        add(droPanel, gc);
+        add(versionLabel, gc);
 
         // The units are a user preference that the settings can change while running.
         configuration.addListener(new ConfigurationListener.Adapter() {
@@ -93,10 +90,6 @@ public class StatusBarPanel extends JPanel {
 
     public void setPlacements(String text) {
         placementsLabel.setText(text);
-    }
-
-    public DroPanel getDroPanel() {
-        return droPanel;
     }
 
     /** Everything here is supporting detail, so none of it competes with the window's content. */
