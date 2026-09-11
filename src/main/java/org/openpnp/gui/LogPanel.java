@@ -162,7 +162,7 @@ public class LogPanel extends JPanel {
             }
         }, 0, 500, TimeUnit.MILLISECONDS);
 
-        MainFrame.get().getTabs().addChangeListener(new ChangeListener() {
+        MainFrame.get().getNavigation().addChangeListener(new ChangeListener() {
 
             @Override
             public void stateChanged(ChangeEvent e) {
@@ -294,7 +294,7 @@ public class LogPanel extends JPanel {
     }
 
     protected void refreshLogIfOnTop() {
-        if (MainFrame.get().getTabs().getSelectedComponent() == LogPanel.this) {
+        if (MainFrame.get().getNavigation().getSelectedComponent() == LogPanel.this) {
             if (logEntries.isRefreshNeeded()) {
                 logEntries.refresh();
             }

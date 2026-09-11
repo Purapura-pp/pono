@@ -787,8 +787,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
             if (element == null || frame == null) {
                 return;
             }
-            frame.showTab(Translations.getString(
-                    "MainFrame.RightComponent.tabs.MachineSetup")); //$NON-NLS-1$
+            frame.showTab(frame.getMachineSetupTab());
             frame.getMachineSetupTab().selectPropertySheetHolder(element);
         }
     }

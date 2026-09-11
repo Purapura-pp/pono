@@ -319,7 +319,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
                             configurationPanel.setSelectedIndex(Math.max(0, Math.min(configurationPanel.getTabCount()-1, 
                                     lastSelectedTabIndex.get(feeder.getClass()))));
                         }
-                        if (mainFrame.getTabs().getSelectedComponent() == mainFrame.getFeedersTab()
+                        if (mainFrame.getNavigation().getSelectedComponent() == mainFrame.getFeedersTab()
                               &&  configuration.getTablesLinked() == TablesLinked.Linked
                               && feeder.getPart() != null) {
                             mainFrame.getPartsTab().selectPartInTableAndUpdateLinks(feeder.getPart());
@@ -410,7 +410,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             return;
         }
         SwingUtilities.invokeLater(() -> {
-            mainFrame.showTab("Feeders");
+            mainFrame.showTab(mainFrame.getFeedersTab());
             
             for (int i = 0; i < tableModel.getRowCount(); i++) {
                 if (tableModel.getRowObjectAt(i) == event.feeder) {
@@ -430,7 +430,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
      * @param part
      */
     public void showFeederForPart(Part part) {
-        mainFrame.showTab("Feeders");
+        mainFrame.showTab(mainFrame.getFeedersTab());
         searchTextField.setText("");
         search();
 
@@ -721,7 +721,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         }
         // The part is now on the nozzle.
         MovableUtils.fireTargetedUserAction(nozzle);
-        if (MainFrame.get().getTabs().getSelectedComponent() == MainFrame.get().getFeedersTab() 
+        if (MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getFeedersTab() 
                 && configuration.getTablesLinked() == TablesLinked.Linked) {
             MainFrame.get().getPartsTab().selectPartInTableAndUpdateLinks(feeder.getPart());
         }

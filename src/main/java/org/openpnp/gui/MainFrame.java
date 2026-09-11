@@ -59,6 +59,7 @@ import java.util.prefs.Preferences;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.ButtonGroup;
+import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JDialog;
@@ -71,7 +72,6 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTextPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -97,6 +97,7 @@ import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.SwingUserInteraction;
 import org.openpnp.gui.shell.DroPanel;
+import org.openpnp.gui.shell.NavigationRail;
 import org.openpnp.gui.shell.StatusBarPanel;
 import org.openpnp.gui.shell.TopBarPanel;
 import org.openpnp.model.Board;
@@ -257,7 +258,7 @@ public class MainFrame extends JFrame {
     }
 
     private JPanel contentPane;
-    private JTabbedPane tabs;
+    private NavigationRail navigationRail;
     private JSplitPane splitPaneMachineAndTabs;
     private JLabel lblInstructionsTitle;
     private JPanel panelInstructions;
@@ -273,8 +274,18 @@ public class MainFrame extends JFrame {
     private JMenu mnScripts;
     private JMenu mnWindows;
 
-    public JTabbedPane getTabs() {
-        return tabs;
+    public NavigationRail getNavigation() {
+        return navigationRail;
+    }
+
+    /**
+     * One rail item, labelled from its own short key and explained by the tab title it replaces.
+     */
+    private void addNavigation(String key, Icon icon, Component page) {
+        navigationRail.addPage(
+                Translations.getString("MainFrame.Navigation." + key), //$NON-NLS-1$
+                Translations.getString("MainFrame.RightComponent.tabs." + key), //$NON-NLS-1$
+                icon, page);
     }
 
     public Map<KeyStroke, Action> getHotkeyActionMap() {
@@ -706,8 +717,8 @@ public class MainFrame extends JFrame {
                 }
             });
 
-        tabs = new JTabbedPane(JTabbedPane.TOP);
-        splitPaneMachineAndTabs.setRightComponent(tabs);
+        navigationRail = new NavigationRail();
+        splitPaneMachineAndTabs.setRightComponent(navigationRail.getPages());
 
         splitPaneMachineAndTabs
                 .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
@@ -720,33 +731,35 @@ public class MainFrame extends JFrame {
                     }
                 });
 
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Job"), //$NON-NLS-1$
-                null, jobPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Panels"), //$NON-NLS-1$
-                null, panelsPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Boards" //$NON-NLS-1$
-        ),null, boardsPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Parts"), //$NON-NLS-1$
-                null, partsPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Packages" //$NON-NLS-1$
-        ),null, packagesPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Vision"), //$NON-NLS-1$
-                null, visionSettingsPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Feeders"), //$NON-NLS-1$
-                null, feedersPanel, null); //$NON-NLS-1$
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.MachineSetup"), //$NON-NLS-1$
-                null, machineSetupPanel, null);
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.IssuesAndSolutions"), //$NON-NLS-1$
-                null, issuesAndSolutionsPanel, null);
-
+        // The rail's own label is short enough to sit under an icon; the tab title it replaces
+        // stays on as the tooltip, since that is the name the wiki and the menus use.
+        // The icons are the ones the library already has. Two of them are only nearly right -
+        // there is no parts icon and no gear - so they were chosen to be told apart at a glance,
+        // which matters more in a rail of eleven than being the perfect metaphor.
+        addNavigation("Job", Icons.place, jobPanel); //$NON-NLS-1$
+        addNavigation("Feeders", Icons.feeder, feedersPanel); //$NON-NLS-1$
+        addNavigation("Parts", Icons.footprintDual, partsPanel); //$NON-NLS-1$
+        addNavigation("Packages", Icons.footprintQuad, packagesPanel); //$NON-NLS-1$
+        addNavigation("Boards", Icons.board, boardsPanel); //$NON-NLS-1$
+        addNavigation("Panels", Icons.panel, panelsPanel); //$NON-NLS-1$
+        addNavigation("Vision", Icons.captureCamera, visionSettingsPanel); //$NON-NLS-1$
+        navigationRail.addGap();
+        addNavigation("MachineSetup", Icons.axisCartesian, machineSetupPanel); //$NON-NLS-1$
+        addNavigation("IssuesAndSolutions", Icons.solutions, issuesAndSolutionsPanel); //$NON-NLS-1$
         LogPanel logPanel = new LogPanel();
-        tabs.addTab(Translations.getString("MainFrame.RightComponent.tabs.Log"),
-                null, logPanel, null); //$NON-NLS-1$
+        addNavigation("Log", Icons.info, logPanel); //$NON-NLS-1$
+        // Settings opens the appearance dialog for now; the plan is for it to gather the settings
+        // that are spread across the menus.
+        navigationRail.addAction(
+                Translations.getString("MainFrame.Navigation.Settings"), //$NON-NLS-1$
+                Translations.getString("MainFrame.Navigation.Settings.toolTipText"), //$NON-NLS-1$
+                Icons.driver, e -> ThemeDialog.showThemeDialog(MainFrame.this));
+        contentPane.add(navigationRail, BorderLayout.WEST);
 
-        tabs.addChangeListener(new ChangeListener() {
+        navigationRail.addChangeListener(new ChangeListener() {
             @Override
             public void stateChanged(ChangeEvent e) {
-                updateMenuState(tabs.getSelectedComponent());
+                updateMenuState(navigationRail.getSelectedComponent());
             }});
         
         topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel);
@@ -890,7 +903,7 @@ public class MainFrame extends JFrame {
 
                 @Override
                 public void actionPerformed(ActionEvent e) {
-                    if (tabs.getSelectedComponent() == jobPanel) {
+                    if (navigationRail.getSelectedComponent() == jobPanel) {
                         boardsPanel.selectBoard((Board) jobPanel.getSelection().getPlacementsHolder().getDefinition());
                     }
                     boardsPanel.getBoardPlacementsPanel().importBoard(boardImporter.getClass());
@@ -907,7 +920,7 @@ public class MainFrame extends JFrame {
      * @param selectedTab - the selected tab
      */
     public void updateMenuState(Component selectedTab) {
-        if (selectedTab != tabs.getSelectedComponent()) {
+        if (selectedTab != navigationRail.getSelectedComponent()) {
             return;
         }
         if (selectedTab == jobPanel) {
@@ -1119,9 +1132,12 @@ public class MainFrame extends JFrame {
         });
     }
 
-    public void showTab(String title) {
-        int index = tabs.indexOfTab(title);
-        tabs.setSelectedIndex(index);
+    /**
+     * Show the page a panel lives on. Takes the panel rather than its title, which is translated
+     * and so could only ever be matched by a caller that knew the display language.
+     */
+    public void showTab(Component page) {
+        navigationRail.setSelectedComponent(page);
     }
 
     private ComponentListener mainFrameListener = new ComponentAdapter() {

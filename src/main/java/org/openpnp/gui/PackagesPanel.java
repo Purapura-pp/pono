@@ -529,7 +529,7 @@ public class PackagesPanel extends JPanel implements WizardContainer {
                 tabbedPane.setSelectedIndex(selectedTab);
             }
             MainFrame mainFrame = MainFrame.get();
-            if (mainFrame.getTabs().getSelectedComponent() == mainFrame.getPackagesTab() 
+            if (mainFrame.getNavigation().getSelectedComponent() == mainFrame.getPackagesTab() 
                     && configuration.getTablesLinked() == TablesLinked.Linked) {
                  mainFrame.getVisionSettingsTab().selectVisionSettingsInTable(selectedPackage);
             }

@@ -233,7 +233,7 @@ public class BoardPlacementsPanel extends JPanel {
                     return;
                 }
 
-                boolean updateLinkedTables = MainFrame.get().getTabs().getSelectedComponent() == MainFrame.get().getBoardsTab() 
+                boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getBoardsTab() 
                         && configuration.getTablesLinked() == TablesLinked.Linked;
                 
                 if (getSelections().size() > 1) {
@@ -246,7 +246,7 @@ public class BoardPlacementsPanel extends JPanel {
                     multiSelectionActionGroup.setEnabled(false);
                     singleSelectionActionGroup.setEnabled(getSelection() != null);
                     MainFrame mainFrame = MainFrame.get();
-                    Component selectedComponent = mainFrame.getTabs().getSelectedComponent();
+                    Component selectedComponent = mainFrame.getNavigation().getSelectedComponent();
                     if (updateLinkedTables) {
                         configuration.getBus().post(new PlacementSelectedEvent(getSelection(),
                                 new BoardLocation(board), BoardPlacementsPanel.this));

@@ -160,7 +160,7 @@ public class BoardsPanel extends JPanel {
                         }
                         
                         boolean updateLinkedTables = 
-                                MainFrame.get().getTabs().getSelectedComponent() == MainFrame.get().getBoardsTab() 
+                                MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getBoardsTab() 
                                 && configuration.getTablesLinked() == TablesLinked.Linked;
 
                         List<Board> selections = getSelections();

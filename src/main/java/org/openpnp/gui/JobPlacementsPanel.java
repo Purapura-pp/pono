@@ -223,7 +223,7 @@ public class JobPlacementsPanel extends JPanel {
                 }
 
                 boolean updateLinkedTables = 
-                        MainFrame.get().getTabs().getSelectedComponent() == MainFrame.get().getJobTab() 
+                        MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getJobTab() 
                         && configuration.getTablesLinked() == TablesLinked.Linked;
                 
                 if (getSelections().size() > 1) {

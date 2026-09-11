@@ -161,7 +161,7 @@ public class PanelsPanel extends JPanel {
                             return;
                         }
                         
-                        boolean updateLinkedTables = MainFrame.get().getTabs().getSelectedComponent() == MainFrame.get().getPanelsTab() 
+                        boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
                                 && configuration.getTablesLinked() == TablesLinked.Linked;
 
                         List<Panel> selections = getSelections();

@@ -519,7 +519,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 tabbedPane.add(wizard.getWizardName(), (JPanel) wizard);
             }
             MainFrame mainFrame = MainFrame.get();
-            if (mainFrame.getTabs().getSelectedComponent() == mainFrame.getPartsTab() 
+            if (mainFrame.getNavigation().getSelectedComponent() == mainFrame.getPartsTab() 
                     && configuration.getTablesLinked() == TablesLinked.Linked) {
                 mainFrame.getPackagesTab().selectPackageInTable(selectedPart.getPackage());
                 mainFrame.getFeedersTab().selectFeederForPart(selectedPart);

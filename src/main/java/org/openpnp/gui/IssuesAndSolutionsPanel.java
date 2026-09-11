@@ -42,7 +42,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -373,37 +372,27 @@ public class IssuesAndSolutionsPanel extends JPanel {
         updateIssueIndicator();
     }
 
+    /**
+     * Report how many issues are waiting, as a badge on this page's navigation item.
+     * <p>
+     * It used to be a coloured dot written into the tab's own title as HTML, which is why the
+     * bundles carried a second title with a span in it. The rail item takes a count, so what the
+     * user sees now is how much there is to attend to rather than only that there is something.
+     */
     public void updateIssueIndicator() {
         if (!machine.getSolutions().isShowIndicator()) {
             // See Issue https://github.com/openpnp/openpnp/issues/1199. 
             return;
         }
-        Solutions.Severity maxSeverity = Solutions.Severity.None;
+        int unhandled = 0;
         for (Solutions.Issue issue : machine.getSolutions().getIssues()) {
-            if (issue.getSeverity().ordinal() >= maxSeverity.ordinal() 
-                    && issue.getState() == Solutions.State.Open) {
-                maxSeverity = issue.getSeverity();
+            if (issue.getState() == Solutions.State.Open
+                    && issue.getSeverity().ordinal() > Solutions.Severity.Information.ordinal()) {
+                unhandled++;
             }
         }
-        JTabbedPane tabs = frame.getTabs();
-        if (tabs != null) {
-            int index = tabs.indexOfComponent(frame.getIssuesAndSolutionsTab());
-            if (index >= 0) {
-                if (maxSeverity.ordinal() > Solutions.Severity.Information.ordinal()) {
-                    int indicatorUnicode = 0x2B24;
-                    Color color = maxSeverity.color;
-                    color = saturate(color);
-                    //"<html>Issues &amp; Solutions <span style=\"color:#"
-                    tabs.setTitleAt(index, Translations.getString(
-                            "MainFrame.RightComponent.tabs.IssuesAndSolutionsHtml") //$NON-NLS-1$
-                            +String.format("%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue()) //$NON-NLS-1$
-                            +";\">&#"+(indicatorUnicode)+";</span></html>"); //$NON-NLS-1$ //$NON-NLS-2$
-                }
-                else {
-                    tabs.setTitleAt(index, Translations.getString(
-                            "MainFrame.RightComponent.tabs.IssuesAndSolutions")); //$NON-NLS-1$
-                }
-            }
+        if (frame.getNavigation() != null) {
+            frame.getNavigation().setBadge(frame.getIssuesAndSolutionsTab(), unhandled);
         }
     }
 

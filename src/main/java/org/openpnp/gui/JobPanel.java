@@ -277,7 +277,7 @@ public class JobPanel extends JPanel {
                             return;
                         }
                         
-                        boolean updateLinkedTables = mainFrame.getTabs().getSelectedComponent() == mainFrame.getJobTab() 
+                        boolean updateLinkedTables = mainFrame.getNavigation().getSelectedComponent() == mainFrame.getJobTab() 
                                 && configuration.getTablesLinked() == TablesLinked.Linked;
                         
                         List<PlacementsHolderLocation<?>> selections = getSelections();
@@ -1027,7 +1027,7 @@ public class JobPanel extends JPanel {
             Helpers.selectObjectTableRow(jobTable, b);
             if(primary) {
                 // focus the job tab
-                MainFrame.get().getTabs().setSelectedComponent(MainFrame.get().getJobTab());
+                MainFrame.get().showTab(MainFrame.get().getJobTab());
             }
         } else if (source instanceof Placement) {
             Placement p = (Placement)source;
@@ -1045,7 +1045,7 @@ public class JobPanel extends JPanel {
             Helpers.selectObjectTableRow(jobPlacementsPanel.getTable(), p);
             if(primary) {
                 // focus the job tab
-                MainFrame.get().getTabs().setSelectedComponent(MainFrame.get().getJobTab());
+                MainFrame.get().showTab(MainFrame.get().getJobTab());
             }
         } else if (source instanceof Part) {
             Part p = (Part)source;
@@ -1054,7 +1054,7 @@ public class JobPanel extends JPanel {
             MainFrame.get().getPartsTab().selectPartInTableAndUpdateLinks(p);
             if(primary) {
                 // focus the parts tab
-                MainFrame.get().getTabs().setSelectedComponent(MainFrame.get().getPartsTab());
+                MainFrame.get().showTab(MainFrame.get().getPartsTab());
             }
         } else if (source instanceof Feeder) {
             Feeder f = (Feeder)source;
@@ -1063,7 +1063,7 @@ public class JobPanel extends JPanel {
             MainFrame.get().getFeedersTab().selectFeederInTable(f);
             if(primary) {
                 // focus the feeder tab
-                MainFrame.get().getTabs().setSelectedComponent(MainFrame.get().getFeedersTab());
+                MainFrame.get().showTab(MainFrame.get().getFeedersTab());
             }
         } else if (source instanceof Nozzle) {
             Nozzle n = (Nozzle)source;
