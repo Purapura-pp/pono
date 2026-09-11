@@ -98,6 +98,7 @@ import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.SwingUserInteraction;
 import org.openpnp.gui.shell.CameraStage;
 import org.openpnp.gui.shell.DroPanel;
+import org.openpnp.gui.shell.InspectorPanel;
 import org.openpnp.gui.shell.NavigationRail;
 import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
 import org.openpnp.gui.shell.OverlayCard;
@@ -134,6 +135,8 @@ public class MainFrame extends JFrame {
     private static final int PREF_DIVIDER_POSITION_DEF = -1;
     private static final String PREF_WINDOW_STYLE_MULTIPLE = "MainFrame.windowStyleMultiple"; //$NON-NLS-1$
     private static final boolean PREF_WINDOW_STYLE_MULTIPLE_DEF = false;
+    private static final String PREF_INSPECTOR_COLLAPSED = "MainFrame.inspectorCollapsed"; //$NON-NLS-1$
+    private static final boolean PREF_INSPECTOR_COLLAPSED_DEF = false;
 
     private static final String PREF_CAMERA_WINDOW_X = "CameraFrame.windowX"; //$NON-NLS-1$
     private static final int PREF_CAMERA_WINDOW_X_DEF = 0;
@@ -253,6 +256,7 @@ public class MainFrame extends JFrame {
 
     private JPanel contentPane;
     private NavigationRail navigationRail;
+    private InspectorPanel inspectorPanel;
     private CameraStage cameraStage;
     private OverlayCard instructionsCard;
     private DroPanel droPanel;
@@ -273,6 +277,14 @@ public class MainFrame extends JFrame {
 
     public NavigationRail getNavigation() {
         return navigationRail;
+    }
+
+    /**
+     * The properties column down the right hand side. Panels hand it whatever their table has
+     * selected rather than showing the property sheets themselves.
+     */
+    public InspectorPanel getInspector() {
+        return inspectorPanel;
     }
 
     /**
@@ -769,6 +781,15 @@ public class MainFrame extends JFrame {
 
         statusBarPanel = new StatusBarPanel(configuration);
         contentPane.add(statusBarPanel, BorderLayout.SOUTH);
+
+        // One properties column for the whole window, where every table used to keep its own
+        // below itself behind a split divider.
+        inspectorPanel = new InspectorPanel();
+        inspectorPanel.setCollapsed(prefs.getBoolean(PREF_INSPECTOR_COLLAPSED,
+                PREF_INSPECTOR_COLLAPSED_DEF));
+        inspectorPanel.addPropertyChangeListener("collapsed", //$NON-NLS-1$
+                e -> prefs.putBoolean(PREF_INSPECTOR_COLLAPSED, inspectorPanel.isCollapsed()));
+        contentPane.add(inspectorPanel, BorderLayout.EAST);
 
         // No title on the camera: the camera selector inside it already says which one this is,
         // and the etched box only cost the view a few pixels on every edge.

@@ -24,11 +24,9 @@ import java.awt.Component;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import java.util.prefs.Preferences;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 import java.util.Map;
@@ -44,8 +42,6 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
@@ -62,11 +58,11 @@ import org.openpnp.Translations;
 import org.openpnp.events.FeederSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.ClassSelectionDialog;
-import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.CustomBooleanRenderer;
 import org.openpnp.gui.support.Helpers;
 import org.openpnp.gui.support.Icons;
+import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
@@ -102,7 +98,6 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     private final MainFrame mainFrame;
 
     private static final String PREF_DIVIDER_POSITION = "FeedersPanel.dividerPosition";
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
 
     private JTable table;
 
@@ -113,13 +108,8 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     private ActionGroup singleSelectActionGroup;
     private ActionGroup multiSelectActionGroup;
 
-    private Preferences prefs = Preferences.userNodeForPackage(FeedersPanel.class);
     
-    private JTabbedPane configurationPanel;
     private int priorRowIndex = -1;
-    private String priorFeederId;
-    private HashMap<Class, Integer> lastSelectedTabIndex = new HashMap<>();
-    private Boolean applyChangesDialogPending = false;
     
     public FeedersPanel(Configuration configuration, MainFrame mainFrame) {
         this.configuration = configuration;
@@ -230,25 +220,11 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         tableSorter = new TableRowSorter<>(tableModel);
         table.getColumnModel().moveColumn(1,  2);
 
-        final JSplitPane splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setContinuousLayout(true);
-        splitPane
-                .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() {
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
-        
-        add(splitPane, BorderLayout.CENTER);
-        splitPane.setLeftComponent(new JScrollPane(table));
+        // The property sheets of the selected feeder are shown by the window's one properties
+        // column now, so the table gets the whole panel and there is no divider to remember.
+        add(new JScrollPane(table), BorderLayout.CENTER);
         table.setRowSorter(tableSorter);
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-
-        configurationPanel = new JTabbedPane(JTabbedPane.TOP);
-        splitPane.setRightComponent(configurationPanel);
 
         singleSelectActionGroup = new ActionGroup(deleteFeederAction, feedFeederAction,
                 pickFeederAction, moveCameraToPickLocation, moveToolToPickLocation,
@@ -279,55 +255,31 @@ public class FeedersPanel extends JPanel implements WizardContainer {
                 }
 
                 if (table.getSelectedRow() != priorRowIndex) {
-
-                    if (applyChangesDialogPending) {
-                        // We already have the "apply changes?" dialog box open, so this is a recursive call.
+                    Feeder feeder = getSelection();
+                    Result shown = mainFrame.getInspector().show(feeder, FeedersPanel.this,
+                            feeder == null ? null : feeder.getName(),
+                            feeder == null ? null : feeder.getPropertySheetHolderIcon());
+                    if (shown == Result.Busy) {
+                        // A question about the feeder selected before this one is on screen, and
+                        // asking it let the event queue run us again.
                         return;
                     }
-
-                    if (keepUnAppliedFeederConfigurationChanges()) {
-                        // Cancel was pressed
+                    if (shown == Result.Cancelled) {
                         table.setRowSelectionInterval(priorRowIndex, priorRowIndex);
                         return;
                     }
 
-                    // NB getSelectedRow might have changed since the call just above, while the message box
-                    // inside keepUnAppliedFeederConfigurationChanges was active
+                    // The selected row may have moved while the question about unapplied changes
+                    // was on screen.
                     priorRowIndex = table.getSelectedRow();
 
-                    Feeder feeder = getSelection();
-
-                    for (Component comp : configurationPanel.getComponents()) {
-                        if (comp instanceof AbstractConfigurationWizard) {
-                            ((AbstractConfigurationWizard) comp).dispose();
-                        }
-                    }
-                    configurationPanel.removeAll();
                     if (feeder != null) {
-                        priorFeederId = feeder.getId();
-                        PropertySheet[] propertySheets = feeder.getPropertySheets();
-                        for (PropertySheet ps : propertySheets) {
-                            JPanel panel = ps.getPropertySheetPanel();
-                            if(panel instanceof AbstractConfigurationWizard) {
-                                AbstractConfigurationWizard wizard = (AbstractConfigurationWizard) panel;
-                                wizard.setWizardContainer(FeedersPanel.this);
-                            }
-                            configurationPanel.addTab(ps.getPropertySheetTitle(), panel);
-                        }
-                        // Re-select the last selected tab of that feeder class. 
-                        if (lastSelectedTabIndex.get(feeder.getClass()) != null) {
-                            configurationPanel.setSelectedIndex(Math.max(0, Math.min(configurationPanel.getTabCount()-1, 
-                                    lastSelectedTabIndex.get(feeder.getClass()))));
-                        }
                         if (mainFrame.getNavigation().getSelectedComponent() == mainFrame.getFeedersTab()
                               &&  configuration.getTablesLinked() == TablesLinked.Linked
                               && feeder.getPart() != null) {
                             mainFrame.getPartsTab().selectPartInTableAndUpdateLinks(feeder.getPart());
                         }
                     }
-
-                    revalidate();
-                    repaint();
 
                     configuration.getBus().post(new FeederSelectedEvent(feeder, FeedersPanel.this));
                 }
@@ -349,59 +301,6 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         popupMenu.add(setFeedOptionsMenu);
 
         table.setComponentPopupMenu(popupMenu);
-    }
-
-    private boolean keepUnAppliedFeederConfigurationChanges() {
-        Feeder priorFeeder = configuration.getMachine().getFeeder(priorFeederId);
-        if (priorFeeder != null) {
-            // Btw., remember the tab that was selected for this feeder class.
-            lastSelectedTabIndex.put(priorFeeder.getClass(), configurationPanel.getSelectedIndex());
-        }
-        boolean feederConfigurationIsDirty = false;
-        for (Component component : configurationPanel.getComponents()) {
-            if(component instanceof AbstractConfigurationWizard) {
-                feederConfigurationIsDirty = ((AbstractConfigurationWizard) component).isDirty();
-                if(feederConfigurationIsDirty) {
-                    break;
-                }
-            }
-        }
-        if (feederConfigurationIsDirty && (priorFeeder != null)) {
-            int selection = JOptionPane.NO_OPTION;
-            applyChangesDialogPending = true;
-            try {
-                selection = JOptionPane.showConfirmDialog(null,
-                        priorFeeder.getName() + " changed.  Apply changes?",
-                        "Warning!",
-                        JOptionPane.YES_NO_CANCEL_OPTION,
-                        JOptionPane.QUESTION_MESSAGE,
-                        null
-                        );
-            }
-            finally {
-                applyChangesDialogPending = false;
-            }
-
-            switch (selection) {
-                case JOptionPane.YES_OPTION:
-                    for (Component component : configurationPanel.getComponents()) {
-                        if(component instanceof AbstractConfigurationWizard) {
-                            AbstractConfigurationWizard wizard = (AbstractConfigurationWizard) component;
-                            if(wizard.isDirty()) {
-                                wizard.apply();
-                            }
-                        }
-                    }
-                    return false;
-                case JOptionPane.NO_OPTION:
-                    return false;
-                case JOptionPane.CANCEL_OPTION:
-                default:
-                    return true;
-            }
-        } else {
-            return false;
-        }
     }
 
     @Subscribe
@@ -498,7 +397,8 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     public void wizardCancelled(Wizard wizard) {}
 
     private void newFeeder(Part part) {
-        if (keepUnAppliedFeederConfigurationChanges()) {
+        // Adding a feeder moves the selection, so settle any unapplied edits first.
+        if (!mainFrame.getInspector().getPresenter().settleUnappliedEdits()) {
             return;
         }
         
@@ -528,7 +428,6 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             return;
         }
         try {
-            priorFeederId = null;
             
             Feeder feeder = feederClass.newInstance();
 
