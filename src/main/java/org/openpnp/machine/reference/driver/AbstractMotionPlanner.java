@@ -533,7 +533,13 @@ public abstract class AbstractMotionPlanner extends AbstractMachineElement imple
                                     backlashOffset 
                                     : new Length(0, LengthUnit.Millimeters);
                             AxesLocation effectiveBacklashAxisOffset = new AxesLocation(refAxis, effectiveBacklashOffset);
-                            if (refAxis.getBacklashCompensationMethod() == BacklashCompensationMethod.DirectionalSneakUp) {
+                            // Sneaking up is an extra move, which is the one thing
+                            // SpeedOverPrecision asks to do without. The offset still applies, so
+                            // the axis arrives from the same side as always, just in one move -
+                            // which is how DirectionalCompensation behaves, and what the option
+                            // already did for the one-sided methods below.
+                            if (refAxis.getBacklashCompensationMethod() == BacklashCompensationMethod.DirectionalSneakUp
+                                    && !Motion.MotionOption.SpeedOverPrecision.isSetIn(optionFlags)) {
                                 // Sneak up, this needs an extra move for last segment at slower speed.
                                 needsExtraBacklashMove = true;
                                 Length sneakOffset = refAxis.getSneakUpOffset()

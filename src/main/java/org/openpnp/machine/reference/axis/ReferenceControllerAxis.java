@@ -277,12 +277,19 @@ public class ReferenceControllerAxis extends AbstractControllerAxis {
         this.backlashOffset = convertFromSystem(backlashOffset);
     }
 
+    /**
+     * Converted the way the backlash offset beside it is, which matters for a rotational axis:
+     * the conversion re-labels the stored number as the system unit rather than scaling it,
+     * because the value is an angle and must not be unit converted. Without it the two offsets
+     * arrive in different units and the subtraction between them in
+     * {@code createBacklashCompensatedMotion} mixes the two.
+     */
     public Length getSneakUpOffset() {
-        return sneakUpOffset;
+        return convertToSystem(sneakUpOffset);
     }
 
     public void setSneakUpOffset(Length sneakUpOffset) {
-        this.sneakUpOffset = sneakUpOffset;
+        this.sneakUpOffset = convertFromSystem(sneakUpOffset);
     }
 
     public double getBacklashSpeedFactor() {

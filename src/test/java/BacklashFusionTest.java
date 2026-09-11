@@ -55,6 +55,14 @@ public class BacklashFusionTest {
             return recorded;
         }
 
+        /** The same, asking for speed over precision. */
+        public List<Motion> compensateForSpeed(HeadMountable hm, AxesLocation from,
+                AxesLocation to) {
+            recorded.clear();
+            createBacklashCompensatedMotion(hm, 1.0, from, to, MotionOption.SpeedOverPrecision);
+            return recorded;
+        }
+
         @Override
         protected Motion addMotion(HeadMountable hm, double speed, AxesLocation location0,
                 AxesLocation location1, int options) {
@@ -252,6 +260,55 @@ public class BacklashFusionTest {
                 "it starts past the target, by the backlash offset");
         assertSame(nozzle, approach.getHeadMountable());
         assertNotNull(approach.getLocation1());
+    }
+
+    /**
+     * SpeedOverPrecision asks for no extra moves. It was honoured for the one-sided methods and
+     * silently ignored for sneaking up, which is the method that always adds one.
+     */
+    @Test
+    public void speedOverPrecisionStopsTheSneakUpFromAddingAMove() {
+        xAxis.setBacklashCompensationMethod(BacklashCompensationMethod.DirectionalSneakUp);
+        xAxis.setBacklashOffset(new Length(0.1, LengthUnit.Millimeters));
+        xAxis.setSneakUpOffset(new Length(1, LengthUnit.Millimeters));
+
+        List<Motion> withPrecision = planner.compensate(nozzle, at(0, 20, 20), at(10, 20, 20));
+        assertEquals(2, withPrecision.size(), "sneaking up is two moves when precision matters");
+
+        List<Motion> overPrecision =
+                planner.compensateForSpeed(nozzle, at(0, 20, 20), at(10, 20, 20));
+
+        assertEquals(1, overPrecision.size(),
+                "with SpeedOverPrecision the offset still applies, but in one move");
+        assertEquals(10.1, coordinate(overPrecision.get(0).getLocation1(), xAxis), 1e-9,
+                "the offset is still applied, so the axis arrives from the same side");
+    }
+
+    /**
+     * The sneak-up offset is subtracted from the backlash offset while the compensation is being
+     * worked out, so the two have to arrive in the same unit. For a rotational axis the conversion
+     * re-labels the stored number as the system unit rather than scaling it, because the value is
+     * an angle; without it the subtraction mixes an angle labelled in millimetres with one
+     * labelled in inches, and Length obligingly scales one of them.
+     */
+    @Test
+    public void theSneakUpOffsetIsConvertedTheWayTheBacklashOffsetBesideItIs() throws Exception {
+        LengthUnit systemUnits = Configuration.get().getSystemUnits();
+        try {
+            Configuration.get().setSystemUnits(LengthUnit.Inches);
+            ReferenceControllerAxis rotation = addAxis("C", Axis.Type.Rotation);
+            rotation.setBacklashOffset(new Length(0.5, LengthUnit.Inches));
+            rotation.setSneakUpOffset(new Length(2, LengthUnit.Inches));
+
+            assertEquals(rotation.getBacklashOffset().getUnits(),
+                    rotation.getSneakUpOffset().getUnits(),
+                    "the two offsets have to be comparable to be subtracted");
+            assertEquals(2, rotation.getSneakUpOffset().getValue(), 1e-9,
+                    "an angle must not be scaled by a unit conversion");
+        }
+        finally {
+            Configuration.get().setSystemUnits(systemUnits);
+        }
     }
 
     private ReferenceControllerAxis addAxis(String letter, Axis.Type type) throws Exception {
