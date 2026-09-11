@@ -42,7 +42,8 @@ import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.border.TitledBorder;
+import javax.swing.JLabel;
+import javax.swing.border.EmptyBorder;
 import javax.swing.JPopupMenu;
 import javax.swing.JMenuItem;
 
@@ -100,15 +101,12 @@ public class MachineControlsPanel extends JPanel {
 
     private Location markLocation = null;
 
-    private Color droNormalColor = new Color(0xBDFFBE);
-    private Color droSavedColor = new Color(0x90cce0);
     
     /**
      * Create the panel.
      */
     public MachineControlsPanel(Configuration configuration, JobPanel jobPanel) {
-        setBorder(new TitledBorder(null, Translations.getString("MachineControls.Label"), TitledBorder.LEADING, TitledBorder.TOP, //$NON-NLS-1$
-                null, null));
+        setBorder(new EmptyBorder(4, 4, 2, 4));
         this.configuration = configuration;
         this.jobPanel = jobPanel;
 
@@ -290,35 +288,46 @@ public class MachineControlsPanel extends JPanel {
     }
 
     public void updateDros() {
-        MainFrame.get().getDroLabel().setText(getDroText());
+        MainFrame.get().getDroPanel().setLocation(getDroLocation(), markLocation != null);
+    }
+
+    /**
+     * @return the selected tool's position, or its offset from the mark when one is set. Null when
+     *         there is nothing selected to report on.
+     */
+    public Location getDroLocation() {
+        Location l = getCurrentLocation();
+        if (l == null) {
+            return null;
+        }
+        return markLocation != null ? l.subtract(markLocation) : l;
     }
 
     public String getDroText() {
-        Location l = getCurrentLocation();
+        Location l = getDroLocation();
         if (l == null) {
             return "";
         }
 
-        if (markLocation != null) {
-            l = l.subtract(markLocation);
-        }
-
-        double x, y, z, c;
-
-        x = l.getX();
-        y = l.getY();
-        z = l.getZ();
-        c = l.getRotation();
-
         return String.format("X:%-9s Y:%-9s Z:%-9s C:%-9s", //$NON-NLS-1$
-                String.format(Locale.US, configuration.getLengthDisplayFormat(), x),
-                String.format(Locale.US, configuration.getLengthDisplayFormat(), y),
-                String.format(Locale.US, configuration.getLengthDisplayFormat(), z),
-                String.format(Locale.US, configuration.getLengthDisplayFormat(), c));
+                String.format(Locale.US, configuration.getLengthDisplayFormat(), l.getX()),
+                String.format(Locale.US, configuration.getLengthDisplayFormat(), l.getY()),
+                String.format(Locale.US, configuration.getLengthDisplayFormat(), l.getZ()),
+                String.format(Locale.US, configuration.getLengthDisplayFormat(), l.getRotation()));
     }
 
     private void createUi() {
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+
+        // A plain heading where the etched title used to be. The border drew a box around the
+        // whole panel for the sake of one word.
+        JLabel heading = new JLabel(Translations.getString("MachineControls.Label")); //$NON-NLS-1$
+        heading.setAlignmentX(LEFT_ALIGNMENT);
+        Color headingColor = UIManager.getColor("Pono.textSecondary"); //$NON-NLS-1$
+        if (headingColor != null) {
+            heading.setForeground(headingColor);
+        }
+        add(heading);
 
         JXCollapsiblePane collapsePane = new JXCollapsiblePane();
 
@@ -573,10 +582,7 @@ public class MachineControlsPanel extends JPanel {
     private ConfigurationListener configurationListener = new ConfigurationListener.Adapter() {
         @Override
         public void configurationComplete(Configuration configuration) {
-            SwingUtilities.invokeLater(() -> {
-                MainFrame.get().getDroLabel().setBackground(droNormalColor);
-            });
-            MainFrame.get().getDroLabel().addMouseListener(new MouseAdapter() {
+            MainFrame.get().getDroPanel().addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     if(e.getButton()==MouseEvent.BUTTON3) {
@@ -585,14 +591,9 @@ public class MachineControlsPanel extends JPanel {
                         menu.show(e.getComponent(), e.getX(), e.getY());
                     } else {
                         SwingUtilities.invokeLater(() -> {
-                            if (markLocation == null) {
-                                markLocation = getCurrentLocation();
-                                MainFrame.get().getDroLabel().setBackground(droSavedColor);
-                            }
-                            else {
-                                markLocation = null;
-                                MainFrame.get().getDroLabel().setBackground(droNormalColor);
-                            }
+                            // The readout shows the mark by tinting its numbers, which
+                            // updateDros() picks up from markLocation.
+                            markLocation = markLocation == null ? getCurrentLocation() : null;
                             updateDros();
                         });
                     }

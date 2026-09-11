@@ -38,6 +38,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JLabel;
+import javax.swing.UIManager;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JTabbedPane;
@@ -285,23 +286,30 @@ public class JogControlsPanel extends JPanel {
         homeButton.setToolTipText(Translations.getString("JogControlsPanel.homeButton.toolTipText")); //$NON-NLS-1$ //$NON-NLS-2$
         panelControls.add(homeButton, "2, 2"); //$NON-NLS-1$
 
+        // Lucida Grande is a macOS font: elsewhere Swing silently substituted something else at a
+        // size that ignored the user's font setting. These derive from the theme's label font, so
+        // they follow both the theme and the appearance dialog's size slider.
+        Font labelFont = UIManager.getFont("Label.font"); //$NON-NLS-1$
+        Font axisFont = labelFont.deriveFont(labelFont.getSize2D() * 1.7f);
+        Font captionFont = labelFont.deriveFont(labelFont.getSize2D() * 0.8f);
+
         JLabel lblXy = new JLabel(Translations.getString("JogControlsPanel.lblXy.text")); //$NON-NLS-1$ //$NON-NLS-2$
-        lblXy.setFont(new Font("Lucida Grande", Font.PLAIN, 22)); //$NON-NLS-1$
+        lblXy.setFont(axisFont);
         lblXy.setHorizontalAlignment(SwingConstants.CENTER);
         panelControls.add(lblXy, "8, 2, fill, default"); //$NON-NLS-1$
 
         JLabel lblZ = new JLabel("Z"); //$NON-NLS-1$
         lblZ.setHorizontalAlignment(SwingConstants.CENTER);
-        lblZ.setFont(new Font("Lucida Grande", Font.PLAIN, 22)); //$NON-NLS-1$
+        lblZ.setFont(axisFont);
         panelControls.add(lblZ, "14, 2"); //$NON-NLS-1$
 
         JLabel lblDistance = new JLabel("<html>" + Translations.getString("JogControlsPanel.Label.Distance") + "<br>[" + configuration.getSystemUnits().getShortName() + "/deg]</html>"); //$NON-NLS-1$
-        lblDistance.setFont(new Font("Lucida Grande", Font.PLAIN, 10)); //$NON-NLS-1$
+        lblDistance.setFont(captionFont);
         lblDistance.setToolTipText(Translations.getString("JogControlsPanel.Label.Distance.toolTipText")); //$NON-NLS-1$
         panelControls.add(lblDistance, "18, 2, center, center"); //$NON-NLS-1$
 
         JLabel lblSpeed = new JLabel("<html>" + Translations.getString("JogControlsPanel.Label.Speed") + "<br>[%]</html>"); //$NON-NLS-1$
-        lblSpeed.setFont(new Font("Lucida Grande", Font.PLAIN, 10)); //$NON-NLS-1$
+        lblSpeed.setFont(captionFont);
         panelControls.add(lblSpeed, "20, 2, center, center"); //$NON-NLS-1$
 
         sliderIncrements = new JSlider();
@@ -405,7 +413,7 @@ public class JogControlsPanel extends JPanel {
 
         JLabel lblC = new JLabel("C"); //$NON-NLS-1$
         lblC.setHorizontalAlignment(SwingConstants.CENTER);
-        lblC.setFont(new Font("Lucida Grande", Font.PLAIN, 22)); //$NON-NLS-1$
+        lblC.setFont(axisFont);
         panelControls.add(lblC, "4, 12"); //$NON-NLS-1$
 
         JButton counterclockwiseButton = new JButton(cPlusAction);

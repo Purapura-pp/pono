@@ -78,7 +78,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.BevelBorder;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.undo.UndoManager;
@@ -97,6 +96,8 @@ import org.openpnp.gui.support.OSXAdapter;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.SwingUserInteraction;
+import org.openpnp.gui.shell.DroPanel;
+import org.openpnp.gui.shell.StatusBarPanel;
 import org.openpnp.gui.shell.TopBarPanel;
 import org.openpnp.model.Board;
 import org.openpnp.model.BoardLocation;
@@ -258,7 +259,7 @@ public class MainFrame extends JFrame {
     private JPanel contentPane;
     private JTabbedPane tabs;
     private JSplitPane splitPaneMachineAndTabs;
-    private TitledBorder panelInstructionsBorder;
+    private JLabel lblInstructionsTitle;
     private JPanel panelInstructions;
     private JPanel panelInstructionActions;
     private JPanel panel_1;
@@ -583,10 +584,13 @@ public class MainFrame extends JFrame {
         panelInstructions = new JPanel();
         panelInstructions.setVisible(false);
         panelCameraAndInstructions.setLayout(new BorderLayout(0, 0));
-        panelInstructions.setBorder(panelInstructionsBorder = new TitledBorder(null, Translations.getString("General.Instructions"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, null));
+        panelInstructions.setBorder(new EmptyBorder(4, 4, 4, 4));
         panelCameraAndInstructions.add(panelInstructions, BorderLayout.SOUTH);
         panelInstructions.setLayout(new BorderLayout(0, 0));
+
+        // The wizard sets this per step, which is what the etched border's title used to carry.
+        lblInstructionsTitle = new JLabel(Translations.getString("General.Instructions")); //$NON-NLS-1$
+        panelInstructions.add(lblInstructionsTitle, BorderLayout.NORTH);
 
         panelInstructionActions = new JPanel();
         panelInstructionActions.setAlignmentY(Component.BOTTOM_ALIGNMENT);
@@ -748,45 +752,12 @@ public class MainFrame extends JFrame {
         topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel);
         contentPane.add(topBarPanel, BorderLayout.NORTH);
 
-        panelStatusAndDros = new JPanel();
-        panelStatusAndDros.setBorder(null);
-        contentPane.add(panelStatusAndDros, BorderLayout.SOUTH);
-        panelStatusAndDros.setLayout(new FormLayout(
-                new ColumnSpec[] {ColumnSpec.decode("default:grow"), ColumnSpec.decode("8px"), //$NON-NLS-1$ //$NON-NLS-2$
-                        FormSpecs.RELATED_GAP_COLSPEC, FormSpecs.DEFAULT_COLSPEC, 
-                        FormSpecs.RELATED_GAP_COLSPEC, FormSpecs.DEFAULT_COLSPEC,
-                        FormSpecs.RELATED_GAP_COLSPEC, FormSpecs.DEFAULT_COLSPEC,},
-                new RowSpec[] {RowSpec.decode("20px"),})); //$NON-NLS-1$
+        statusBarPanel = new StatusBarPanel(configuration);
+        contentPane.add(statusBarPanel, BorderLayout.SOUTH);
 
-        
-        // Status Information
-        lblStatus = new JLabel(" "); //$NON-NLS-1$
-        lblStatus.setBorder(new BevelBorder(BevelBorder.LOWERED, null, null, null, null));
-        panelStatusAndDros.add(lblStatus, "1, 1"); //$NON-NLS-1$
-        
-        
-        // Placement Information
-        lblPlacements = new JLabel(Translations.getString("MainFrame.StatusPanel.PlacementsLabel.initial.text")); //$NON-NLS-1$
-        lblPlacements.setBorder(new BevelBorder(BevelBorder.LOWERED, null, null, null, null));
-        panelStatusAndDros.add(lblPlacements, "4, 1"); //$NON-NLS-1$
-        
-        
-        // The progress bar moved to the top bar; column 6 of this layout goes with the rest of
-        // this panel when the flat status bar replaces it.
-
-        
-        // DRO 
-        droLbl = new JLabel("X 0000.0000, Y 0000.0000, Z 0000.0000, R 0000.0000"); //$NON-NLS-1$
-        droLbl.setOpaque(true);
-        droLbl.setForeground(new Color(0,0,0));
-        droLbl.setFont(new Font("Monospaced", Font.PLAIN, 13)); //$NON-NLS-1$
-        droLbl.setBorder(new BevelBorder(BevelBorder.LOWERED, null, null, null, null));
-        panelStatusAndDros.add(droLbl, "8, 1"); //$NON-NLS-1$
-
-        cameraPanel.setBorder(new TitledBorder(null,
-                Translations.getString("MainFrame.CameraPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING,
-                TitledBorder.TOP, null, null)); //$NON-NLS-1$
+        // No title on the camera: the camera selector inside it already says which one this is,
+        // and the etched box only cost the view a few pixels on every edge.
+        cameraPanel.setBorder(null);
         panelCameraAndInstructions.add(cameraPanel, BorderLayout.CENTER);
 
         splitPaneMachineAndTabs.setResizeWeight(0.1);
@@ -903,8 +874,8 @@ public class MainFrame extends JFrame {
         }
     }
 
-    public JLabel getDroLabel() {
-        return droLbl;
+    public DroPanel getDroPanel() {
+        return statusBarPanel.getDroPanel();
     }
 
     private void addImporterMenuOptions() {
@@ -991,7 +962,7 @@ public class MainFrame extends JFrame {
     public void showInstructions(String title, String instructions, boolean showCancelButton,
             boolean showProceedButton, String proceedButtonText,
             ActionListener cancelActionListener, ActionListener proceedActionListener) {
-        panelInstructionsBorder.setTitle(title);
+        lblInstructionsTitle.setText(title);
         lblInstructions.setText(instructions);
         btnInstructionsCancel.setVisible(showCancelButton);
         btnInstructionsNext.setVisible(showProceedButton);
@@ -1133,13 +1104,13 @@ public class MainFrame extends JFrame {
 
     public void setStatus(String status) {
         SwingUtilities.invokeLater(() -> {
-            lblStatus.setText(status);
+            statusBarPanel.setStatus(status);
         });
     }
     
     public void setPlacementCompletionStatus(int totalPlacementsCompleted, int totalPlacements, int boardPlacementsCompleted, int boardPlacements) {
         SwingUtilities.invokeLater(() -> {
-            lblPlacements.setText(String.format(Translations.getString(
+            statusBarPanel.setPlacements(String.format(Translations.getString(
                     "MainFrame.StatusPanel.PlacementsLabel.initial.format.text"), //$NON-NLS-1$
                     totalPlacementsCompleted, totalPlacements, boardPlacementsCompleted, boardPlacements));
             topBarPanel.setProgress(totalPlacements > 0
@@ -1416,10 +1387,7 @@ public class MainFrame extends JFrame {
       }
     }
     
-    private JPanel panelStatusAndDros;
-    private JLabel droLbl;
-    private JLabel lblStatus;
-    private JLabel lblPlacements;
     private TopBarPanel topBarPanel;
+    private StatusBarPanel statusBarPanel;
     private JLabel labelIcon;
 }

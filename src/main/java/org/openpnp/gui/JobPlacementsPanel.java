@@ -54,7 +54,6 @@ import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
-import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -79,6 +78,7 @@ import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.gui.support.PartsComboBoxModel;
 import org.openpnp.gui.support.RotationCellValue;
+import org.openpnp.gui.support.StatusPillRenderer;
 import org.openpnp.gui.support.TableUtils;
 import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel;
 import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel.Status;
@@ -124,10 +124,6 @@ public class JobPlacementsPanel extends JPanel {
 
     private static Color typeColorFiducial = new Color(157, 188, 255);
     private static Color typeColorPlacement = new Color(255, 255, 255);
-    private static Color statusColorWarning = new Color(252, 255, 157);
-    private static Color statusColorReady = new Color(157, 255, 168);
-    private static Color statusColorError = new Color(255, 157, 157);
-    private static Color statusColorDisabled = new Color(180, 180, 180);
 
     public JobPlacementsPanel(JobPanel jobPanel) {
     	this.jobPanel = jobPanel;
@@ -1016,47 +1012,39 @@ public class JobPlacementsPanel extends JPanel {
         }
     }
 
-    static class StatusRenderer extends DefaultTableCellRenderer {
-        public void setValue(Object value) {
-            if (value == null) {
-                return;
+    static class StatusRenderer extends StatusPillRenderer {
+        StatusRenderer() {
+            super(StatusRenderer::toneOf, StatusRenderer::textOf);
+        }
+
+        private static Tone toneOf(Object value) {
+            switch ((Status) value) {
+                case Ready:
+                    return Tone.Ok;
+                case ZeroPartHeight:
+                    return Tone.Warning;
+                case Disabled:
+                    return Tone.Muted;
+                default:
+                    return Tone.Error;
             }
-            Status status = (Status) value; 
-            if (status == Status.Ready) {
-                setBorder(new LineBorder(getBackground()));
-                setForeground(Color.black);
-                setBackground(statusColorReady);
-                setText(Translations.getString("JobPlacementsPanel.StatusRenderer.StatusReady")); //$NON-NLS-1$
-            }
-            else if (status == Status.MissingFeeder) {
-                setBorder(new LineBorder(getBackground()));
-                setForeground(Color.black);
-                setBackground(statusColorError);
-                setText(Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingFeeder")); //$NON-NLS-1$
-            }
-            else if (status == Status.ZeroPartHeight) {
-                setBorder(new LineBorder(getBackground()));
-                setForeground(Color.black);
-                setBackground(statusColorWarning);
-                setText(Translations.getString("JobPlacementsPanel.StatusRenderer.StatusPartHeight")); //$NON-NLS-1$
-            }
-            else if (status == Status.MissingPart) {
-                setBorder(new LineBorder(getBackground()));
-                setForeground(Color.black);
-                setBackground(statusColorError);
-                setText(Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingPart")); //$NON-NLS-1$
-            }
-            else if (status == Status.Disabled) {
-                setBorder(new LineBorder(getBackground()));
-                setForeground(Color.black);
-                setBackground(statusColorDisabled);
-                setText(Translations.getString("JobPlacementsPanel.StatusRenderer.StatusDisabled")); //$NON-NLS-1$
-            }
-            else {
-                setBorder(new LineBorder(getBackground()));
-                setForeground(Color.black);
-                setBackground(statusColorError);
-                setText(status.toString());
+        }
+
+        private static String textOf(Object value) {
+            Status status = (Status) value;
+            switch (status) {
+                case Ready:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusReady"); //$NON-NLS-1$
+                case MissingFeeder:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingFeeder"); //$NON-NLS-1$
+                case ZeroPartHeight:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusPartHeight"); //$NON-NLS-1$
+                case MissingPart:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingPart"); //$NON-NLS-1$
+                case Disabled:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusDisabled"); //$NON-NLS-1$
+                default:
+                    return status.toString();
             }
         }
     }

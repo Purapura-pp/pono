@@ -56,10 +56,12 @@ public class TopBarPanel extends JPanel {
 
     private final JLabel jobLabel = new JLabel();
     private final JProgressBar progressBar = new JProgressBar(0, 100);
+    private final Configuration configuration;
     private JButton themeButton;
 
     public TopBarPanel(Configuration configuration, JobPanel jobPanel,
             MachineControlsPanel machineControls) {
+        this.configuration = configuration;
         // GridBagLayout, and every control added straight to this panel: the job controls are
         // nameless until a job is loaded, and a nested panel measured while they were still blank
         // reported a width that pushed the last of them off the right edge of the window.
@@ -126,7 +128,6 @@ public class TopBarPanel extends JPanel {
      */
     private void toggleTheme() {
         ThemeInfo theme = FlatLaf.isLafDark() ? PonoThemes.light() : PonoThemes.dark();
-        Configuration configuration = Configuration.get();
         new ThemeSettingsPanel().setTheme(theme, configuration.getFontSize(),
                 configuration.isAlternateRows());
         configuration.setThemeInfo(theme);
