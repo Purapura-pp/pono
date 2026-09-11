@@ -29,9 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.List;
-import java.util.prefs.Preferences;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -39,14 +37,10 @@ import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.JToolBar;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
-import javax.swing.event.ChangeEvent;
-import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.TreeSelectionEvent;
@@ -60,7 +54,6 @@ import javax.swing.tree.TreeSelectionModel;
 
 import org.openpnp.ConfigurationListener;
 import org.openpnp.Translations;
-import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.model.Configuration;
@@ -73,14 +66,11 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
 
 
     private static final String PREF_DIVIDER_POSITION = "MachineSetupPanel.dividerPosition";
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
 
     private JTextField searchTextField;
 
-    private Preferences prefs = Preferences.userNodeForPackage(MachineSetupPanel.class);
     private JTree tree;
     private DefaultTreeModel treeModel;
-    private JTabbedPane tabbedPane;
     private JToolBar toolBar;
     private final Action action = new SwingAction();
     private JCheckBox cbExp;
@@ -92,9 +82,6 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
      * Nozzle Tip you probably want to look at the Part Detection settings for it, and not
      * whatever the first tab is.
      */
-    private boolean disableLastSelectedListener = false;
-    private Object lastSelectedNode = null;
-    private HashMap<Class, Integer> lastSelectedTabIndex = new HashMap<>();
 
     private final Configuration configuration;
 
@@ -141,40 +128,15 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         panel_1.add(searchTextField);
         searchTextField.setColumns(15);
 
-        final JSplitPane splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setContinuousLayout(true);
-        splitPane
-                .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() {
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
-        add(splitPane, BorderLayout.CENTER);
-
+        // The property sheets of the selected node are shown by the window's one properties
+        // column now, so the tree gets the whole panel.
         JScrollPane scrollPane = new JScrollPane();
-        splitPane.setLeftComponent(scrollPane);
+        add(scrollPane, BorderLayout.CENTER);
 
         tree = new JTree();
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setCellRenderer(treeCellRenderer);
         scrollPane.setViewportView(tree);
-
-        tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-        splitPane.setRightComponent(tabbedPane);
-        
-        tabbedPane.addChangeListener(new ChangeListener() {
-            public void stateChanged(ChangeEvent e) {
-                if (lastSelectedNode != null) {
-                    if (disableLastSelectedListener) {
-                        return;
-                    }
-                    lastSelectedTabIndex.put(lastSelectedNode.getClass(), tabbedPane.getSelectedIndex());
-                }
-            }
-        });
 
         tree.getSelectionModel().addTreeSelectionListener(new TreeSelectionListener() {
             @Override
@@ -251,19 +213,13 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
     }
 
     public void selectCurrentTreePath() {
-        disableLastSelectedListener = true;
-
-        for (Component comp : tabbedPane.getComponents()) {
-            if (comp instanceof AbstractConfigurationWizard) {
-                ((AbstractConfigurationWizard) comp).dispose();
-            }
-        }
-        tabbedPane.removeAll();
-        
         toolBar.removeAll();
 
         TreePath path = tree.getSelectionPath();
+        PropertySheetHolder holder = null;
         if (path != null) {
+            // The actions of every node on the way down, not just the selected one: a nozzle tip's
+            // actions belong beside the head's and the machine's.
             List<Object> pathsReverse = Arrays.asList(path.getPath());
             Collections.reverse(pathsReverse);
             for (Object o : pathsReverse) {
@@ -275,46 +231,15 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
                     }
                 }
             }
-
             PropertySheetHolderTreeNode node =
                     (PropertySheetHolderTreeNode) path.getLastPathComponent();
             if (node != null) {
-                PropertySheet[] propertySheets = node.obj.getPropertySheets();
-                if (propertySheets != null) {
-                    for (PropertySheet propertySheet : propertySheets) {
-                        String title = propertySheet.getPropertySheetTitle();
-                        JPanel panel = propertySheet.getPropertySheetPanel();
-                        if(panel instanceof AbstractConfigurationWizard) {
-                            AbstractConfigurationWizard wizard = (AbstractConfigurationWizard) panel;
-                            if (wizard.getWizardContainer() == null) {
-                                wizard.setWizardContainer(MachineSetupPanel.this);
-                            }
-                        }
-                        if (title == null) {
-                            title = Translations.getString("MachineSetupPanel.RightComponent.tabs.configuration.title"); //$NON-NLS-1$
-                        }
-                        if (panel != null) {
-                            tabbedPane.add(title, panel);
-                        }
-                    }
-                    
-                    if (node.obj != null) {
-                        if (lastSelectedTabIndex.get(node.obj.getClass()) != null) {
-                            // Sometimes when clicking around quickly, the lastSelectedTabIndex update seems to be wrong, 
-                            // resulting in an IndexOutOfBoundsException. Therefore we check the tab count too. This covers variable per class Wizards too. 
-                            tabbedPane.setSelectedIndex(Math.min(tabbedPane.getTabCount()-1, lastSelectedTabIndex.get(node.obj.getClass())));
-                        }
-                    }
-                    
-                    lastSelectedNode = node.obj;
-                }
-                else {
-                    lastSelectedNode = null;
-                }
+                holder = node.obj;
             }
         }
-        
-        disableLastSelectedListener = false;
+        MainFrame.get().getInspector().show(holder, MachineSetupPanel.this,
+                holder == null ? null : holder.getPropertySheetHolderTitle(),
+                holder == null ? null : holder.getPropertySheetHolderIcon());
 
         revalidate();
         repaint();

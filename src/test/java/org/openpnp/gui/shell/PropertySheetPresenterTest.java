@@ -225,7 +225,8 @@ public class PropertySheetPresenterTest {
 
         presenter.show(new StubHolder("N2", new StubWizard("A")), container, "N2");
 
-        assertEquals("N2", presenter.getShown().getPropertySheetHolderTitle());
+        assertEquals("N2",
+                ((PropertySheetHolder) presenter.getShown()).getPropertySheetHolderTitle());
     }
 
     private static class StubPrompt implements PropertySheetPresenter.Prompt {
