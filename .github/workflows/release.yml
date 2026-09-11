@@ -55,8 +55,14 @@ jobs:
             version="0.0.0-$(git rev-parse --short=7 HEAD)"
           fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
-          # jpackage wants a plain numeric version, and refuses anything else on Windows.
-          echo "numeric=$(echo "${version}" | grep -oE '^[0-9]+(\.[0-9]+){0,2}' || echo 1.0.0)" >> "$GITHUB_OUTPUT"
+          # jpackage takes a separate version of its own: Windows refuses anything but one to
+          # three integers, and macOS additionally refuses a leading zero, which is what a
+          # hand-run build's 0.0.0-<sha> reduces to.
+          numeric="$(echo "${version}" | grep -oE '^[0-9]+(\.[0-9]+){0,2}' || true)"
+          case "${numeric}" in
+            ''|0|0.*) numeric=1.0.0 ;;
+          esac
+          echo "numeric=${numeric}" >> "$GITHUB_OUTPUT"
 
       - name: Build
         run: mvn -B package -DskipTests
