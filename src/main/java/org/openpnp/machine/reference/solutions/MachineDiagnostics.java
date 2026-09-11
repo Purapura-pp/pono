@@ -22,6 +22,7 @@ package org.openpnp.machine.reference.solutions;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import org.opencv.core.Mat;
 import org.opencv.core.RotatedRect;
@@ -57,6 +59,11 @@ import org.openpnp.machine.reference.solutions.MachineDiagnosticsMath.LinearFit;
 import org.openpnp.machine.reference.solutions.MachineDiagnosticsMath.MotionFit;
 import org.openpnp.machine.reference.solutions.MachineDiagnosticsMath.Stats;
 import org.openpnp.machine.reference.solutions.MachineDiagnosticsReport.Severity;
+import org.openpnp.machine.reference.solutions.MachineDiagnosticsResults.ControllerLimits;
+import org.openpnp.machine.reference.solutions.MachineDiagnosticsResults.FieldOfView;
+import org.openpnp.machine.reference.solutions.MachineDiagnosticsResults.Motion;
+import org.openpnp.machine.reference.solutions.MachineDiagnosticsResults.Positioning;
+import org.openpnp.machine.reference.solutions.MachineDiagnosticsResults.Settling;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.spi.Axis;
 import org.openpnp.spi.Camera;
@@ -106,6 +113,33 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private static final int DEFAULT_ALLOW_MISDETECTIONS = 1;
     /** Below this the two fiducials are the same place as far as any calibration can tell. */
     private static final Length HOMING_FIDUCIAL_TOLERANCE = new Length(0.2, LengthUnit.Millimeters);
+    /** A controller limit this far below the axis setting is a cap, not a rounding difference. */
+    private static final double LIMIT_TOLERANCE = 1.05;
+    /** Below this fraction of what it is planned with, a limit describes a different machine. */
+    private static final double SHORTFALL_FRACTION = 0.7;
+    /** Homing scatter beyond this is worth acting on, as the report also reads it. */
+    private static final double HOMING_SCATTER_TOLERANCE_MM = 0.05;
+    /** A Units per Pixel error beyond this is visible across a board. */
+    private static final double SCALE_ERROR_TOLERANCE = 0.005;
+    /** Rotation backlash below this is not worth compensating. */
+    private static final double ROTATION_BACKLASH_TOLERANCE = 0.2;
+    /** Margin over the measured backlash for a one-sided offset, which has to clear it. */
+    private static final double BACKLASH_OFFSET_MARGIN = 1.2;
+    /** Margin over the measured settle time for a fixed wait, which has to outlast it. */
+    private static final double SETTLE_MARGIN = 1.5;
+    /** A fixed wait longer than this many times the measured time is worth shortening. */
+    private static final double SETTLE_EXCESS = 2.5;
+
+    private static final String WIKI_MOTION_PLANNER =
+            "https://github.com/openpnp/openpnp/wiki/Motion-Planner";
+    private static final String WIKI_MACHINE_AXES =
+            "https://github.com/openpnp/openpnp/wiki/Machine-Axes";
+    private static final String WIKI_CAMERA_SETTLING =
+            "https://github.com/openpnp/openpnp/wiki/Camera-Settling";
+    private static final String WIKI_CALIBRATION_SOLUTIONS =
+            "https://github.com/openpnp/openpnp/wiki/Calibration-Solutions#advanced-camera-calibration";
+    private static final String WIKI_VISUAL_HOMING =
+            "https://github.com/openpnp/openpnp/wiki/Visual-Homing";
 
     public enum TestGroup {
         Firmware,
@@ -174,6 +208,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     @Element(required = false, data = true)
     private String firmwareCommands = "M115\nM503\nM114\nM119";
 
+    /**
+     * What the last run of each test group concluded. Persisted, because the measurements take
+     * long enough that nobody repeats them to be told something they were told last week, and
+     * because the checks in {@link #findIssues} run on every Find Issues rather than only while
+     * the report is still on screen.
+     */
+    @Element(required = false)
+    private MachineDiagnosticsResults lastResults;
+
     private Configuration configuration;
     /**
      * Deliberately not serialized: the machine owns this object, so naming it back would put a
@@ -224,8 +267,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
-     * Settings that are wrong on their own terms, without needing anything measured: each is read
-     * straight off the configuration, so they are re-evaluated on every Find Issues.
+     * The findings this contributes to Issues and Solutions, of two kinds. Settings that are
+     * wrong on their own terms are read straight off the configuration. The rest hold a setting
+     * against what {@link #run} last measured, and so appear only on a machine that has been
+     * measured. Both are re-evaluated on every Find Issues.
      * <p>
      * The wording of an issue must not carry a number. The fingerprint that remembers a dismissal
      * is a hash of the subject, the issue and the solution, so a number in the text would give the
@@ -248,6 +293,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 findHomingFiducialIssues(solutions, (ReferenceHead) head);
             }
         }
+        if (lastResults != null) {
+            findMeasuredIssues(solutions, lastResults);
+        }
     }
 
     /**
@@ -269,6 +317,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Solutions.Severity.Warning,
                 "https://github.com/openpnp/openpnp/wiki/Nozzle-Tip-Calibration") {
             private final int oldAllowMisdetections = calibration.getAllowMisdetections();
+            private int proposed = DEFAULT_ALLOW_MISDETECTIONS;
 
             @Override
             protected String extendedDescription() {
@@ -290,12 +339,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                                 0, Math.max(0, calibration.getAngleSubdivisions() - 2)) {
                             @Override
                             public int get() {
-                                return calibration.getAllowMisdetections();
+                                return proposed;
                             }
 
                             @Override
                             public void set(int value) {
-                                calibration.setAllowMisdetections(value);
+                                proposed = value;
                             }
                         },
                 };
@@ -303,12 +352,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
             @Override
             public void setState(Solutions.State state) throws Exception {
-                if (state == Solutions.State.Solved) {
-                    calibration.setAllowMisdetections(DEFAULT_ALLOW_MISDETECTIONS);
-                }
-                else {
-                    calibration.setAllowMisdetections(oldAllowMisdetections);
-                }
+                calibration.setAllowMisdetections(
+                        state == Solutions.State.Solved ? proposed : oldAllowMisdetections);
                 super.setState(state);
             }
         });
@@ -431,6 +476,516 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "the right one is not something the machine can know.";
             }
         });
+    }
+
+    /**
+     * The checks that hold a setting against what the machine was measured doing. Each one needs
+     * a conclusion from the last run, so none of them appears on a machine that has never been
+     * measured, and each stops appearing once the setting and the measurement agree again.
+     * <p>
+     * A measured value is offered as an adjustable property and written only on Accept, rather
+     * than applied here. The number came from one run on one day, and whether that run was
+     * representative is not something this can know.
+     */
+    private void findMeasuredIssues(Solutions solutions, MachineDiagnosticsResults results) {
+        for (ControllerLimits limits : results.getControllerLimits()) {
+            ReferenceControllerAxis axis = controllerAxis(limits.getAxisId());
+            if (axis != null) {
+                findControllerLimitIssues(solutions, axis, limits,
+                        measuredWhen(results, TestGroup.Firmware));
+            }
+        }
+        for (Motion motion : results.getMotion()) {
+            ReferenceControllerAxis axis = controllerAxis(motion.getAxisId());
+            if (axis != null) {
+                findMotionShortfallIssues(solutions, axis, motion,
+                        measuredWhen(results, TestGroup.Kinematics));
+            }
+        }
+        for (Positioning positioning : results.getPositioning()) {
+            ReferenceControllerAxis axis = controllerAxis(positioning.getAxisId());
+            if (axis != null) {
+                findBacklashOffsetIssue(solutions, axis, positioning,
+                        measuredWhen(results, TestGroup.XyPositioning));
+            }
+        }
+        for (Settling settling : results.getSettling()) {
+            ReferenceCamera camera = camera(settling.getCameraId());
+            if (camera != null) {
+                findSettleTimeIssues(solutions, camera, settling,
+                        measuredWhen(results, TestGroup.CameraSettle));
+            }
+        }
+        findFieldOfViewIssues(solutions, results);
+        findHomingScatterIssue(solutions, results);
+        findRotationBacklashIssue(solutions, results);
+    }
+
+    /**
+     * What the controller says about itself, against what the axis is set to.
+     * <p>
+     * A controller limit below the axis setting caps every move without saying so, which makes
+     * the planner's timing - and the speed factors it scales against that timing - describe a
+     * machine that does not exist. A resolution finer than the controller's step is the same
+     * disagreement in the other direction: coordinates are sent that the machine cannot take up.
+     */
+    private void findControllerLimitIssues(Solutions solutions, ReferenceControllerAxis axis,
+            ControllerLimits limits, String when) {
+        // The controller's figures are read as being in the units the axis is planned in, which
+        // is the assumption the measurement itself was taken under.
+        String unit = axisUnit(axis);
+        Double feedRate = limits.getMaxFeedRate();
+        if (feedRate != null && axis.getMotionLimit(1) > feedRate * LIMIT_TOLERANCE) {
+            Length previous = axis.getFeedratePerSecond();
+            solutions.add(new LengthSettingIssue(axis,
+                    "The axis is planned with a feed rate the controller will not allow.",
+                    "Lower the axis feed rate to the controller's own limit.",
+                    Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                    "Feed rate per second",
+                    "The feed rate the axis will be planned with.",
+                    String.format("The controller reported a maximum feed rate of %.0f %s/s for "
+                            + "this axis %s, and the axis is set to be planned at %.0f %s/s. The "
+                            + "controller caps every move at its own figure without reporting "
+                            + "that it did, so the planner's move times, and the speed factors "
+                            + "it scales against them, are computed for a machine that is not "
+                            + "there.", feedRate, unit, when, axis.getMotionLimit(1), unit),
+                    previous, new Length(feedRate, AxesLocation.getUnits()),
+                    (value, solved) -> axis.setFeedratePerSecond(value)));
+        }
+        Double acceleration = limits.getMaxAcceleration();
+        if (acceleration != null && axis.getMotionLimit(2) > acceleration * LIMIT_TOLERANCE) {
+            Length previous = axis.getAccelerationPerSecond2();
+            solutions.add(new LengthSettingIssue(axis,
+                    "The axis is planned with an acceleration the controller will not allow.",
+                    "Lower the axis acceleration to the controller's own limit.",
+                    Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                    "Acceleration per second squared",
+                    "The acceleration the axis will be planned with.",
+                    String.format("The controller reported a maximum acceleration of %.0f %s/s² "
+                            + "for this axis %s, and the axis is set to be planned at %.0f %s/s². "
+                            + "Every move is capped at the controller's figure, so the planned "
+                            + "ramps are shorter than the real ones and the machine is still "
+                            + "moving when the plan says it has arrived.", acceleration, unit,
+                            when, axis.getMotionLimit(2), unit),
+                    previous, new Length(acceleration, AxesLocation.getUnits()),
+                    (value, solved) -> axis.setAccelerationPerSecond2(value)));
+        }
+        Double steps = limits.getStepsPerUnit();
+        if (steps != null && steps > 0 && axis.getDriver() != null) {
+            LengthUnit driverUnits = axis.getDriver().getUnits();
+            double step = 1.0 / steps;
+            if (axis.getResolution() < step * 0.5) {
+                double previous = axis.getResolution();
+                solutions.add(new LengthSettingIssue(axis,
+                        "The axis resolution is finer than the smallest step the controller can "
+                                + "make.",
+                        "Set the resolution to one controller step.",
+                        Solutions.Severity.Warning, WIKI_MACHINE_AXES,
+                        "Resolution",
+                        "The smallest difference in coordinate the axis is asked to make.",
+                        String.format("The controller reported %.4f steps per unit for this axis "
+                                + "%s, so its smallest step is %.5f %s, while the axis "
+                                + "resolution is set to %.5f %s. Resolution is what decides "
+                                + "whether a coordinate counts as a move at all, so a value "
+                                + "below one step sends moves the machine cannot make and "
+                                + "reports them as done.", steps, when, step,
+                                driverUnits.getShortName(), previous,
+                                driverUnits.getShortName()),
+                        new Length(previous, driverUnits), new Length(step, driverUnits),
+                        (value, solved) -> axis.setResolution(
+                                value.convertToUnits(driverUnits).getValue())));
+            }
+        }
+    }
+
+    /**
+     * An axis that reaches only a fraction of the limit it is planned with. The planner works out
+     * every move time from these two numbers, and scales its speed factors against them, so a
+     * limit the machine never reaches makes a job slower than the plan says and puts the
+     * deceleration somewhere other than where it was planned.
+     */
+    private void findMotionShortfallIssues(Solutions solutions, ReferenceControllerAxis axis,
+            Motion motion, String when) {
+        String unit = motion.getUnit();
+        double configuredVelocity = axis.getMotionLimit(1);
+        if (Double.isFinite(motion.getVelocity()) && configuredVelocity > 0
+                && motion.getVelocity() < configuredVelocity * SHORTFALL_FRACTION) {
+            solutions.add(new LengthSettingIssue(axis,
+                    "The axis never reaches the feed rate it is planned with.",
+                    "Set the axis feed rate to the one it was measured reaching.",
+                    Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                    "Feed rate per second",
+                    "The feed rate the axis will be planned with.",
+                    String.format("Move times measured %s fit a cruise velocity of %.0f %s/s, "
+                            + "against the %.0f %s/s the axis is planned with. Whatever is "
+                            + "holding it back - the controller, the driver, the mechanics - the "
+                            + "planner is timing moves that take longer than it thinks.", when,
+                            motion.getVelocity(), unit, configuredVelocity, unit),
+                    axis.getFeedratePerSecond(),
+                    new Length(motion.getVelocity(), AxesLocation.getUnits()),
+                    (value, solved) -> axis.setFeedratePerSecond(value)));
+        }
+        double configuredAcceleration = axis.getMotionLimit(2);
+        if (Double.isFinite(motion.getAcceleration()) && configuredAcceleration > 0
+                && motion.getAcceleration() < configuredAcceleration * SHORTFALL_FRACTION) {
+            solutions.add(new LengthSettingIssue(axis,
+                    "The axis never reaches the acceleration it is planned with.",
+                    "Set the axis acceleration to the one it was measured reaching.",
+                    Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                    "Acceleration per second squared",
+                    "The acceleration the axis will be planned with.",
+                    String.format("Move times measured %s fit an acceleration of %.0f %s/s², "
+                            + "against the %.0f %s/s² the axis is planned with. The planner puts "
+                            + "the start of the deceleration where the configured figure says it "
+                            + "should be, so on the real machine the ramp is still running "
+                            + "there.", when, motion.getAcceleration(), unit,
+                            configuredAcceleration, unit),
+                    axis.getAccelerationPerSecond2(),
+                    new Length(motion.getAcceleration(), AxesLocation.getUnits()),
+                    (value, solved) -> axis.setAccelerationPerSecond2(value)));
+        }
+    }
+
+    /**
+     * One-sided positioning always approaches a target from the same side, having first driven
+     * past it by the backlash offset. An offset smaller than the backlash does not get past it,
+     * so the approach starts inside the slack and the compensation does nothing.
+     */
+    private void findBacklashOffsetIssue(Solutions solutions, ReferenceControllerAxis axis,
+            Positioning positioning, String when) {
+        if (!axis.getBacklashCompensationMethod().isOneSidedPositioningMethod()) {
+            return;
+        }
+        double measured = positioning.getBacklashMaxMm();
+        Length offset = axis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters);
+        if (measured <= offset.getValue()) {
+            return;
+        }
+        solutions.add(new LengthSettingIssue(axis,
+                "One-sided backlash compensation is set to less offset than the axis has "
+                        + "backlash.",
+                "Raise the offset past the backlash that was measured.",
+                Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                "Backlash offset",
+                "How far past the target the axis drives before approaching it.",
+                String.format("The axis measured up to %.4f mm of backlash %s, with compensation "
+                        + "switched off, and %s is set to drive %.4f mm past the target before "
+                        + "approaching it. That does not clear the slack, so the approach begins "
+                        + "inside it and every position still carries the backlash. The offered "
+                        + "value keeps a margin over the largest backlash measured.", measured,
+                        when, axis.getBacklashCompensationMethod(), offset.getValue()),
+                axis.getBacklashOffset(),
+                new Length(measured * BACKLASH_OFFSET_MARGIN, LengthUnit.Millimeters)
+                        .convertToUnits(axis.getBacklashOffset().getUnits()),
+                (value, solved) -> axis.setBacklashOffset(value)));
+    }
+
+    /**
+     * A camera that waits a fixed time before capturing, against how long the image really takes
+     * to stop moving. Too short and every calibration and every alignment is measured on a
+     * shaking image; too long and the difference is paid on every single capture in a job.
+     */
+    private void findSettleTimeIssues(Solutions solutions, ReferenceCamera camera,
+            Settling settling, String when) {
+        if (camera.getSettleMethod() != AbstractSettlingCamera.SettleMethod.FixedTime) {
+            return;
+        }
+        long configured = camera.getSettleTimeMs();
+        double measured = settling.getSettleSeconds();
+        if (configured < measured * 1000) {
+            solutions.add(new SettleTimeIssue(camera,
+                    "The camera waits a fixed time that ends before the image has stopped moving.",
+                    "Wait as long as the image was measured taking to settle.",
+                    Solutions.Severity.Error,
+                    String.format("The image was still moving %.0f ms after a %.0f mm move %s, "
+                            + "and the camera waits %d ms before it captures. Everything that "
+                            + "looks through this camera - the calibrations, fiducial location, "
+                            + "part alignment - is therefore measuring a moving image, and no "
+                            + "amount of calibration afterwards can recover that.",
+                            measured * 1000, settling.getDistanceMm(), when, configured),
+                    configured, settleMilliseconds(measured * SETTLE_MARGIN)));
+        }
+        else if (measured > 0 && configured > measured * 1000 * SETTLE_EXCESS) {
+            solutions.add(new SettleTimeIssue(camera,
+                    "The camera waits considerably longer than the image takes to settle.",
+                    "Shorten the wait to what the image was measured needing.",
+                    Solutions.Severity.Suggestion,
+                    String.format("The image settled %.0f ms after a %.0f mm move %s, and the "
+                            + "camera waits %d ms before it captures. The difference is spent on "
+                            + "every capture the machine makes, which over a job of thousands of "
+                            + "placements is time spent waiting for something that has already "
+                            + "happened.", measured * 1000, settling.getDistanceMm(), when,
+                            configured),
+                    configured, settleMilliseconds(measured * SETTLE_MARGIN)));
+        }
+    }
+
+    /**
+     * Units per Pixel against the scale the camera was measured having across its field of view.
+     * Reported rather than corrected: the scan says the scale is wrong, and the calibration that
+     * gets it right is the advanced camera calibration that Issues and Solutions already offers,
+     * which measures tilt and lens distortion in the same pass.
+     */
+    private void findFieldOfViewIssues(Solutions solutions, MachineDiagnosticsResults results) {
+        Map<String, FieldOfView> worst = new LinkedHashMap<>();
+        for (FieldOfView scan : results.getFieldOfView()) {
+            FieldOfView previous = worst.get(scan.getCameraId());
+            if (previous == null
+                    || Math.abs(scan.getScaleError()) > Math.abs(previous.getScaleError())) {
+                worst.put(scan.getCameraId(), scan);
+            }
+        }
+        String when = measuredWhen(results, TestGroup.XyPositioning);
+        for (FieldOfView scan : worst.values()) {
+            ReferenceCamera camera = camera(scan.getCameraId());
+            if (camera == null || Math.abs(scan.getScaleError()) <= SCALE_ERROR_TOLERANCE) {
+                continue;
+            }
+            solutions.add(new Solutions.PlainIssue(camera,
+                    "Units per Pixel does not agree with what the camera sees across its field "
+                            + "of view.",
+                    "Calibrate the camera with the advanced camera calibration offered here.",
+                    Solutions.Severity.Warning, WIKI_CALIBRATION_SOLUTIONS) {
+                @Override
+                protected String extendedDescription() {
+                    return String.format("A fiducial swept across the field of view %s moved "
+                            + "%+.2f%% further in %s than Units per Pixel accounts for, leaving "
+                            + "%.4f mm rms of distortion under the scale error. Units per Pixel "
+                            + "scales every vision correction the machine makes, so the error is "
+                            + "carried into placement over the whole board. This is not "
+                            + "corrected here: the advanced camera calibration in this list "
+                            + "measures the scale together with the camera's tilt and the lens "
+                            + "distortion, which is what the residual says is also present.",
+                            when, scan.getScaleError() * 100, scan.getAxis(),
+                            scan.getResidualMm());
+                }
+            });
+        }
+    }
+
+    /**
+     * Homing scatter against visual homing. The endstops repeat to whatever precision they
+     * repeat to, and that scatter moves the origin of every coordinate in the machine; visual
+     * homing pins the origin to a fiducial instead, which is an offer Issues and Solutions
+     * already makes and which this points at rather than duplicating.
+     */
+    private void findHomingScatterIssue(Solutions solutions, MachineDiagnosticsResults results) {
+        MachineDiagnosticsResults.Homing homing = results.getHoming();
+        if (homing == null || homing.getSpreadMm() <= HOMING_SCATTER_TOLERANCE_MM) {
+            return;
+        }
+        Head head = machine.getHead(homing.getHeadId());
+        if (!(head instanceof ReferenceHead)
+                || ((ReferenceHead) head).getVisualHomingMethod()
+                        != ReferenceHead.VisualHomingMethod.None) {
+            return;
+        }
+        String when = measuredWhen(results, TestGroup.Homing);
+        solutions.add(new Solutions.PlainIssue(head,
+                "Homing does not put the machine origin back in the same place.",
+                "Set up visual homing, with the Enable Visual Homing solution offered here.",
+                Solutions.Severity.Warning, WIKI_VISUAL_HOMING) {
+            @Override
+            protected String extendedDescription() {
+                return String.format("Homing %d times and measuring the same fiducial after each "
+                        + "one %s put the origin within %.4f mm of itself. Visual homing is off, "
+                        + "so that is the repeatability of the endstops, and it shifts every "
+                        + "coordinate the machine holds - fiducials, feeders, nozzle offsets - "
+                        + "by that much between one power-up and the next. Visual homing takes "
+                        + "the origin from a fiducial instead, which is the solution offered in "
+                        + "this list.", homing.getCycles(), when, homing.getSpreadMm());
+            }
+        });
+    }
+
+    /**
+     * Rotation backlash with no compensation set. The nozzle turns the part by however much of
+     * the commanded angle the mechanism takes up, and the error at the corner of a part grows
+     * with its size, so it shows up on the large parts that are otherwise easiest to place.
+     */
+    private void findRotationBacklashIssue(Solutions solutions,
+            MachineDiagnosticsResults results) {
+        MachineDiagnosticsResults.Rotation rotation = results.getRotation();
+        if (rotation == null
+                || Math.abs(rotation.getBacklashDegrees()) <= ROTATION_BACKLASH_TOLERANCE) {
+            return;
+        }
+        ReferenceControllerAxis axis = controllerAxis(rotation.getAxisId());
+        if (axis == null || axis.getBacklashCompensationMethod()
+                != BacklashCompensationMethod.None) {
+            return;
+        }
+        double measured = Math.abs(rotation.getBacklashDegrees());
+        String when = measuredWhen(results, TestGroup.RotationBacklash);
+        solutions.add(new LengthSettingIssue(axis,
+                "The rotation axis has backlash and no compensation set.",
+                "Compensate the rotation in the direction of travel, by the offset measured.",
+                Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                "Backlash offset",
+                "How far the commanded angle is shifted in the direction the axis is turning.",
+                String.format("Approaching the same angle from either side %s left %.3f degrees "
+                        + "between the two, measured on the bottom camera through the part "
+                        + "itself, and no compensation is set. At the corner of a 5 mm part that "
+                        + "angle is %.3f mm of placement error, which is why it shows up first "
+                        + "on the large parts. Accepting sets compensation in the direction of "
+                        + "travel, which is the method that costs no extra move.", when, measured,
+                        Math.toRadians(measured) * 2.5),
+                axis.getBacklashOffset(), new Length(measured, AxesLocation.getUnits()),
+                new LengthSetting() {
+                    private final BacklashCompensationMethod previousMethod =
+                            axis.getBacklashCompensationMethod();
+
+                    @Override
+                    public void set(Length value, boolean solved) {
+                        axis.setBacklashCompensationMethod(solved
+                                ? BacklashCompensationMethod.DirectionalCompensation
+                                : previousMethod);
+                        axis.setBacklashOffset(value);
+                    }
+                }));
+    }
+
+    /** What an issue does with the length it offers, when accepted and when that is undone. */
+    private interface LengthSetting {
+        void set(Length value, boolean solved) throws Exception;
+    }
+
+    /**
+     * An issue whose solution is one measured length going into one setting. The value is
+     * adjustable before accepting, accepting writes it, and undoing puts back what was there.
+     */
+    private static class LengthSettingIssue extends Solutions.Issue {
+        private final String label;
+        private final String toolTip;
+        private final String explanation;
+        private final Length previous;
+        private final LengthSetting setting;
+        private Length proposed;
+
+        LengthSettingIssue(Solutions.Subject subject, String issue, String solution,
+                Solutions.Severity severity, String uri, String label, String toolTip,
+                String explanation, Length previous, Length proposed, LengthSetting setting) {
+            super(subject, issue, solution, severity, uri);
+            this.label = label;
+            this.toolTip = toolTip;
+            this.explanation = explanation;
+            this.previous = previous;
+            this.proposed = proposed;
+            this.setting = setting;
+        }
+
+        @Override
+        protected String extendedDescription() {
+            return explanation;
+        }
+
+        @Override
+        public CustomProperty[] getProperties() {
+            return new CustomProperty[] { new LengthProperty(label, toolTip) {
+                @Override
+                public Length get() {
+                    return proposed;
+                }
+
+                @Override
+                public void set(Length value) {
+                    proposed = value;
+                }
+            } };
+        }
+
+        @Override
+        public void setState(Solutions.State state) throws Exception {
+            setting.set(state == Solutions.State.Solved ? proposed : previous,
+                    state == Solutions.State.Solved);
+            super.setState(state);
+        }
+    }
+
+    /**
+     * The settle time issues, which differ from the length ones only in that a wait is a number
+     * of milliseconds and the camera keeps it as one.
+     */
+    private static class SettleTimeIssue extends Solutions.Issue {
+        private final AbstractSettlingCamera camera;
+        private final String explanation;
+        private final long previous;
+        private int proposed;
+
+        SettleTimeIssue(AbstractSettlingCamera camera, String issue, String solution,
+                Solutions.Severity severity, String explanation, long previous, int proposed) {
+            super(camera, issue, solution, severity, WIKI_CAMERA_SETTLING);
+            this.camera = camera;
+            this.explanation = explanation;
+            this.previous = previous;
+            this.proposed = proposed;
+        }
+
+        @Override
+        protected String extendedDescription() {
+            return explanation;
+        }
+
+        @Override
+        public CustomProperty[] getProperties() {
+            return new CustomProperty[] { new IntegerProperty("Settle time in milliseconds",
+                    "How long the camera waits after a move before it captures.", 0, 60000) {
+                @Override
+                public int get() {
+                    return proposed;
+                }
+
+                @Override
+                public void set(int value) {
+                    proposed = value;
+                }
+            } };
+        }
+
+        @Override
+        public void setState(Solutions.State state) throws Exception {
+            camera.setSettleTimeMs(state == Solutions.State.Solved ? proposed : previous);
+            super.setState(state);
+        }
+    }
+
+    /** A settle time rounded up to the next whole millisecond, which is the camera's unit. */
+    private static int settleMilliseconds(double seconds) {
+        return (int) Math.min(Integer.MAX_VALUE, Math.ceil(seconds * 1000));
+    }
+
+    /** The axis by its id, or null if it is gone or is no longer a controller axis. */
+    private ReferenceControllerAxis controllerAxis(String id) {
+        Axis axis = machine.getAxis(id);
+        return axis instanceof ReferenceControllerAxis ? (ReferenceControllerAxis) axis : null;
+    }
+
+    /** The camera by its id, wherever it hangs, or null if it is gone. */
+    private ReferenceCamera camera(String id) {
+        for (Camera camera : machine.getAllCameras()) {
+            if (camera.getId().equals(id) && camera instanceof ReferenceCamera) {
+                return (ReferenceCamera) camera;
+            }
+        }
+        return null;
+    }
+
+    /** Degrees for a rotation axis, the system length unit for the rest. */
+    private static String axisUnit(ReferenceControllerAxis axis) {
+        return axis.getType() == Axis.Type.Rotation ? "deg" : AxesLocation.getUnits().getShortName();
+    }
+
+    /**
+     * When the group that measured this last ran, as a clause to drop into a description. The
+     * age of a measurement is what tells the reader whether to trust it against a machine they
+     * have worked on since.
+     */
+    private static String measuredWhen(MachineDiagnosticsResults results, TestGroup group) {
+        MachineDiagnosticsResults.Run run = results.getRun(group);
+        if (run == null) {
+            return "in the last diagnostics run";
+        }
+        return "on " + new SimpleDateFormat("yyyy-MM-dd HH:mm").format(run.getWhen());
     }
 
     private Configuration getConfiguration() throws Exception {
@@ -653,6 +1208,37 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         return lastReportDirectory;
     }
 
+    /**
+     * @return What each test group last concluded, or null if nothing has ever been measured on
+     *         this machine.
+     */
+    public MachineDiagnosticsResults getLastResults() {
+        return lastResults;
+    }
+
+    public void setLastResults(MachineDiagnosticsResults lastResults) {
+        Object oldValue = this.lastResults;
+        this.lastResults = lastResults;
+        firePropertyChange("lastResults", oldValue, lastResults);
+    }
+
+    /**
+     * Store what a test group concluded, under the group's name and the time it finished.
+     * <p>
+     * Called at the end of a measurement rather than as each number is worked out, so that a
+     * group which threw halfway leaves the previous conclusions in place instead of replacing
+     * them with a partial set.
+     */
+    private void recordResults(TestGroup group, MachineDiagnosticsReport report,
+            Consumer<MachineDiagnosticsResults> conclusions) {
+        MachineDiagnosticsResults results =
+                lastResults != null ? lastResults : new MachineDiagnosticsResults();
+        conclusions.accept(results);
+        results.setRun(group, System.currentTimeMillis(),
+                report.getDirectory().getAbsolutePath());
+        setLastResults(results);
+    }
+
     public SimpleGraph getTimingGraph() {
         return timingGraph;
     }
@@ -829,6 +1415,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             throws Exception {
         report.section("Firmware and controller settings");
         StringBuilder raw = new StringBuilder();
+        List<ControllerLimits> limits = new ArrayList<>();
         boolean anyDriver = false;
         for (Driver driver : machine.getDrivers()) {
             if (!(driver instanceof GcodeDriver)) {
@@ -858,13 +1445,14 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 settings.putAll(MachineDiagnosticsMath.parseSettingsReport(replies));
                 report.line("  %s -> %d line(s)", command, replies.size());
             }
-            compareControllerLimits(machine, gcodeDriver, settings, report);
+            compareControllerLimits(machine, gcodeDriver, settings, report, limits);
         }
         if (!anyDriver) {
             throw new Exception("No G-code driver to ask.");
         }
         report.writeText("firmware.txt", raw.toString());
         report.line("Raw controller output: firmware.txt");
+        recordResults(TestGroup.Firmware, report, results -> results.setControllerLimits(limits));
     }
 
     /**
@@ -888,7 +1476,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * and therefore its speed factors, describe a machine that does not exist.
      */
     private void compareControllerLimits(ReferenceMachine machine, GcodeDriver driver,
-            Map<String, GcodeSettingLine> settings, MachineDiagnosticsReport report) {
+            Map<String, GcodeSettingLine> settings, MachineDiagnosticsReport report,
+            List<ControllerLimits> limits) {
         GcodeSettingLine maxFeedRate = settings.get("M203");
         GcodeSettingLine maxAcceleration = settings.get("M201");
         GcodeSettingLine stepsPerUnit = settings.get("M92");
@@ -911,6 +1500,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             Double steps = stepsPerUnit != null ? stepsPerUnit.get(letter) : null;
             Double feedController = maxFeedRate != null ? maxFeedRate.get(letter) : null;
             Double accelerationController = maxAcceleration != null ? maxAcceleration.get(letter) : null;
+            limits.add(new ControllerLimits(controllerAxis.getId(), steps, feedController,
+                    accelerationController));
             double feedConfigured = controllerAxis.getMotionLimit(1);
             double accelerationConfigured = controllerAxis.getMotionLimit(2);
             report.line("  %-6s %-10s %-12.1f %-12s %-12.1f %-12s", controllerAxis.getName(),
@@ -950,6 +1541,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         double[] distances = MachineDiagnosticsMath.parseSeries(timingDistances);
         SimpleGraph graph = newTimingGraph();
         List<Object[]> rows = new ArrayList<>();
+        List<Motion> fits = new ArrayList<>();
         ReferenceHead head = requireHead(machine);
         HeadMountable camera = requireDownLookingCamera(head);
         Nozzle nozzle = head.getNozzles().isEmpty() ? null : head.getNozzles().get(0);
@@ -962,7 +1554,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     report.line("No controller axis of type %s on the camera, skipped.", type);
                     continue;
                 }
-                timeAxis(machine, report, graph, rows, camera, axis, distances, "mm");
+                timeAxis(machine, report, graph, rows, fits, camera, axis, distances, "mm");
             }
         }
         finally {
@@ -980,7 +1572,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     }
                 }
                 if (zDistances.size() >= 3) {
-                    timeAxis(machine, report, graph, rows, nozzle, zAxis, toArray(zDistances), "mm");
+                    timeAxis(machine, report, graph, rows, fits, nozzle, zAxis,
+                            toArray(zDistances), "mm");
                 }
                 else {
                     report.line("Z safe zone is %.1fmm, too small for the timing distances, skipped.",
@@ -994,17 +1587,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             ReferenceControllerAxis rotationAxis = findControllerAxis(nozzle, Axis.Type.Rotation);
             if (rotationAxis != null) {
                 nozzle.moveToSafeZ();
-                timeAxis(machine, report, graph, rows,  nozzle, rotationAxis,
+                timeAxis(machine, report, graph, rows, fits, nozzle, rotationAxis,
                         MachineDiagnosticsMath.parseSeries(rotationTimingAngles), "deg");
             }
         }
         report.writeCsv("kinematics.csv",
                 new String[] { "axis", "distance", "repeat", "seconds" }, rows);
         setTimingGraph(graph);
+        recordResults(TestGroup.Kinematics, report, results -> results.setMotion(fits));
     }
 
     private void timeAxis(ReferenceMachine machine, MachineDiagnosticsReport report,
-            SimpleGraph graph, List<Object[]> rows, HeadMountable movable,
+            SimpleGraph graph, List<Object[]> rows, List<Motion> fits, HeadMountable movable,
             ReferenceControllerAxis axis, double[] distances, String unit) throws Exception {
         Location base = movable.getLocation();
         double axisPerUnit = axisUnitVector(movable, axis, base);
@@ -1059,6 +1653,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             return;
         }
         MotionFit fit = MachineDiagnosticsMath.fitMotion(toArray(fitDistances), toArray(fitTimes));
+        fits.add(new Motion(axis.getId(), fit.acceleration, fit.velocity, fit.overhead, unit));
         double configuredFeedRate = axis.getMotionLimit(1);
         double configuredAcceleration = axis.getMotionLimit(2);
         report.line("  measured: acceleration %.0f %s/s2, velocity %.0f %s/s, overhead %.0f ms "
@@ -1109,11 +1704,23 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         scale.setSymmetricIfSigned(true);
         scale.setLabelShown(true);
 
+        Map<String, Stats> backlash = new LinkedHashMap<>();
+        Map<String, Double> effectiveResolution = new LinkedHashMap<>();
+        List<FieldOfView> scans = new ArrayList<>();
         measureRepeatability(machine, report, graph, head, camera, fiducial, diameter);
-        measureRawBacklash(machine, report, graph, head, camera, fiducial, diameter);
+        measureRawBacklash(machine, report, graph, head, camera, fiducial, diameter, backlash);
         setPositioningGraph(graph);
-        measureStepResponse(machine, report, head, camera, fiducial, diameter);
-        measureFieldOfViewScale(machine, report, head, camera, fiducial, diameter);
+        measureStepResponse(machine, report, head, camera, fiducial, diameter, effectiveResolution);
+        measureFieldOfViewScale(machine, report, head, camera, fiducial, diameter, scans);
+        recordResults(TestGroup.XyPositioning, report, results -> {
+            List<Positioning> positioning = new ArrayList<>();
+            for (Map.Entry<String, Stats> axis : backlash.entrySet()) {
+                positioning.add(new Positioning(axis.getKey(), axis.getValue().min,
+                        axis.getValue().max, effectiveResolution.get(axis.getKey())));
+            }
+            results.setPositioning(positioning);
+            results.setFieldOfView(scans);
+        });
     }
 
     /**
@@ -1186,7 +1793,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      */
     private void measureRawBacklash(ReferenceMachine machine, MachineDiagnosticsReport report,
             SimpleGraph graph, ReferenceHead head, ReferenceCamera camera, Location fiducial,
-            Length diameter) throws Exception {
+            Length diameter, Map<String, Stats> measured) throws Exception {
         double[] distances = MachineDiagnosticsMath.parseSeries(positioningDistances);
         double[] speeds = MachineDiagnosticsMath.parseSeries(speedFactors);
         List<Object[]> rows = new ArrayList<>();
@@ -1247,6 +1854,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 continue;
             }
             Stats stats = MachineDiagnosticsMath.stats(axisBacklash);
+            measured.put(axis.getId(), stats);
             Length configured = axis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters);
             report.finding(Severity.Info, "Axis %s backlash measures %.4f to %.4f mm across the "
                     + "tested distances and speeds; the configured offset is %.4f mm and the "
@@ -1268,8 +1876,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * moves the accumulated distance.
      */
     private void measureStepResponse(ReferenceMachine machine, MachineDiagnosticsReport report,
-            ReferenceHead head, ReferenceCamera camera, Location fiducial, Length diameter)
-                    throws Exception {
+            ReferenceHead head, ReferenceCamera camera, Location fiducial, Length diameter,
+            Map<String, Double> effectiveResolution) throws Exception {
         if (!(stepTestStepMm > 0) || !(stepTestDistanceMm > stepTestStepMm)) {
             report.line("Step test skipped: the step and distance settings do not describe a test.");
             return;
@@ -1336,6 +1944,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "largest single jump %.4f mm", axis.getName(), speed, stalled,
                         Math.max(0, step - 1), largestJump);
                 if (step > 1 && stalled * 3 > step) {
+                    // The worst speed is the conclusion: an axis that only tracks the commands
+                    // when driven slowly still has the coarser resolution in a job.
+                    effectiveResolution.merge(axis.getId(), largestJump, Math::max);
                     report.finding(Severity.Warning, "Axis %s at %.2fx does not respond to %.3f mm "
                             + "commands: %d of %d moved almost nothing and the motion then caught "
                             + "up in jumps of up to %.4f mm. Its effective resolution at this speed "
@@ -1357,8 +1968,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * scale to it is lens distortion.
      */
     private void measureFieldOfViewScale(ReferenceMachine machine, MachineDiagnosticsReport report,
-            ReferenceHead head, ReferenceCamera camera, Location fiducial, Length diameter)
-                    throws Exception {
+            ReferenceHead head, ReferenceCamera camera, Location fiducial, Length diameter,
+            List<FieldOfView> scale) throws Exception {
         if (fieldOfViewGridSteps < 3) {
             report.line("Field of view scan skipped: it needs at least a 3 by 3 grid.");
             return;
@@ -1398,12 +2009,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         report.writeCsv("field-of-view.csv",
                 new String[] { "offset_x_mm", "offset_y_mm", "error_x_mm", "error_y_mm" }, rows);
-        reportFieldOfViewAxis(report, camera, "X", toArray(offsetsX), toArray(errorsX), upp.getX());
-        reportFieldOfViewAxis(report, camera, "Y", toArray(offsetsY), toArray(errorsY), upp.getY());
+        reportFieldOfViewAxis(report, camera, "X", toArray(offsetsX), toArray(errorsX), upp.getX(),
+                scale);
+        reportFieldOfViewAxis(report, camera, "Y", toArray(offsetsY), toArray(errorsY), upp.getY(),
+                scale);
     }
 
     private void reportFieldOfViewAxis(MachineDiagnosticsReport report, ReferenceCamera camera,
-            String axis, double[] offsets, double[] errors, double unitsPerPixel) {
+            String axis, double[] offsets, double[] errors, double unitsPerPixel,
+            List<FieldOfView> scale) {
         LinearFit fit = MachineDiagnosticsMath.linearFit(offsets, errors);
         double residualSum = 0;
         for (int i = 0; i < offsets.length; i++) {
@@ -1411,6 +2025,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             residualSum += residual * residual;
         }
         double rms = Math.sqrt(residualSum / offsets.length);
+        scale.add(new FieldOfView(camera.getId(), axis, fit.slope, rms));
         report.line("  %s: scale error %+.2f%%, residual after removing it %.4f mm rms",
                 axis, fit.slope * 100, rms);
         if (Math.abs(fit.slope) < 1) {
@@ -1457,10 +2072,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 / camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters).getX());
         Color[] palette = new Color[] { COLOR_X, COLOR_Y, COLOR_Z, COLOR_ROTATION, COLOR_MEASURED };
         int index = 0;
+        // The move that took longest to settle is the conclusion, because the wait before a
+        // capture is one setting and has to cover every move a job makes.
+        Double worstSettled = null;
+        double worstDistance = 0;
         for (double distance : distances) {
             checkAborted();
             Double settled = sampleSettling(camera, fiducial, distance, diameterPixels, graph, rows,
                     palette[index++ % palette.length]);
+            if (settled != null && (worstSettled == null || settled > worstSettled)) {
+                worstSettled = settled;
+                worstDistance = distance;
+            }
             if (settled == null) {
                 report.line("  after a %.0f mm move: never settled within %.0f ms",
                         distance, settleSampleSeconds * 1000);
@@ -1494,6 +2117,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.writeCsv("camera-settle.csv",
                 new String[] { "distance_mm", "time_s", "deviation_px" }, rows);
         setSettleGraph(graph);
+        List<Settling> settleTimes = new ArrayList<>();
+        if (worstSettled != null) {
+            settleTimes.add(new Settling(camera.getId(), worstSettled, worstDistance));
+        }
+        recordResults(TestGroup.CameraSettle, report, results -> results.setSettling(settleTimes));
     }
 
     private Double sampleSettling(ReferenceCamera camera, Location fiducial, double distance,
@@ -1624,6 +2252,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.line("  X spread %.4f mm (sd %.4f), Y spread %.4f mm (sd %.4f)",
                 statsX.getRange(), statsX.stdDev, statsY.getRange(), statsY.stdDev);
         double worst = Math.max(statsX.getRange(), statsY.getRange());
+        recordResults(TestGroup.Homing, report, results -> results
+                .setHoming(new MachineDiagnosticsResults.Homing(head.getId(), worst, homingCycles)));
         Severity severity = worst > 0.05 ? Severity.Warning : Severity.Info;
         report.finding(severity, "Homing reproduces the origin to within %.3f mm over %d cycles.",
                 worst, homingCycles);
@@ -1710,6 +2340,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 report.line("  Mean backlash %.4f deg over the tested angles.", stats.mean);
                 ReferenceControllerAxis rotationAxis = findControllerAxis(nozzle, Axis.Type.Rotation);
                 String axisName = rotationAxis != null ? rotationAxis.getName() : "rotation";
+                if (rotationAxis != null) {
+                    recordResults(TestGroup.RotationBacklash, report,
+                            results -> results.setRotation(new MachineDiagnosticsResults.Rotation(
+                                    rotationAxis.getId(), stats.mean)));
+                }
                 if (Math.abs(stats.mean) > 0.2) {
                     report.finding(Severity.Warning, "The %s axis has %.3f deg of backlash and %s "
                             + "compensation set. On a 5 mm part that is %.3f mm at the corner.",
@@ -1939,6 +2574,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.section("Configuration snapshot");
         report.line("Written to config-snapshot.txt.");
         log("Configuration snapshot written.");
+        // No conclusions of its own, but the page shows when each group last ran and this one is
+        // the group that says which settings everything else was measured under.
+        recordResults(TestGroup.ConfigSnapshot, report, results -> {
+        });
     }
 
     // Shared helpers.

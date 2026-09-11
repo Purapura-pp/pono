@@ -188,11 +188,24 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                     selected.add(entry.getKey());
                 }
             }
-            UiUtils.submitUiMachineTask(() -> {
-                diagnostics.run(machine, selected);
-            });
+            UiUtils.submitUiMachineTask(() -> diagnostics.run(machine, selected),
+                    (report) -> reportIssues(), (t) -> UiUtils.showError(t));
         }
     };
+
+    /**
+     * Ask Issues and Solutions to look again, now that there is something measured to look at.
+     * <p>
+     * A conclusion the run reached is of no use sitting in a report the user has to open and
+     * read; the checks that turn one into an issue live on the machine and only run when asked.
+     * Called on the event thread, because publishing tells the tables to rebuild themselves.
+     */
+    private void reportIssues() {
+        UiUtils.messageBoxOnException(() -> {
+            machine.getSolutions().findIssues();
+            machine.getSolutions().publishIssues();
+        });
+    }
 
     private Action stopAction = new AbstractAction(Translations.getString(
             "MachineDiagnosticsWizard.Action.Stop"), Icons.stop) { //$NON-NLS-1$

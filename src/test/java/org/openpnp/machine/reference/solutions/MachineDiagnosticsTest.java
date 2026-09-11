@@ -1,7 +1,9 @@
 package org.openpnp.machine.reference.solutions;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -58,6 +60,26 @@ public class MachineDiagnosticsTest {
         String report = read(new File(directory, "report.txt"));
         assertTrue(report.contains("Configuration snapshot"),
                 "the report says which measurements were taken");
+    }
+
+    /**
+     * Every group records that it ran, so that the page can say how old each conclusion is and an
+     * issue can say when it was measured. The snapshot is the group that reaches no conclusion of
+     * its own, so it is the one where only the stamp is left to check.
+     */
+    @Test
+    public void aGroupThatRanSaysWhenItRanAndWhereItWrote() throws Exception {
+        assertNull(diagnostics.getLastResults(), "nothing has been measured yet");
+
+        File directory = diagnostics.run(machine, EnumSet.of(TestGroup.ConfigSnapshot));
+
+        MachineDiagnosticsResults.Run run =
+                diagnostics.getLastResults().getRun(TestGroup.ConfigSnapshot);
+        assertNotNull(run, "the snapshot did not record that it ran");
+        assertEquals(directory.getAbsolutePath(), run.getReportDirectory());
+        assertTrue(run.getMillis() > 0, "the run carries no time");
+        assertNull(diagnostics.getLastResults().getRun(TestGroup.Homing),
+                "a group that did not run must not be given a time");
     }
 
     /** A second run in the same second must not overwrite the first one's report. */
