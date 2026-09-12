@@ -87,23 +87,6 @@ public class NavigationRail extends JPanel {
         return pages;
     }
 
-    @Override
-    public void addNotify() {
-        super.addNotify();
-        StringBuilder debug = new StringBuilder("RAIL size=" + getSize() + " pref=" + getPreferredSize());
-        for (Component child : getComponents()) {
-            debug.append("\n  ").append(child.getClass().getSimpleName()).append(" bounds=")
-                    .append(child.getBounds()).append(" pref=").append(child.getPreferredSize());
-            if (child instanceof java.awt.Container) {
-                for (Component grand : ((java.awt.Container) child).getComponents()) {
-                    debug.append("\n     ").append(grand.getClass().getSimpleName())
-                            .append(" bounds=").append(grand.getBounds());
-                }
-            }
-        }
-        org.pmw.tinylog.Logger.info(debug.toString());
-    }
-
     /**
      * @param label The short label under the icon, two words at most.
      * @param toolTip The full name of the page, which no longer fits under an icon.
