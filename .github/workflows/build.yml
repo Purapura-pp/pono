@@ -6,6 +6,10 @@ name: Build
 
 on:
   push:
+    # Not on tags: the commit a tag points at has already been through this, and a release has
+    # its own workflow.
+    tags-ignore:
+      - '**'
   pull_request:
   # Also runnable by hand, which is how this is tested without pushing.
   workflow_dispatch:
