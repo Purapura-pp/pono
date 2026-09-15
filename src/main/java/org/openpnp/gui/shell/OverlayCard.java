@@ -42,11 +42,23 @@ import javax.swing.UIManager;
  */
 @SuppressWarnings("serial")
 public class OverlayCard extends JPanel {
-    private static final int ARC = 12;
+    /** The stylesheet's {@code .glass}: a 10 pixel arc. */
+    private static final int ARC = 10;
 
     public OverlayCard() {
         setOpaque(false);
         setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+    }
+
+    /**
+     * A glass strip holding a row of pills: the stylesheet's {@code .glass.pills}, 3 pixel
+     * padding and 2 pixel gaps.
+     */
+    public static OverlayCard strip() {
+        OverlayCard strip = new OverlayCard();
+        strip.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
+        strip.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 2, 0));
+        return strip;
     }
 
     /**
@@ -82,7 +94,7 @@ public class OverlayCard extends JPanel {
                         RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setColor(background);
                 g2.fillRoundRect(0, 0, getWidth(), getHeight(), ARC, ARC);
-                Color border = UIManager.getColor("Pono.borderStrong"); //$NON-NLS-1$
+                Color border = UIManager.getColor("Pono.border"); //$NON-NLS-1$
                 if (border != null) {
                     g2.setColor(border);
                     g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, ARC, ARC);

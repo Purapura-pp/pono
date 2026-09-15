@@ -79,6 +79,11 @@ public class CameraStage extends JLayeredPane {
      * A layered pane takes a layer where a layout manager takes a constraint, so the anchor is
      * handed to the layout itself rather than through the add.
      */
+    /** Float a component that paints its own card, or several cards, over the image. */
+    public void anchor(Component component, Anchor anchor) {
+        anchor(component, anchor, JLayeredPane.PALETTE_LAYER);
+    }
+
     private void anchor(Component component, Anchor anchor, Integer layer) {
         // The layer has to be set before the add, because a layered pane reads it back from the
         // component; the anchor then travels as the layout constraint, where an Integer would

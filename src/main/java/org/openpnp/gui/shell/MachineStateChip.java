@@ -51,9 +51,13 @@ import org.openpnp.spi.MachineListener;
  */
 @SuppressWarnings("serial")
 public class MachineStateChip extends JLabel {
-    private static final int DOT_SIZE = 9;
-    /** How much of the state colour is left in the chip's own background. */
-    private static final int BACKGROUND_ALPHA = 38;
+    /** The stylesheet's .chip: 26 high, an 8 pixel LED, 12 pixel semibold text. */
+    private static final int HEIGHT = 26;
+    private static final int DOT_SIZE = 8;
+    /** How much of the state colour is left in the chip's own background: rgba(.16). */
+    private static final int BACKGROUND_ALPHA = 41;
+    /** And in its border: rgba(.35). */
+    private static final int BORDER_ALPHA = 89;
 
     private enum State {
         Disconnected("TopBar.MachineState.Disconnected", "Pono.textMuted", Color.GRAY), //$NON-NLS-1$ //$NON-NLS-2$
@@ -89,8 +93,9 @@ public class MachineStateChip extends JLabel {
     public MachineStateChip(Configuration configuration, Action toggleAction) {
         this.toggleAction = toggleAction;
         setOpaque(false);
-        setBorder(new EmptyBorder(new Insets(3, 9, 3, 11)));
-        setIconTextGap(7);
+        setBorder(new EmptyBorder(new Insets(0, 10, 0, 10)));
+        setIconTextGap(6);
+        setFont(Ui.font(12f, java.awt.Font.BOLD));
         setIcon(new StateDot());
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         setToolTipText(Translations.getString("TopBar.MachineState.toolTipText")); //$NON-NLS-1$
@@ -164,6 +169,13 @@ public class MachineStateChip extends JLabel {
     }
 
     @Override
+    public java.awt.Dimension getPreferredSize() {
+        java.awt.Dimension size = super.getPreferredSize();
+        size.height = HEIGHT;
+        return size;
+    }
+
+    @Override
     protected void paintComponent(Graphics g) {
         Color color = state().color();
         Graphics2D g2 = (Graphics2D) g.create();
@@ -171,6 +183,8 @@ public class MachineStateChip extends JLabel {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), BACKGROUND_ALPHA));
             g2.fillRoundRect(0, 0, getWidth(), getHeight(), getHeight(), getHeight());
+            g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), BORDER_ALPHA));
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, getHeight(), getHeight());
         }
         finally {
             g2.dispose();
@@ -184,7 +198,12 @@ public class MachineStateChip extends JLabel {
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g2.setColor(state().color());
+                Color color = state().color();
+                if (state() == State.Ready) {
+                    g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), BORDER_ALPHA));
+                    g2.fillOval(x - 3, y - 3, DOT_SIZE + 6, DOT_SIZE + 6);
+                }
+                g2.setColor(color);
                 g2.fillOval(x, y, DOT_SIZE, DOT_SIZE);
             }
             finally {

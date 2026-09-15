@@ -59,10 +59,41 @@ public class PillBar extends JPanel {
     /** What a pill is labelled with. An item's own text, unless a caller knows better. */
     private Function<Object, String> labeller = String::valueOf;
 
+    /** Items that stay in the model but get no pill; the stylesheet shows fewer choices. */
+    private java.util.function.Predicate<Object> hidden = item -> false;
+
+    /**
+     * Where an item's pill goes: pills are kept in ascending order of this key, and in model order
+     * within a key. The stylesheet lists the cameras before the side-by-side view, which is not
+     * the order the model adds them in.
+     */
+    private Function<Object, Integer> order = item -> 0;
+
+    public void setOrder(Function<Object, Integer> order) {
+        this.order = order;
+        removeAll();
+        for (int key : items.stream().map(order).sorted().distinct().collect(java.util.stream.Collectors.toList())) {
+            for (int index = 0; index < items.size(); index++) {
+                if (order.apply(items.get(index)) == key) {
+                    add(buttons.get(index));
+                }
+            }
+        }
+        revalidate();
+    }
+
+    public void setHidden(java.util.function.Predicate<Object> hidden) {
+        this.hidden = hidden;
+        for (int index = 0; index < items.size(); index++) {
+            buttons.get(index).setVisible(!hidden.test(items.get(index)));
+        }
+        revalidate();
+    }
+
     public PillBar() {
         // One row, never wrapped: a wrapping layout asked for a column when nothing had told it
         // how wide it was allowed to be, and this is a bar over an image, not a form.
-        setLayout(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        setLayout(new FlowLayout(FlowLayout.LEFT, 2, 0));
         setOpaque(false);
     }
 
@@ -83,15 +114,16 @@ public class PillBar extends JPanel {
 
     public void insertItemAt(Object item, int index) {
         JToggleButton button = new JToggleButton(labeller.apply(item));
-        Font font = UIManager.getFont("Label.font"); //$NON-NLS-1$
-        button.setFont(font.deriveFont(font.getSize2D() * 0.9f));
-        button.setMargin(new Insets(2, 8, 2, 8));
-        button.setFocusable(false);
+        Ui.pill(button);
+        button.setVisible(!hidden.test(item));
         button.addActionListener(e -> setSelectedItem(item));
         items.add(index, item);
         buttons.add(index, button);
         group.add(button);
         add(button, index);
+        if (order != null) {
+            setOrder(order);
+        }
         if (items.size() == 1) {
             setSelectedItem(item);
         }

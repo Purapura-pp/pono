@@ -505,9 +505,30 @@ public class JobPanel extends JPanel {
         configuration.getBus().register(this);
     }
     
+    /** Fired whenever {@link #isJobRunning()} may have changed, for the top bar to follow. */
+    public static final String PROPERTY_JOB_RUNNING = "jobRunning"; //$NON-NLS-1$
+
     void setState(State newState) {
+        boolean wasRunning = isJobRunning();
         this.state = newState;
         updateJobActions();
+        firePropertyChange(PROPERTY_JOB_RUNNING, wasRunning, isJobRunning());
+        MainFrame frame = MainFrame.get();
+        if (frame != null) {
+            frame.setStatusState(
+                    Translations.getString(state == State.Stopped ? "StatusBar.State.Idle" //$NON-NLS-1$
+                            : "StatusBar.State.Running"), //$NON-NLS-1$
+                    state == State.Stopped ? org.openpnp.gui.shell.Chip.Tone.Pending
+                            : org.openpnp.gui.shell.Chip.Tone.Run);
+        }
+    }
+
+    /**
+     * Whether the job is running or about to pause, which is when the one start/pause action
+     * means Pause. The top bar shows Start and Pause as two buttons and needs to know which.
+     */
+    public boolean isJobRunning() {
+        return state == State.Running || state == State.Pausing;
     }
     
     public JTable getPlacementsHolderLocationsTable() {

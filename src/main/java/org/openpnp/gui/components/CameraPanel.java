@@ -214,6 +214,18 @@ public class CameraPanel extends JPanel {
         return cameraViews.get(camera);
     }
 
+    private final java.util.List<Runnable> selectionListeners = new java.util.ArrayList<>();
+
+    /** Called on the event thread whenever which camera is shown changes. */
+    public void addSelectionListener(Runnable listener) {
+        selectionListeners.add(listener);
+    }
+
+    /** The one view on show, or null while none or all of the cameras are. */
+    public CameraView getSelectedCameraView() {
+        return selectedCameraView;
+    }
+
     private void relayoutPanel() {
         selectedCameraView = null;
         camerasPanel.removeAll();
@@ -270,6 +282,9 @@ public class CameraPanel extends JPanel {
         }
         revalidate();
         repaint();
+        for (Runnable listener : new java.util.ArrayList<>(selectionListeners)) {
+            listener.run();
+        }
     }
 
     private AbstractAction cameraSelectedAction = new AbstractAction("") {

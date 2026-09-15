@@ -96,7 +96,14 @@ import org.openpnp.gui.support.OSXAdapter;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.SwingUserInteraction;
+import org.openpnp.gui.support.CameraItem;
+import org.openpnp.spi.Camera;
+import javax.swing.BorderFactory;
 import org.openpnp.gui.shell.CameraStage;
+import org.openpnp.gui.shell.CameraToolsBar;
+import org.openpnp.gui.shell.PillBar;
+import org.openpnp.gui.shell.Chip;
+import org.openpnp.gui.shell.CommandPalette;
 import org.openpnp.gui.shell.DroPanel;
 import org.openpnp.gui.shell.InspectorPanel;
 import org.openpnp.gui.shell.PropertySheetPresenter.Result;
@@ -295,6 +302,48 @@ public class MainFrame extends JFrame {
         return inspectorPanel;
     }
 
+    private Chip unitsPerPixelChip;
+
+    /** {@code 1 px = 0.0209 mm}, for the camera on show; blank while none or all are. */
+    private void showUnitsPerPixel() {
+        org.openpnp.gui.components.CameraView view = cameraPanel.getSelectedCameraView();
+        Camera camera = view == null ? null : view.getCamera();
+        if (camera == null || camera.getUnitsPerPixel() == null) {
+            unitsPerPixelChip.setText(""); //$NON-NLS-1$
+            unitsPerPixelChip.getParent().setVisible(false);
+        }
+        else {
+            org.openpnp.model.Location upp = camera.getUnitsPerPixel()
+                    .convertToUnits(configuration.getSystemUnits());
+            unitsPerPixelChip.setText(String.format(java.util.Locale.US, "1 px = %.4f %s", //$NON-NLS-1$
+                    Math.abs(upp.getX()), configuration.getSystemUnits().getShortName()));
+            unitsPerPixelChip.getParent().setVisible(true);
+        }
+        cameraStage.revalidate();
+    }
+
+    private boolean cameraFullScreen;
+    private int dividerBeforeFullScreen;
+    private boolean inspectorBeforeFullScreen;
+
+    /**
+     * Give the image the whole middle of the window and back again: the tables below it and the
+     * properties column fold away, and the divider positions come back with them.
+     */
+    private void toggleCameraFullScreen() {
+        if (!cameraFullScreen) {
+            dividerBeforeFullScreen = splitPaneMachineAndTabs.getDividerLocation();
+            inspectorBeforeFullScreen = inspectorPanel.isCollapsed();
+            splitPaneMachineAndTabs.setDividerLocation(1.0);
+            inspectorPanel.setCollapsed(true);
+        }
+        else {
+            splitPaneMachineAndTabs.setDividerLocation(dividerBeforeFullScreen);
+            inspectorPanel.setCollapsed(inspectorBeforeFullScreen);
+        }
+        cameraFullScreen = !cameraFullScreen;
+    }
+
     /** Put the properties column at its stored width, or fold it to its sliver. */
     private void applyInspectorWidth() {
         int total = splitPaneInspector.getWidth();
@@ -397,7 +446,6 @@ public class MainFrame extends JFrame {
         visionSettingsPanel = new VisionSettingsPanel(configuration, this);
 
         menuBar = new JMenuBar();
-        setJMenuBar(menuBar);
 
         // File
         //////////////////////////////////////////////////////////////////////
@@ -835,8 +883,16 @@ public class MainFrame extends JFrame {
                 }
             }});
         
-        topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel);
+        topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel, menuBar,
+                () -> showTab(issuesAndSolutionsPanel), this::openCommandPalette);
         contentPane.add(topBarPanel, BorderLayout.NORTH);
+        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_K, KeyEvent.CTRL_DOWN_MASK),
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        openCommandPalette();
+                    }
+                });
 
         statusBarPanel = new StatusBarPanel(configuration);
         contentPane.add(statusBarPanel, BorderLayout.SOUTH);
@@ -872,7 +928,41 @@ public class MainFrame extends JFrame {
         // and the etched box only cost the view a few pixels on every edge.
         cameraPanel.setBorder(null);
         cameraStage = new CameraStage(cameraPanel);
-        cameraStage.overlay(cameraPanel.getCameraSelector(), Anchor.NorthWest);
+        // Top left: which camera, and how big a pixel is. Top right: the view tools.
+        PillBar cameraSelector = cameraPanel.getCameraSelector();
+        cameraSelector.setLabeller(item -> {
+            if (item instanceof CameraItem) {
+                Camera camera = ((CameraItem) item).getCamera();
+                return camera.getHead() == null ? camera.getName()
+                        : camera.getName() + " \u00b7 " //$NON-NLS-1$
+                                + Translations.getString("CameraPanel.Show.HeadPrefix") //$NON-NLS-1$
+                                + camera.getHead().getName();
+            }
+            return Translations.getString("CameraPanel.Show." //$NON-NLS-1$
+                    + String.valueOf(item).replace(" ", "")); //$NON-NLS-1$ //$NON-NLS-2$
+        });
+        // The stylesheet offers the cameras and one side-by-side view; the other two choices stay
+        // in the model for a stored preference that names them.
+        cameraSelector.setHidden(item -> !(item instanceof CameraItem)
+                && !"Show All Horizontal".equals(String.valueOf(item))); //$NON-NLS-1$
+        cameraSelector.setOrder(item -> item instanceof CameraItem ? 0 : 1);
+        JPanel topLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        topLeft.setOpaque(false);
+        OverlayCard selectorStrip = OverlayCard.strip();
+        selectorStrip.add(cameraSelector);
+        topLeft.add(selectorStrip);
+        unitsPerPixelChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$
+        unitsPerPixelChip.setFont(org.openpnp.gui.shell.Ui.mono(12f, java.awt.Font.PLAIN));
+        OverlayCard unitsStrip = new OverlayCard();
+        unitsStrip.setLayout(new BorderLayout());
+        unitsStrip.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        unitsStrip.add(unitsPerPixelChip);
+        topLeft.add(unitsStrip);
+        cameraPanel.addSelectionListener(this::showUnitsPerPixel);
+        cameraStage.anchor(topLeft, Anchor.NorthWest);
+        cameraStage.anchor(
+                new CameraToolsBar(configuration, cameraPanel, this::toggleCameraFullScreen),
+                Anchor.NorthEast);
         // The readout goes bottom left and the machine controls bottom right, as the mockups have
         // them; the instructions arrive at the top, over the image they are talking about.
         cameraStage.overlay(droPanel, Anchor.SouthWest);
@@ -1062,6 +1152,8 @@ public class MainFrame extends JFrame {
     public void showInstructions(String title, String instructions, boolean showCancelButton,
             boolean showProceedButton, String proceedButtonText,
             ActionListener cancelActionListener, ActionListener proceedActionListener) {
+        setStatusState(Translations.getString("StatusBar.State.Wizard"), Chip.Tone.Run); //$NON-NLS-1$
+        setStatus(title);
         lblInstructionsTitle.setText(title);
         lblInstructions.setText(instructions);
         btnInstructionsCancel.setVisible(showCancelButton);
@@ -1085,6 +1177,9 @@ public class MainFrame extends JFrame {
     }
 
     public void hideInstructions() {
+        boolean running = jobPanel != null && jobPanel.isJobRunning();
+        setStatusState(Translations.getString(running ? "StatusBar.State.Running" //$NON-NLS-1$
+                : "StatusBar.State.Idle"), running ? Chip.Tone.Run : Chip.Tone.Pending); //$NON-NLS-1$
         if (scheduledExecutor != null) {
             scheduledExecutor.shutdown();
             scheduledExecutor = null;
@@ -1211,16 +1306,38 @@ public class MainFrame extends JFrame {
             statusBarPanel.setStatus(status);
         });
     }
+
+    /** The pill at the left of the status bar: what mode the window is in. */
+    public void setStatusState(String text, Chip.Tone tone) {
+        SwingUtilities.invokeLater(() -> statusBarPanel.setState(text, tone));
+    }
+
+    public StatusBarPanel getStatusBar() {
+        return statusBarPanel;
+    }
     
     public void setPlacementCompletionStatus(int totalPlacementsCompleted, int totalPlacements, int boardPlacementsCompleted, int boardPlacements) {
         SwingUtilities.invokeLater(() -> {
-            statusBarPanel.setPlacements(String.format(Translations.getString(
-                    "MainFrame.StatusPanel.PlacementsLabel.initial.format.text"), //$NON-NLS-1$
-                    totalPlacementsCompleted, totalPlacements, boardPlacementsCompleted, boardPlacements));
-            topBarPanel.setProgress(totalPlacements > 0
-                    ? (int) (((float) totalPlacementsCompleted / (float) totalPlacements) * 100.0f)
-                    : 0);
+            statusBarPanel.setProgress(totalPlacementsCompleted, totalPlacements,
+                    boardPlacementsCompleted, boardPlacements);
+            topBarPanel.setProgress(totalPlacementsCompleted, totalPlacements);
         });
+    }
+
+    /**
+     * Every menu item and every page, found by typing part of its name. Built on each opening,
+     * because which items are enabled changes with the machine's state.
+     */
+    private void openCommandPalette() {
+        List<CommandPalette.Command> commands = new ArrayList<>();
+        for (Component page : navigationRail.getPageComponents()) {
+            String name = navigationRail.getLabel(page);
+            commands.add(new CommandPalette.Command(
+                    Translations.getString("CommandPalette.Path.Pages"), name, //$NON-NLS-1$
+                    () -> showTab(page)));
+        }
+        commands.addAll(CommandPalette.commandsOf(menuBar));
+        new CommandPalette(this, commands).open();
     }
 
     /**

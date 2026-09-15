@@ -17,61 +17,88 @@
 
 package org.openpnp.gui.shell;
 
-import java.awt.Color;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Font;
 
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 
 import org.openpnp.ConfigurationListener;
 import org.openpnp.Main;
 import org.openpnp.Translations;
+import org.openpnp.gui.shell.Chip.Shape;
+import org.openpnp.gui.shell.Chip.Tone;
 import org.openpnp.model.Configuration;
 
 /**
- * The strip along the bottom: what the machine is doing, how far the job has got, the units the
- * numbers are in, and the version. The axis readout started here and has moved onto the camera
- * image, where it is beside the thing it describes.
+ * The line along the bottom: what the machine is doing, and how far the job has got.
  * <p>
- * The three pieces it replaces each sat in a lowered bevel border, which drew three boxes around
- * text that is only ever read, and the units and version were nowhere in the window at all - so a
- * coordinate could not be interpreted without opening the settings, and a bug report could not say
- * which build it came from.
+ * The stylesheet's {@code .statusbar}: 28 pixels, 12 pixel secondary text, a status pill on the
+ * left followed by the current action, and on the right the totals, the units and the version.
+ * The units and the version are the two facts a bug report most often lacks.
  */
 @SuppressWarnings("serial")
 public class StatusBarPanel extends JPanel {
-    private final JLabel statusLabel = new JLabel(" "); //$NON-NLS-1$
-    private final JLabel placementsLabel = new JLabel(
-            Translations.getString("MainFrame.StatusPanel.PlacementsLabel.initial.text")); //$NON-NLS-1$
-    private final JLabel unitsLabel = new JLabel();
-    private final JLabel versionLabel = new JLabel(Main.getVersionString());
+    public static final int HEIGHT = 28;
+
+    private final Chip statePill = new Chip(
+            Translations.getString("StatusBar.State.Idle"), Tone.Pending, Shape.Status); //$NON-NLS-1$
+    private final JLabel statusLabel = Ui.t2(" "); //$NON-NLS-1$
+    private final JLabel lastPlacementLabel = Ui.muted(""); //$NON-NLS-1$
+    private final JComponent lastPlacementSep = Ui.divider(14);
+    private final JLabel totalLabel = Ui.mono("0 / 0", 12f); //$NON-NLS-1$
+    private final JLabel boardLabel = Ui.mono("0 / 0", 12f); //$NON-NLS-1$
+    private final JLabel remainingLabel = Ui.mono("", 12f); //$NON-NLS-1$
+    private final JComponent remainingItem;
+    private final JLabel unitsLabel = Ui.muted(""); //$NON-NLS-1$
+    private final JLabel versionLabel = Ui.muted("v" + Main.getVersionString()); //$NON-NLS-1$
 
     public StatusBarPanel(Configuration configuration) {
-        setLayout(new GridBagLayout());
-        setBorder(new EmptyBorder(new Insets(2, 2, 0, 2)));
+        setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
+        setOpaque(true);
+        setBackground(Ui.surface());
+        setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
+                new EmptyBorder(0, 14, 0, 14)));
 
-        GridBagConstraints gc = new GridBagConstraints();
-        gc.gridy = 0;
-        gc.anchor = GridBagConstraints.WEST;
-        gc.insets = new Insets(0, 0, 0, 14);
+        statusLabel.setFont(Ui.font(12f));
+        lastPlacementLabel.setFont(Ui.font(12f));
+        unitsLabel.setFont(Ui.font(12f));
+        versionLabel.setFont(Ui.font(12f));
 
-        gc.gridx = 0;
-        gc.weightx = 1;
-        add(statusLabel, gc);
+        add(item(6, statePill, statusLabel));
+        add(Box.createHorizontalStrut(14));
+        add(lastPlacementSep);
+        add(Box.createHorizontalStrut(14));
+        add(lastPlacementLabel);
+        lastPlacementSep.setVisible(false);
+        lastPlacementLabel.setVisible(false);
+        add(Box.createHorizontalGlue());
+        add(item(6, Ui.t2(Translations.getString("StatusBar.TotalProgress")), bold(totalLabel))); //$NON-NLS-1$
+        add(Box.createHorizontalStrut(14));
+        add(item(6, Ui.t2(Translations.getString("StatusBar.CurrentBoard")), bold(boardLabel))); //$NON-NLS-1$
+        add(Box.createHorizontalStrut(14));
+        remainingItem = item(6, Ui.t2(Translations.getString("StatusBar.Remaining")), bold(remainingLabel)); //$NON-NLS-1$
+        remainingItem.setVisible(false);
+        add(remainingItem);
+        add(Box.createHorizontalStrut(14));
+        add(Ui.divider(14));
+        add(Box.createHorizontalStrut(14));
+        add(unitsLabel);
+        add(Box.createHorizontalStrut(14));
+        add(versionLabel);
 
-        gc.weightx = 0;
-        gc.anchor = GridBagConstraints.EAST;
-        gc.gridx = 1;
-        add(placementsLabel, gc);
-        gc.gridx = 2;
-        add(unitsLabel, gc);
-        gc.gridx = 3;
-        gc.insets = new Insets(0, 0, 0, 0);
-        add(versionLabel, gc);
+        for (Component c : getComponents()) {
+            if (c instanceof JComponent) {
+                ((JComponent) c).setAlignmentY(CENTER_ALIGNMENT);
+            }
+        }
 
         // The units are a user preference that the settings can change while running.
         configuration.addListener(new ConfigurationListener.Adapter() {
@@ -80,44 +107,100 @@ public class StatusBarPanel extends JPanel {
                 unitsLabel.setText(configuration.getSystemUnits().getShortName());
             }
         });
-
-        applyColors();
     }
 
+    private static JLabel bold(JLabel label) {
+        label.setFont(label.getFont().deriveFont(Font.BOLD));
+        return label;
+    }
+
+    private static JComponent item(int gap, JComponent... parts) {
+        JPanel item = new JPanel();
+        item.setOpaque(false);
+        item.setLayout(new BoxLayout(item, BoxLayout.X_AXIS));
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                item.add(Box.createHorizontalStrut(gap));
+            }
+            parts[i].setAlignmentY(CENTER_ALIGNMENT);
+            item.add(parts[i]);
+        }
+        item.setMaximumSize(item.getPreferredSize());
+        return item;
+    }
+
+    /** What the machine is doing right now, in words. */
     public void setStatus(String status) {
-        statusLabel.setText(status);
+        statusLabel.setText(status == null || status.isEmpty() ? " " : status); //$NON-NLS-1$
     }
 
-    public void setPlacements(String text) {
-        placementsLabel.setText(text);
+    /**
+     * The pill before the status text: running, in a wizard, or idle.
+     * 
+     * @param text The word in the pill.
+     * @param tone Run while a job runs or a wizard is up, Pending when idle, Err on a fault.
+     */
+    public void setState(String text, Tone tone) {
+        statePill.setText(text);
+        statePill.setTone(tone);
+        revalidate();
     }
 
-    /** Everything here is supporting detail, so none of it competes with the window's content. */
-    private void applyColors() {
-        Color secondary = UIManager.getColor("Pono.textSecondary"); //$NON-NLS-1$
-        Color muted = UIManager.getColor("Pono.textMuted"); //$NON-NLS-1$
-        if (secondary == null) {
-            secondary = UIManager.getColor("Label.disabledForeground"); //$NON-NLS-1$
+    /** Placements done, on the job and on the current board. */
+    public void setProgress(int done, int total, int boardDone, int boardTotal) {
+        totalLabel.setText(done + " / " + total); //$NON-NLS-1$
+        boardLabel.setText(boardDone + " / " + boardTotal); //$NON-NLS-1$
+        revalidateItems();
+    }
+
+    /** The previous placement and how long it took, or null to show nothing. */
+    public void setLastPlacement(String text) {
+        boolean shown = text != null && !text.isEmpty();
+        lastPlacementLabel.setText(shown ? text : ""); //$NON-NLS-1$
+        lastPlacementSep.setVisible(shown);
+        lastPlacementLabel.setVisible(shown);
+        revalidateItems();
+    }
+
+    /** The estimated time left on the job, or null to show nothing. */
+    public void setRemaining(String text) {
+        boolean shown = text != null && !text.isEmpty();
+        remainingLabel.setText(shown ? text : ""); //$NON-NLS-1$
+        remainingItem.setVisible(shown);
+        revalidateItems();
+    }
+
+    private void revalidateItems() {
+        for (Component c : getComponents()) {
+            if (c instanceof JPanel) {
+                ((JPanel) c).setMaximumSize(c.getPreferredSize());
+            }
         }
-        if (muted == null) {
-            muted = secondary;
-        }
-        if (secondary != null) {
-            statusLabel.setForeground(secondary);
-            placementsLabel.setForeground(secondary);
-        }
-        if (muted != null) {
-            unitsLabel.setForeground(muted);
-            versionLabel.setForeground(muted);
-        }
+        revalidate();
+        repaint();
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+        Dimension size = super.getPreferredSize();
+        size.height = HEIGHT;
+        return size;
     }
 
     @Override
     public void updateUI() {
         super.updateUI();
-        // Null while the superclass constructor is still running.
+        // Colours are read from the theme, so they are stale after a look and feel change. Null
+        // while the superclass constructor is still running.
         if (statusLabel != null) {
-            applyColors();
+            setBackground(Ui.surface());
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
+                    new EmptyBorder(0, 14, 0, 14)));
+            statusLabel.setForeground(Ui.text2());
+            for (JLabel muted : new JLabel[] { lastPlacementLabel, unitsLabel, versionLabel }) {
+                muted.setForeground(Ui.muted());
+            }
         }
     }
 }

@@ -82,6 +82,17 @@ public class NavigationRail extends JPanel {
         add(bottom);
     }
 
+    /** The pages, in rail order. */
+    public List<Component> getPageComponents() {
+        return new ArrayList<>(buttons.keySet());
+    }
+
+    /** The short label a page is shown under, or null for a component that is not a page. */
+    public String getLabel(Component page) {
+        RailButton button = buttons.get(page);
+        return button == null ? null : button.getText();
+    }
+
     /** The card panel holding the pages. Belongs next to the rail in the window's layout. */
     public JPanel getPages() {
         return pages;

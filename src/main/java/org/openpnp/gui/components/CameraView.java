@@ -1898,14 +1898,31 @@ public class CameraView extends JComponent implements CameraListener {
                 double zoomInc = Math.max(zoomIncPerMouseWheelTick,
                         // When best-scale is selected, we can only zoom by integers
                         renderingQuality == RenderingQuality.BestScale ? 2.0 : 0);
-                zoom = zoom * Math.pow(zoomInc, - e.getPreciseWheelRotation());
-                zoom = Math.max(zoom, 1.0d);
-                zoom = Math.min(zoom, 64d);
+                setZoom(zoom * Math.pow(zoomInc, - e.getPreciseWheelRotation()));
             }
             calculateScalingData();
             repaint();
         }
     };
+
+    /** The magnification over fit-to-view: 1 is the whole image, 64 the most it will do. */
+    public double getZoom() {
+        return zoom;
+    }
+
+    /**
+     * Set the magnification, clamped to what the view supports. Fires a {@code zoom} property
+     * change, which is how the readout on the image keeps up with the mouse wheel.
+     */
+    public void setZoom(double zoom) {
+        double was = this.zoom;
+        this.zoom = Math.min(64d, Math.max(1.0d, zoom));
+        if (this.zoom != was) {
+            calculateScalingData();
+            repaint();
+            firePropertyChange("zoom", was, this.zoom); //$NON-NLS-1$
+        }
+    }
 
     public CameraViewSelectionTextDelegate pixelsAndUnitsTextSelectionDelegate =
             new CameraViewSelectionTextDelegate() {
