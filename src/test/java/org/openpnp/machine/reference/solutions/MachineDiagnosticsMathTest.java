@@ -249,6 +249,16 @@ public class MachineDiagnosticsMathTest {
         assertEquals("0.5, 1, 2", MachineDiagnosticsMath.formatSeries(new double[] { 0.5, 1, 2 }));
     }
 
+    /** The median is what one wild frame cannot move, which is why it is the measurement. */
+    @Test
+    public void medianIgnoresOneWildFrame() {
+        assertEquals(10.02, MachineDiagnosticsMath.median(
+                java.util.List.of(10.01, 10.03, 10.02, 10.00, 47.0)), 1e-9);
+        assertEquals(2.5, MachineDiagnosticsMath.median(java.util.List.of(4.0, 1.0, 2.0, 3.0)), 1e-9);
+        assertEquals(7.0, MachineDiagnosticsMath.median(java.util.List.of(7.0)), 1e-9);
+        assertTrue(Double.isNaN(MachineDiagnosticsMath.median(java.util.List.of())));
+    }
+
     private static void assertArrayEqualsWithin(double[] expected, double[] actual) {
         assertEquals(expected.length, actual.length);
         for (int i = 0; i < expected.length; i++) {

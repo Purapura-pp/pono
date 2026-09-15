@@ -65,6 +65,17 @@ public class MachineDiagnosticsMath {
         }
     }
 
+    /** The median: the middle value, or the mean of the two middle values. */
+    public static double median(List<Double> values) {
+        if (values == null || values.isEmpty()) {
+            return Double.NaN;
+        }
+        List<Double> sorted = new java.util.ArrayList<>(values);
+        java.util.Collections.sort(sorted);
+        int n = sorted.size();
+        return n % 2 == 1 ? sorted.get(n / 2) : (sorted.get(n / 2 - 1) + sorted.get(n / 2)) / 2;
+    }
+
     public static Stats stats(List<Double> values) {
         if (values == null || values.isEmpty()) {
             throw new IllegalArgumentException("No values to summarise.");

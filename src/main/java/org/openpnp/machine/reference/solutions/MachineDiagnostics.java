@@ -123,6 +123,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private static final double SCALE_ERROR_TOLERANCE = 0.005;
     /** Rotation backlash below this is not worth compensating. */
     private static final double ROTATION_BACKLASH_TOLERANCE = 0.2;
+    /**
+     * Half a pixel of frame-to-frame scatter with nothing moving. Sub-pixel detection on a well
+     * lit fiducial holds a tenth of that; more says the lighting or the exposure is marginal.
+     */
+    private static final double VISION_NOISE_TOLERANCE_PIXELS = 0.5;
     /** Margin over the measured backlash for a one-sided offset, which has to clear it. */
     private static final double BACKLASH_OFFSET_MARGIN = 1.2;
     /** Margin over the measured settle time for a fixed wait, which has to outlast it. */
@@ -138,11 +143,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             "https://github.com/openpnp/openpnp/wiki/Camera-Settling";
     private static final String WIKI_CALIBRATION_SOLUTIONS =
             "https://github.com/openpnp/openpnp/wiki/Calibration-Solutions#advanced-camera-calibration";
+    private static final String WIKI_VISION_SOLUTIONS =
+            "https://github.com/openpnp/openpnp/wiki/Vision-Solutions"; //$NON-NLS-1$
     private static final String WIKI_VISUAL_HOMING =
             "https://github.com/openpnp/openpnp/wiki/Visual-Homing";
 
     public enum TestGroup {
         Firmware,
+        /**
+         * First of the measuring groups, because every position the others report is read through
+         * the camera and this is what the camera's own scatter is.
+         */
+        VisionNoise,
         Kinematics,
         XyPositioning,
         CameraSettle,
@@ -151,8 +163,33 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         ConfigSnapshot
     }
 
+    /**
+     * Ten rather than five: the spread of five samples says what it is to about a third, which
+     * is not enough to tell a 0.02 mm scatter from a 0.03 mm one, and that is the kind of
+     * difference the backlash findings turn on.
+     */
     @Attribute(required = false)
-    private int repeats = 5;
+    private int repeats = 10;
+
+    /**
+     * Frames taken of each standing position, the median of which is the measurement. One frame
+     * carries the camera's own scatter into every number; the frames are cheap next to the move
+     * that preceded them.
+     */
+    @Attribute(required = false)
+    private int framesPerPoint = 5;
+
+    /** Frames taken of the fiducial with the machine standing still, for the noise floor. */
+    @Attribute(required = false)
+    private int noiseFrames = 30;
+
+    /** Approach pairs per cell of the backlash matrix; one pair is one frame's luck. */
+    @Attribute(required = false)
+    private int backlashRepeats = 3;
+
+    /** Runs per settle distance; the wait has to cover the slowest of them. */
+    @Attribute(required = false)
+    private int settleRepeats = 3;
 
     @Element(required = false)
     private String timingDistances = "0.5, 1, 2, 5, 10, 20, 50, 100, 200";
@@ -190,8 +227,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     @Attribute(required = false)
     private double settleThresholdPixels = 0.5;
 
+    /** Five, because three homing cycles cannot say anything about a spread. */
     @Attribute(required = false)
-    private int homingCycles = 3;
+    private int homingCycles = 5;
 
     @Element(required = false)
     private String rotationTestAngles = "0, 30, -30";
@@ -483,6 +521,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * representative is not something this can know.
      */
     private void findMeasuredIssues(Solutions solutions, MachineDiagnosticsResults results) {
+        for (MachineDiagnosticsResults.VisionNoise noise : results.getVisionNoise()) {
+            findVisionNoiseIssue(solutions, noise, measuredWhen(results, TestGroup.VisionNoise));
+        }
         for (ControllerLimits limits : results.getControllerLimits()) {
             ReferenceControllerAxis axis = controllerAxis(limits.getAxisId());
             if (axis != null) {
@@ -755,6 +796,37 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
+     * A camera whose detection scatters by more than half a pixel with nothing moving. There is
+     * no setting to write for this - it is lighting, exposure, focus - so it points at the vision
+     * solutions and says what every measurement through the camera inherits.
+     */
+    private void findVisionNoiseIssue(Solutions solutions, MachineDiagnosticsResults.VisionNoise noise,
+            String when) {
+        if (noise.getSdPixels() <= VISION_NOISE_TOLERANCE_PIXELS) {
+            return;
+        }
+        ReferenceCamera camera = camera(noise.getCameraId());
+        if (camera == null) {
+            return;
+        }
+        solutions.add(new PointerIssue(camera,
+                "The camera cannot locate a standing fiducial to within half a pixel from frame "
+                        + "to frame.",
+                "Improve the lighting, exposure and focus of the camera, with the vision solutions "
+                        + "offered here.",
+                Solutions.Severity.Warning, WIKI_VISION_SOLUTIONS,
+                String.format("With the machine standing still on %s, %d frames of %s put the "
+                        + "fiducial %.3f px (%.4f mm) apart, sd, and up to %.3f px. Every position "
+                        + "the machine is measured at goes through this camera, so nothing it "
+                        + "measures - backlash, repeatability, homing scatter - can be read "
+                        + "closer than this, and every vision correction in a job carries the "
+                        + "same scatter into placement. A well lit fiducial in focus holds a "
+                        + "tenth of a pixel with sub-pixel detection enabled.", when,
+                        noise.getFrames(), camera.getName(), noise.getSdPixels(), noise.getSdMm(),
+                        noise.getRangePixels())));
+    }
+
+    /**
      * Homing scatter against visual homing. The endstops repeat to whatever precision they
      * repeat to, and that scatter moves the origin of every coordinate in the machine; visual
      * homing pins the origin to a fiducial instead, which is an offer Issues and Solutions
@@ -1023,6 +1095,46 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     // Settings.
+
+    public int getFramesPerPoint() {
+        return framesPerPoint;
+    }
+
+    public void setFramesPerPoint(int framesPerPoint) {
+        int old = this.framesPerPoint;
+        this.framesPerPoint = Math.max(1, framesPerPoint);
+        firePropertyChange("framesPerPoint", old, this.framesPerPoint);
+    }
+
+    public int getNoiseFrames() {
+        return noiseFrames;
+    }
+
+    public void setNoiseFrames(int noiseFrames) {
+        int old = this.noiseFrames;
+        this.noiseFrames = Math.max(5, noiseFrames);
+        firePropertyChange("noiseFrames", old, this.noiseFrames);
+    }
+
+    public int getBacklashRepeats() {
+        return backlashRepeats;
+    }
+
+    public void setBacklashRepeats(int backlashRepeats) {
+        int old = this.backlashRepeats;
+        this.backlashRepeats = Math.max(1, backlashRepeats);
+        firePropertyChange("backlashRepeats", old, this.backlashRepeats);
+    }
+
+    public int getSettleRepeats() {
+        return settleRepeats;
+    }
+
+    public void setSettleRepeats(int settleRepeats) {
+        int old = this.settleRepeats;
+        this.settleRepeats = Math.max(1, settleRepeats);
+        firePropertyChange("settleRepeats", old, this.settleRepeats);
+    }
 
     public int getRepeats() {
         return repeats;
@@ -1354,6 +1466,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         running = true;
         aborting = false;
+        runStartedSeconds = NanosecondTime.getRuntimeSeconds();
         synchronized (logText) {
             logText.setLength(0);
         }
@@ -1412,6 +1525,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         switch (group) {
             case Firmware:
                 testFirmware(machine, report);
+                break;
+            case VisionNoise:
+                testVisionNoise(machine, report);
                 break;
             case Kinematics:
                 testKinematics(machine, report);
@@ -1715,6 +1831,278 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
     }
 
+    // Detection through several frames: what every position in this class is read with.
+
+    /** One position read from the camera: the median of several frames, and how they scattered. */
+    static final class Detection {
+        final Location location;
+        /** Scatter of the frames around their median, radial, in pixels and in millimetres. */
+        final double sdPixels;
+        final double sdMm;
+        final int frames;
+        /** The detector's score on the first frame, which is what it would have reported alone. */
+        final double score;
+
+        Detection(Location location, double sdPixels, double sdMm, int frames, double score) {
+            this.location = location;
+            this.sdPixels = sdPixels;
+            this.sdMm = sdMm;
+            this.frames = frames;
+            this.score = score;
+        }
+    }
+
+    /**
+     * Locate the fiducial in {@code frames} frames of the standing camera and take the median.
+     * <p>
+     * The first frame is captured the way any vision operation captures - light on, settle,
+     * capture - and the rest are raw captures with the light still on, since the machine has
+     * not moved in between. A camera can hand out the same frame twice; a frame whose detection
+     * lands on exactly the same sub-pixel position as the previous one is not counted.
+     */
+    private Detection detect(ReferenceMachine machine, ReferenceCamera camera, Location expected,
+            Length diameter, String diagnostics, int frames) throws Exception {
+        VisionSolutions vision = machine.getVisionSolutions();
+        Circle feature = vision.getExpectedOffsetsAndDiameter(camera, camera, expected, diameter,
+                false);
+        List<Double> xs = new ArrayList<>();
+        List<Double> ys = new ArrayList<>();
+        double firstScore = Double.NaN;
+        camera.actuateLightBeforeCapture();
+        try {
+            BufferedImage frame = camera.lightSettleAndCapture();
+            int attempts = 0;
+            while (xs.size() < Math.max(1, frames) && attempts < Math.max(1, frames) * 3) {
+                checkAborted();
+                attempts++;
+                ScoreRange score = new ScoreRange();
+                Circle circle;
+                try {
+                    circle = vision.getSubjectPixelLocation(camera, camera, feature, 0.0,
+                            xs.isEmpty() ? diagnostics : null, score, false, frame);
+                }
+                catch (Exception e) {
+                    if (xs.isEmpty() && attempts >= 3) {
+                        throw e;
+                    }
+                    frame = camera.capture();
+                    continue;
+                }
+                if (Double.isNaN(firstScore)) {
+                    firstScore = score.finalScore;
+                }
+                boolean duplicate = !xs.isEmpty() && circle.x == xs.get(xs.size() - 1)
+                        && circle.y == ys.get(ys.size() - 1);
+                if (!duplicate) {
+                    xs.add(circle.x);
+                    ys.add(circle.y);
+                }
+                if (xs.size() < frames) {
+                    frame = camera.capture();
+                }
+            }
+        }
+        finally {
+            camera.actuateLightAfterCapture();
+        }
+        if (xs.isEmpty()) {
+            throw new Exception("Subject not found.");
+        }
+        double medianX = MachineDiagnosticsMath.median(xs);
+        double medianY = MachineDiagnosticsMath.median(ys);
+        double sumSquares = 0;
+        for (int i = 0; i < xs.size(); i++) {
+            sumSquares += Math.pow(xs.get(i) - medianX, 2) + Math.pow(ys.get(i) - medianY, 2);
+        }
+        double sdPixels = xs.size() > 1 ? Math.sqrt(sumSquares / (xs.size() - 1)) : 0;
+        Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+        double sdMm = sdPixels * Math.hypot(upp.getX(), upp.getY()) / Math.sqrt(2);
+        Location location = VisionUtils.getPixelLocation(camera, camera, medianX, medianY)
+                .convertToUnits(expected.getUnits());
+        return new Detection(location, sdPixels, sdMm, xs.size(), firstScore);
+    }
+
+    private Detection detect(ReferenceMachine machine, ReferenceCamera camera, Location expected,
+            Length diameter, String diagnostics) throws Exception {
+        return detect(machine, camera, expected, diameter, diagnostics, framesPerPoint);
+    }
+
+    /** Seconds since the run started, for the time column of every CSV. */
+    private double elapsed() {
+        return NanosecondTime.getRuntimeSeconds() - runStartedSeconds;
+    }
+
+    private double runStartedSeconds;
+
+    /** The columns every measurement row ends with: when, and how sure the camera was. */
+    private static final String[] DETECTION_COLUMNS = { "t_s", "frames", "frame_sd_px", "score" };
+
+    private static Object[] detectionColumns(double t, Detection detection) {
+        return new Object[] { t, detection.frames, detection.sdPixels, detection.score };
+    }
+
+    private static String[] columns(String[] own) {
+        String[] all = new String[own.length + DETECTION_COLUMNS.length];
+        System.arraycopy(own, 0, all, 0, own.length);
+        System.arraycopy(DETECTION_COLUMNS, 0, all, own.length, DETECTION_COLUMNS.length);
+        return all;
+    }
+
+    private static Object[] row(Object[] own, double t, Detection detection) {
+        Object[] tail = detectionColumns(t, detection);
+        Object[] all = new Object[own.length + tail.length];
+        System.arraycopy(own, 0, all, 0, own.length);
+        System.arraycopy(tail, 0, all, own.length, tail.length);
+        return all;
+    }
+
+    /** The noise floor of a camera from the last run, in millimetres, or null. */
+    private Double noiseFloorMm(ReferenceCamera camera) {
+        if (lastResults == null) {
+            return null;
+        }
+        MachineDiagnosticsResults.VisionNoise noise = lastResults.getVisionNoise(camera.getId());
+        return noise == null ? null : noise.getSdMm();
+    }
+
+    /** "…, N times the camera's own scatter" for a finding, or nothing if that was never measured. */
+    private String againstNoiseFloor(ReferenceCamera camera, double spreadMm) {
+        Double floor = noiseFloorMm(camera);
+        if (floor == null || floor <= 0) {
+            return "";
+        }
+        return String.format(" That is %.1f times the camera's own scatter of %.4f mm.",
+                spreadMm / floor, floor);
+    }
+
+    // Test group 2: how much the camera scatters on its own.
+
+    /**
+     * The same fiducial located in many frames while nothing moves. What comes out is the scatter
+     * of the detection itself, from lighting, sensor noise and sub-pixel interpolation, which is
+     * the floor under every position the other groups report: a machine cannot be shown to
+     * repeat better than the camera can see, and a spread below this floor is the camera, not
+     * the machine.
+     */
+    private void testVisionNoise(ReferenceMachine machine, MachineDiagnosticsReport report)
+            throws Exception {
+        report.section("Vision noise floor, the fiducial located in successive frames of a "
+                + "standing camera");
+        ReferenceHead head = requireHead(machine);
+        ReferenceCamera camera = requireDownLookingCamera(head);
+        Location fiducial = requireFiducial(head);
+        Length diameter = head.getCalibrationPrimaryFiducialDiameter();
+        ReferenceControllerAxis xAxis = findControllerAxis(camera, Axis.Type.X);
+        if (xAxis != null) {
+            approachFrom(camera, xAxis, fiducial, -10, 1.0);
+        }
+        else {
+            MovableUtils.moveToLocationAtSafeZ(camera, fiducial);
+        }
+        camera.waitForCompletion(CompletionType.WaitForStillstand);
+        Thread.sleep(machineSettleMs);
+
+        VisionSolutions vision = machine.getVisionSolutions();
+        Circle feature = vision.getExpectedOffsetsAndDiameter(camera, camera, fiducial, diameter,
+                false);
+        Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+        List<Object[]> rows = new ArrayList<>();
+        List<Double> xs = new ArrayList<>();
+        List<Double> ys = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        int wanted = Math.max(5, noiseFrames);
+        int missed = 0;
+        double t0 = NanosecondTime.getRuntimeSeconds();
+        double tLast = t0;
+        camera.actuateLightBeforeCapture();
+        try {
+            BufferedImage frame = camera.lightSettleAndCapture();
+            int attempts = 0;
+            while (xs.size() < wanted && attempts < wanted * 3) {
+                checkAborted();
+                attempts++;
+                double t = NanosecondTime.getRuntimeSeconds();
+                ScoreRange score = new ScoreRange();
+                try {
+                    Circle circle = vision.getSubjectPixelLocation(camera, camera, feature, 0.0,
+                            null, score, false, frame);
+                    boolean duplicate = !xs.isEmpty() && circle.x == xs.get(xs.size() - 1)
+                            && circle.y == ys.get(ys.size() - 1);
+                    if (!duplicate) {
+                        xs.add(circle.x);
+                        ys.add(circle.y);
+                        scores.add(score.finalScore);
+                        rows.add(new Object[] { xs.size() - 1, t - t0, circle.x, circle.y,
+                                score.finalScore });
+                        tLast = t;
+                    }
+                }
+                catch (Exception e) {
+                    missed++;
+                }
+                frame = camera.capture();
+            }
+        }
+        finally {
+            camera.actuateLightAfterCapture();
+        }
+        if (xs.size() < 5) {
+            throw new Exception("The fiducial could not be located in enough frames. Check the "
+                    + "fiducial diameter and the lighting.");
+        }
+        double medianX = MachineDiagnosticsMath.median(xs);
+        double medianY = MachineDiagnosticsMath.median(ys);
+        double sumSquares = 0;
+        double range = 0;
+        for (int i = 0; i < xs.size(); i++) {
+            double dx = xs.get(i) - medianX;
+            double dy = ys.get(i) - medianY;
+            sumSquares += dx * dx + dy * dy;
+            range = Math.max(range, Math.hypot(dx, dy));
+        }
+        double sdPixels = Math.sqrt(sumSquares / (xs.size() - 1));
+        double pixelMm = Math.hypot(upp.getX(), upp.getY()) / Math.sqrt(2);
+        double sdMm = sdPixels * pixelMm;
+        double fps = xs.size() > 1 && tLast > t0 ? (xs.size() - 1) / (tLast - t0) : 0;
+        Stats scoreStats = MachineDiagnosticsMath.stats(scores);
+        for (Object[] r : rows) {
+            r[2] = (Double) r[2] - medianX;
+            r[3] = (Double) r[3] - medianY;
+        }
+        report.writeCsv("vision-noise.csv",
+                new String[] { "frame", "t_s", "dx_px", "dy_px", "score" }, rows);
+        report.line("  %d frames in %.1f s (%.1f frames/s), %d frames without a detection",
+                xs.size(), tLast - t0, fps, missed);
+        report.line("  scatter sd %.3f px = %.4f mm, largest excursion %.3f px", sdPixels, sdMm,
+                range);
+        report.line("  detection score %.2f to %.2f, mean %.2f", scoreStats.min, scoreStats.max,
+                scoreStats.mean);
+        log("Vision noise: sd %.3f px (%.4f mm) over %d frames at %.1f fps", sdPixels, sdMm,
+                xs.size(), fps);
+        Severity severity = sdPixels > VISION_NOISE_TOLERANCE_PIXELS ? Severity.Warning
+                : Severity.Info;
+        report.finding(severity, "With nothing moving, %s locates the fiducial to within %.3f px "
+                + "sd (%.4f mm) from frame to frame. No position measured through this camera "
+                + "can be trusted closer than this.", camera.getName(), sdPixels, sdMm);
+        if (missed > 0) {
+            report.finding(Severity.Warning, "%d of %d frames had no detection at all: the "
+                    + "fiducial is at the edge of what the lighting and the pipeline can find.",
+                    missed, xs.size() + missed);
+        }
+        MachineDiagnosticsResults.VisionNoise noise = new MachineDiagnosticsResults.VisionNoise(
+                camera.getId(), sdPixels, sdMm, range, xs.size(), fps);
+        recordResults(TestGroup.VisionNoise, report, results -> {
+            List<MachineDiagnosticsResults.VisionNoise> kept = new ArrayList<>();
+            for (MachineDiagnosticsResults.VisionNoise other : results.getVisionNoise()) {
+                if (!other.getCameraId().equals(camera.getId())) {
+                    kept.add(other);
+                }
+            }
+            kept.add(noise);
+            results.setVisionNoise(kept);
+        });
+    }
+
     // Test group 3: where the machine actually ends up.
 
     private void testXyPositioning(ReferenceMachine machine, MachineDiagnosticsReport report)
@@ -1780,15 +2168,13 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     for (int repeat = 0; repeat < repeats; repeat++) {
                         checkAborted();
                         approachFrom(camera, axis, fiducial, sign * distance, 1.0);
-                        Location detected = machine.getVisionSolutions().getDetectedLocation(camera,
-                                camera, fiducial, diameter,
-                                String.format("Repeatability %s %+.0fmm", axis.getName(), sign * distance),
-                                false);
-                        double error = shortfallMm(detected, fiducial, unit);
+                        Detection detection = detect(machine, camera, fiducial, diameter,
+                                String.format("Repeatability %s %+.0fmm", axis.getName(), sign * distance));
+                        double error = shortfallMm(detection.location, fiducial, unit);
                         errors.add(error);
                         allErrors.add(error);
-                        rows.add(new Object[] { axis.getName(), sign > 0 ? "+" : "-", distance,
-                                repeat, error });
+                        rows.add(row(new Object[] { axis.getName(), sign > 0 ? "+" : "-", distance,
+                                repeat, error }, elapsed(), detection));
                     }
                     Stats stats = MachineDiagnosticsMath.stats(errors);
                     report.line("  %-6s %-6s %-10.3f %-10.4f %-10.4f %-10.4f", axis.getName(),
@@ -1802,14 +2188,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             }
         }
         report.writeCsv("repeatability.csv",
-                new String[] { "axis", "approach", "distance", "repeat", "error_mm" }, rows);
+                columns(new String[] { "axis", "approach", "distance", "repeat", "error_mm" }), rows);
         if (!allErrors.isEmpty()) {
             Stats overall = MachineDiagnosticsMath.stats(allErrors);
             report.line("  Overall spread across every approach: %.4f mm", overall.getRange());
             report.finding(overall.getRange() > 0.05 ? Severity.Warning : Severity.Info,
                     "Repeated approaches to one point land within %.3f mm of each other "
-                    + "(sd %.4f mm). This is the positional scatter a job sees.",
-                    overall.getRange(), overall.stdDev);
+                    + "(sd %.4f mm). This is the positional scatter a job sees.%s",
+                    overall.getRange(), overall.stdDev,
+                    againstNoiseFloor(camera, overall.stdDev));
         }
     }
 
@@ -1824,9 +2211,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         double[] distances = MachineDiagnosticsMath.parseSeries(positioningDistances);
         double[] speeds = MachineDiagnosticsMath.parseSeries(speedFactors);
         List<Object[]> rows = new ArrayList<>();
+        List<Object[]> rawRows = new ArrayList<>();
         report.blank();
-        report.line("Backlash with compensation switched off");
-        report.line("  %-6s %-8s %-10s %-12s", "axis", "speed", "distance", "backlash mm");
+        report.line("Backlash with compensation switched off, %d approach pairs per cell",
+                Math.max(1, backlashRepeats));
+        report.line("  %-6s %-8s %-10s %-12s %-10s", "axis", "speed", "distance", "backlash mm",
+                "sd mm");
         List<BacklashSetting> saved = suspendBacklashCompensation(machine, Axis.Type.X, Axis.Type.Y);
         try {
             for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
@@ -1837,26 +2227,33 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Location unit = unitLocation(type);
                 for (double speed : speeds) {
                     for (double distance : distances) {
-                        checkAborted();
-                        approachFrom(camera, axis, fiducial, -distance, speed);
-                        Location fromMinus = machine.getVisionSolutions().getDetectedLocation(camera,
-                                camera, fiducial, diameter,
-                                String.format("Backlash %s %.2fx -", axis.getName(), speed), false);
-                        approachFrom(camera, axis, fiducial, distance, speed);
-                        Location fromPlus = machine.getVisionSolutions().getDetectedLocation(camera,
-                                camera, fiducial, diameter,
-                                String.format("Backlash %s %.2fx +", axis.getName(), speed), false);
-                        // The difference between where the machine physically stopped coming from
-                        // one side and from the other.
-                        double backlash = shortfallMm(fromMinus, fiducial, unit)
-                                - shortfallMm(fromPlus, fiducial, unit);
-                        rows.add(new Object[] { axis.getName(), speed, distance, backlash });
-                        report.line("  %-6s %-8.2f %-10.3f %-12.4f", axis.getName(), speed, distance,
-                                backlash);
+                        List<Double> pairs = new ArrayList<>();
+                        for (int repeat = 0; repeat < Math.max(1, backlashRepeats); repeat++) {
+                            checkAborted();
+                            approachFrom(camera, axis, fiducial, -distance, speed);
+                            Detection fromMinus = detect(machine, camera, fiducial, diameter,
+                                    String.format("Backlash %s %.2fx -", axis.getName(), speed));
+                            approachFrom(camera, axis, fiducial, distance, speed);
+                            Detection fromPlus = detect(machine, camera, fiducial, diameter,
+                                    String.format("Backlash %s %.2fx +", axis.getName(), speed));
+                            // The difference between where the machine physically stopped coming
+                            // from one side and from the other.
+                            double backlash = shortfallMm(fromMinus.location, fiducial, unit)
+                                    - shortfallMm(fromPlus.location, fiducial, unit);
+                            pairs.add(backlash);
+                            rawRows.add(row(new Object[] { axis.getName(), speed, distance, repeat,
+                                    backlash }, elapsed(), fromPlus));
+                        }
+                        Stats cell = MachineDiagnosticsMath.stats(pairs);
+                        double backlash = cell.mean;
+                        rows.add(new Object[] { axis.getName(), speed, distance, backlash,
+                                cell.stdDev });
+                        report.line("  %-6s %-8.2f %-10.3f %-12.4f %-10.4f", axis.getName(), speed,
+                                distance, backlash, cell.stdDev);
                         row(graph, "mm", axis.getName() + " backlash " + speed + "x",
                                 COLOR_MEASURED, true, true).recordDataPoint(distance, backlash);
-                        log("%s backlash at %.2fx over %.1fmm: %.4f", axis.getName(), speed,
-                                distance, backlash);
+                        log("%s backlash at %.2fx over %.1fmm: %.4f (sd %.4f)", axis.getName(),
+                                speed, distance, backlash, cell.stdDev);
                     }
                 }
             }
@@ -1865,7 +2262,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             restoreBacklashCompensation(saved);
         }
         report.writeCsv("backlash.csv",
-                new String[] { "axis", "speed", "distance", "backlash_mm" }, rows);
+                new String[] { "axis", "speed", "distance", "backlash_mm", "sd_mm" }, rows);
+        report.writeCsv("backlash-raw.csv",
+                columns(new String[] { "axis", "speed", "distance", "repeat", "backlash_mm" }),
+                rawRows);
         for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
             ReferenceControllerAxis axis = findControllerAxis(camera, type);
             if (axis == null) {
@@ -1885,8 +2285,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             Length configured = axis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters);
             report.finding(Severity.Info, "Axis %s backlash measures %.4f to %.4f mm across the "
                     + "tested distances and speeds; the configured offset is %.4f mm and the "
-                    + "method is %s.", axis.getName(), stats.min, stats.max, configured.getValue(),
-                    axis.getBacklashCompensationMethod());
+                    + "method is %s.%s", axis.getName(), stats.min, stats.max, configured.getValue(),
+                    axis.getBacklashCompensationMethod(),
+                    againstNoiseFloor(camera, stats.getRange()));
             if (axis.getBacklashCompensationMethod().isOneSidedPositioningMethod()
                     && configured.getValue() > 0 && stats.max > configured.getValue()) {
                 report.finding(Severity.Warning, "Axis %s uses %s, which needs an offset at least "
@@ -1940,10 +2341,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     checkAborted();
                     Location target = fiducial.add(unit.multiply(offset, offset, 0, 0));
                     camera.moveTo(target, speed);
-                    Location detected = machine.getVisionSolutions().getDetectedLocation(camera,
-                            camera, fiducial, diameter,
-                            String.format("Step %s %.2fx", axis.getName(), speed), false);
-                    double shortfall = shortfallMm(detected, fiducial, unit);
+                    Detection detection = detect(machine, camera, fiducial, diameter,
+                            String.format("Step %s %.2fx", axis.getName(), speed));
+                    double shortfall = shortfallMm(detection.location, fiducial, unit);
                     // Where the camera physically is, relative to the fiducial.
                     double actual = offset - shortfall;
                     double absoluteError = -shortfall;
@@ -1955,8 +2355,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         }
                         largestJump = Math.max(largestJump, Math.abs(relative));
                     }
-                    rows.add(new Object[] { axis.getName(), speed, step, offset, actual,
-                            absoluteError, relative });
+                    rows.add(row(new Object[] { axis.getName(), speed, step, offset, actual,
+                            absoluteError, relative }, elapsed(), detection));
                     row(graph, "mm", axis.getName() + " " + speed + "x abs",
                             axisColor(axis.getType()), false, true)
                             .recordDataPoint(step, absoluteError);
@@ -1984,8 +2384,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         axis.getName(), speed, stalled, largestJump);
             }
         }
-        report.writeCsv("step-response.csv", new String[] { "axis", "speed", "step",
-                "commanded_mm", "actual_mm", "absolute_error_mm", "relative_mm" }, rows);
+        report.writeCsv("step-response.csv", columns(new String[] { "axis", "speed", "step",
+                "commanded_mm", "actual_mm", "absolute_error_mm", "relative_mm" }), rows);
         setStepGraph(graph);
     }
 
@@ -2021,12 +2421,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Location target = fiducial.add(new Location(LengthUnit.Millimeters, dx, dy, 0, 0));
                 // Z never changes here, so the moves stay in plane rather than routing via safe Z.
                 camera.moveTo(target);
-                Location detected = machine.getVisionSolutions().getDetectedLocation(camera, camera,
-                        fiducial, diameter, "Field of view scan", false)
-                        .convertToUnits(LengthUnit.Millimeters);
+                Detection detection = detect(machine, camera, fiducial, diameter,
+                        "Field of view scan");
+                Location detected = detection.location.convertToUnits(LengthUnit.Millimeters);
                 double errorX = detected.getX() - fiducial.convertToUnits(LengthUnit.Millimeters).getX();
                 double errorY = detected.getY() - fiducial.convertToUnits(LengthUnit.Millimeters).getY();
-                rows.add(new Object[] { dx, dy, errorX, errorY });
+                rows.add(row(new Object[] { dx, dy, errorX, errorY }, elapsed(), detection));
                 offsetsX.add(dx);
                 errorsX.add(errorX);
                 offsetsY.add(dy);
@@ -2035,7 +2435,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             log("Field of view row %d of %d", iy + 1, fieldOfViewGridSteps);
         }
         report.writeCsv("field-of-view.csv",
-                new String[] { "offset_x_mm", "offset_y_mm", "error_x_mm", "error_y_mm" }, rows);
+                columns(new String[] { "offset_x_mm", "offset_y_mm", "error_x_mm", "error_y_mm" }),
+                rows);
         reportFieldOfViewAxis(report, camera, "X", toArray(offsetsX), toArray(errorsX), upp.getX(),
                 scale);
         reportFieldOfViewAxis(report, camera, "Y", toArray(offsetsY), toArray(errorsY), upp.getY(),
@@ -2103,23 +2504,40 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         // capture is one setting and has to cover every move a job makes.
         Double worstSettled = null;
         double worstDistance = 0;
+        int runsPerDistance = Math.max(1, settleRepeats);
+        report.line("  %d runs per distance; the slowest run is the one the wait has to cover.",
+                runsPerDistance);
         for (double distance : distances) {
-            checkAborted();
-            Double settled = sampleSettling(camera, fiducial, distance, diameterPixels, graph, rows,
-                    palette[index++ % palette.length]);
+            Double settled = null;
+            boolean neverSettled = false;
+            Color color = palette[index++ % palette.length];
+            for (int run = 0; run < runsPerDistance; run++) {
+                checkAborted();
+                Double thisRun = sampleSettling(camera, fiducial, distance, diameterPixels, graph,
+                        rows, color, run);
+                if (thisRun == null) {
+                    neverSettled = true;
+                }
+                else if (settled == null || thisRun > settled) {
+                    settled = thisRun;
+                }
+                report.line("  after a %.0f mm move, run %d: %s", distance, run + 1,
+                        thisRun == null ? "never settled" : String.format("settled at %.0f ms", thisRun * 1000));
+            }
             if (settled != null && (worstSettled == null || settled > worstSettled)) {
                 worstSettled = settled;
                 worstDistance = distance;
             }
-            if (settled == null) {
+            if (neverSettled) {
                 report.line("  after a %.0f mm move: never settled within %.0f ms",
                         distance, settleSampleSeconds * 1000);
                 report.finding(Severity.Warning, "The image from %s had not stopped moving %.0f ms "
                         + "after a %.0f mm move.", camera.getName(), settleSampleSeconds * 1000,
                         distance);
             }
-            else {
-                report.line("  after a %.0f mm move: settled at %.0f ms", distance, settled * 1000);
+            if (settled != null) {
+                report.line("  after a %.0f mm move: slowest of %d runs settled at %.0f ms",
+                        distance, runsPerDistance, settled * 1000);
                 log("Settle after %.0fmm: %.0f ms", distance, settled * 1000);
                 if (camera instanceof AbstractSettlingCamera) {
                     AbstractSettlingCamera settling = (AbstractSettlingCamera) camera;
@@ -2142,7 +2560,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             }
         }
         report.writeCsv("camera-settle.csv",
-                new String[] { "distance_mm", "time_s", "deviation_px" }, rows);
+                new String[] { "distance_mm", "run", "time_s", "deviation_px" }, rows);
         setSettleGraph(graph);
         List<Settling> settleTimes = new ArrayList<>();
         if (worstSettled != null) {
@@ -2152,7 +2570,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     private Double sampleSettling(ReferenceCamera camera, Location fiducial, double distance,
-            int diameterPixels, SimpleGraph graph, List<Object[]> rows, Color color)
+            int diameterPixels, SimpleGraph graph, List<Object[]> rows, Color color, int run)
                     throws Exception {
         MovableUtils.moveToLocationAtSafeZ(camera,
                 fiducial.add(new Location(LengthUnit.Millimeters, -distance, 0, 0, 0)));
@@ -2199,8 +2617,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         for (int i = 0; i < times.size(); i++) {
             timeArray[i] = times.get(i);
             deviations[i] = Math.hypot(xs.get(i) - finalX, ys.get(i) - finalY);
-            rows.add(new Object[] { distance, timeArray[i], deviations[i] });
-            row(graph, "px", String.format("%.0f mm", distance), color, true, true)
+            rows.add(new Object[] { distance, run, timeArray[i], deviations[i] });
+            row(graph, "px", String.format("%.0f mm #%d", distance, run + 1), color, true, true)
                     .recordDataPoint(timeArray[i], deviations[i]);
         }
         return MachineDiagnosticsMath.settleTime(timeArray, deviations, settleThresholdPixels);
@@ -2263,17 +2681,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             else {
                 MovableUtils.moveToLocationAtSafeZ(camera, fiducial);
             }
-            Location detected = machine.getVisionSolutions().getDetectedLocation(camera, camera,
-                    fiducial, diameter, "Homing repeatability", false)
-                    .convertToUnits(LengthUnit.Millimeters);
+            Detection detection = detect(machine, camera, fiducial, diameter,
+                    "Homing repeatability");
+            Location detected = detection.location.convertToUnits(LengthUnit.Millimeters);
             double errorX = detected.getX() - reference.getX();
             double errorY = detected.getY() - reference.getY();
             xErrors.add(errorX);
             yErrors.add(errorY);
-            rows.add(new Object[] { cycle, errorX, errorY });
+            rows.add(row(new Object[] { cycle, errorX, errorY }, elapsed(), detection));
             report.line("  %-8d %-12.4f %-12.4f", cycle, errorX, errorY);
         }
-        report.writeCsv("homing.csv", new String[] { "cycle", "error_x_mm", "error_y_mm" }, rows);
+        report.writeCsv("homing.csv",
+                columns(new String[] { "cycle", "error_x_mm", "error_y_mm" }), rows);
         Stats statsX = MachineDiagnosticsMath.stats(xErrors);
         Stats statsY = MachineDiagnosticsMath.stats(yErrors);
         report.line("  X spread %.4f mm (sd %.4f), Y spread %.4f mm (sd %.4f)",
@@ -2282,8 +2701,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         recordResults(TestGroup.Homing, report, results -> results
                 .setHoming(new MachineDiagnosticsResults.Homing(head.getId(), worst, homingCycles)));
         Severity severity = worst > 0.05 ? Severity.Warning : Severity.Info;
-        report.finding(severity, "Homing reproduces the origin to within %.3f mm over %d cycles.",
-                worst, homingCycles);
+        report.finding(severity, "Homing reproduces the origin to within %.3f mm over %d cycles.%s",
+                worst, homingCycles, againstNoiseFloor(camera, worst));
         if (worst > 0.05 && head.getVisualHomingMethod() == ReferenceHead.VisualHomingMethod.None) {
             report.finding(Severity.Warning, "Visual homing is off, so this scatter is the "
                     + "repeatability of the endstops and it carries into every job. Visual homing "
@@ -2331,6 +2750,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         Camera camera = VisionUtils.getBottomVisionCamera();
         double[] angles = parseSignedSeries(rotationTestAngles);
         List<Object[]> rows = new ArrayList<>();
+        List<Object[]> rawRows = new ArrayList<>();
         report.line("Part %s, approach %+.1f deg, %d repeats per direction.", part.getId(),
                 rotationApproachAngle, repeats);
         report.line("  %-8s %-12s %-12s %-12s", "angle", "from + deg", "from - deg", "backlash deg");
@@ -2345,10 +2765,14 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 List<Double> fromMinus = new ArrayList<>();
                 for (int repeat = 0; repeat < repeats; repeat++) {
                     checkAborted();
-                    fromPlus.add(measureAngleApproachedFrom(bottomVision, settings, camera, nozzle,
-                            part, angle, rotationApproachAngle));
-                    fromMinus.add(measureAngleApproachedFrom(bottomVision, settings, camera, nozzle,
-                            part, angle, -rotationApproachAngle));
+                    double plusAngle = measureAngleApproachedFrom(bottomVision, settings, camera,
+                            nozzle, part, angle, rotationApproachAngle);
+                    fromPlus.add(plusAngle);
+                    rawRows.add(new Object[] { angle, repeat, "+", plusAngle, elapsed() });
+                    double minusAngle = measureAngleApproachedFrom(bottomVision, settings, camera,
+                            nozzle, part, angle, -rotationApproachAngle);
+                    fromMinus.add(minusAngle);
+                    rawRows.add(new Object[] { angle, repeat, "-", minusAngle, elapsed() });
                 }
                 Stats plus = MachineDiagnosticsMath.stats(fromPlus);
                 Stats minus = MachineDiagnosticsMath.stats(fromMinus);
@@ -2362,6 +2786,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             }
             report.writeCsv("rotation-backlash.csv", new String[] { "angle_deg", "from_plus_deg",
                     "from_minus_deg", "backlash_deg", "sd_plus_deg", "sd_minus_deg" }, rows);
+            report.writeCsv("rotation-backlash-raw.csv", new String[] { "angle_deg", "repeat",
+                    "approach", "measured_deg", "t_s" }, rawRows);
             if (!allBacklash.isEmpty()) {
                 Stats stats = MachineDiagnosticsMath.stats(allBacklash);
                 report.line("  Mean backlash %.4f deg over the tested angles.", stats.mean);

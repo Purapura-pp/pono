@@ -1442,11 +1442,25 @@ public class VisionSolutions implements Solutions.Subject {
      */
     public Circle getSubjectPixelLocation(ReferenceCamera camera, HeadMountable movable, Circle expectedOffsetAndDiameter, double extraSearchRange, 
             String diagnostics, ScoreRange scoreRange, boolean rough) throws Exception {
+        return getSubjectPixelLocation(camera, movable, expectedOffsetAndDiameter, extraSearchRange,
+                diagnostics, scoreRange, rough, null);
+    }
+
+    /**
+     * As {@link #getSubjectPixelLocation(ReferenceCamera, HeadMountable, Circle, double, String, ScoreRange, boolean)},
+     * but on a frame the caller already holds. The diagnostics take several frames of one
+     * standing subject to separate the scatter of the detection from the scatter of the machine,
+     * and a capture per detection would settle and light the camera anew for each of them.
+     *
+     * @param frame The image to search, or null to capture one.
+     */
+    public Circle getSubjectPixelLocation(ReferenceCamera camera, HeadMountable movable, Circle expectedOffsetAndDiameter, double extraSearchRange, 
+            String diagnostics, ScoreRange scoreRange, boolean rough, BufferedImage frame) throws Exception {
         if (scoreRange == null) {
             scoreRange = new ScoreRange();
         }
-        BufferedImage bufferedImage = (retainedImage != null ?
-                retainedImage : camera.lightSettleAndCapture());
+        BufferedImage bufferedImage = frame != null ? frame
+                : (retainedImage != null ? retainedImage : camera.lightSettleAndCapture());
         Mat image = OpenCvUtils.toMat(bufferedImage);
         try {
             int subjectAreaDiameter = (int) (Math.min(image.cols(), image.rows())

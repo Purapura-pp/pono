@@ -125,6 +125,10 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JButton btnOpenReport;
     private JTextArea logArea;
     private JTextField repeats;
+    private JTextField framesPerPoint;
+    private JTextField noiseFrames;
+    private JTextField backlashRepeats;
+    private JTextField settleRepeats;
     private JTextField timingDistances;
     private JTextField positioningDistances;
     private JTextField speedFactors;
@@ -888,6 +892,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addTestCheck(panel, TestGroup.CameraSettle, "2, 6", false);
         addTestCheck(panel, TestGroup.Homing, "4, 6", false);
         addTestCheck(panel, TestGroup.RotationBacklash, "2, 8", false);
+        addTestCheck(panel, TestGroup.VisionNoise, "4, 8", false);
 
         btnRun = new JButton(runAction);
         panel.add(btnRun, "2, 10");
@@ -920,7 +925,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 ColumnSpec.decode("max(70dlu;default)"),
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), };
-        RowSpec[] rows = new RowSpec[22];
+        RowSpec[] rows = new RowSpec[26];
         for (int i = 0; i < rows.length; i++) {
             rows[i] = i % 2 == 0 ? FormSpecs.RELATED_GAP_ROWSPEC : FormSpecs.DEFAULT_ROWSPEC;
         }
@@ -928,6 +933,10 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
 
         repeats = addField(panel, "Repeats", "2, 2", "4, 2");
         machineSettleMs = addField(panel, "MachineSettle", "6, 2", "8, 2");
+        framesPerPoint = addField(panel, "FramesPerPoint", "2, 22", "4, 22");
+        noiseFrames = addField(panel, "NoiseFrames", "6, 22", "8, 22");
+        backlashRepeats = addField(panel, "BacklashRepeats", "2, 24", "4, 24");
+        settleRepeats = addField(panel, "SettleRepeats", "6, 24", "8, 24");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -953,12 +962,12 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.text")); //$NON-NLS-1$
         lblFirmwareCommands.setToolTipText(Translations.getString(
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.toolTipText")); //$NON-NLS-1$
-        panel.add(lblFirmwareCommands, "2, 22, right, top");
+        panel.add(lblFirmwareCommands, "2, 26, right, top");
         firmwareCommands = new JTextArea();
         firmwareCommands.setRows(4);
         JScrollPane firmwareScroll = new JScrollPane(firmwareCommands);
         firmwareScroll.setPreferredSize(new Dimension(200, 70));
-        panel.add(firmwareScroll, "4, 22, 5, 1, fill, fill");
+        panel.add(firmwareScroll, "4, 26, 5, 1, fill, fill");
     }
 
     private JTextField addField(JPanel panel, String key, String labelConstraints,
@@ -1058,6 +1067,10 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "settleThresholdPixels", settleThresholdPixels, "text",
                 doubleConverter);
         addWrappedBinding(diagnostics, "homingCycles", homingCycles, "text", integerConverter);
+        addWrappedBinding(diagnostics, "framesPerPoint", framesPerPoint, "text", integerConverter);
+        addWrappedBinding(diagnostics, "noiseFrames", noiseFrames, "text", integerConverter);
+        addWrappedBinding(diagnostics, "backlashRepeats", backlashRepeats, "text", integerConverter);
+        addWrappedBinding(diagnostics, "settleRepeats", settleRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

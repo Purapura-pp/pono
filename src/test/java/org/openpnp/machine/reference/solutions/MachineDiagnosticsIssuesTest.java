@@ -64,6 +64,8 @@ public class MachineDiagnosticsIssuesTest {
             "Homing does not put the machine origin back in the same place.";
     private static final String SCALE_DISAGREES =
             "Units per Pixel does not agree with what the camera sees across its field of view.";
+    private static final String CAMERA_IS_NOISY =
+            "The camera cannot locate a standing fiducial to within half a pixel from frame to frame.";
 
     @TempDir
     Path tempDir;
@@ -333,6 +335,42 @@ public class MachineDiagnosticsIssuesTest {
         results.setFieldOfView(List.of(new FieldOfView(camera.getId(), "X", 0.001, 0.001)));
 
         assertFalse(wordings(results).contains(SCALE_DISAGREES));
+    }
+
+    @Test
+    public void aNoisyCameraIsReportedWithWhatItCosts() {
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setVisionNoise(List.of(new MachineDiagnosticsResults.VisionNoise(camera.getId(),
+                0.83, 0.0108, 2.1, 30, 28.5)));
+
+        Solutions.Issue issue = issue(results, CAMERA_IS_NOISY);
+
+        assertFalse(issue.canBeAccepted(), "lighting is not a setting this can write");
+        // The numbers survive translation; the words around them do not.
+        assertTrue(issue.getExtendedDescription().contains("0.830 px"));
+        assertTrue(issue.getExtendedDescription().contains("2.100 px"));
+    }
+
+    @Test
+    public void aQuietCameraIsNotReported() {
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setVisionNoise(List.of(new MachineDiagnosticsResults.VisionNoise(camera.getId(),
+                0.12, 0.0016, 0.4, 30, 30)));
+
+        assertFalse(wordings(results).contains(CAMERA_IS_NOISY));
+    }
+
+    /** The floor is kept per camera, and a new run replaces only the camera it measured. */
+    @Test
+    public void theNoiseFloorIsLookedUpByCamera() {
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setVisionNoise(List.of(
+                new MachineDiagnosticsResults.VisionNoise("other", 0.9, 0.03, 3, 30, 30),
+                new MachineDiagnosticsResults.VisionNoise(camera.getId(), 0.1, 0.001, 0.3, 30, 30)));
+
+        assertEquals(0.1, results.getVisionNoise(camera.getId()).getSdPixels());
+        assertEquals(0.9, results.getVisionNoise("other").getSdPixels());
+        assertEquals(null, results.getVisionNoise("nobody"));
     }
 
     /**

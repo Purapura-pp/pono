@@ -303,6 +303,63 @@ public class MachineDiagnosticsResults {
         }
     }
 
+    /**
+     * How much the detection of a standing fiducial scatters from frame to frame, which is the
+     * floor under every position this camera measures: a machine cannot be shown to repeat better
+     * than the camera can see.
+     */
+    public static class VisionNoise {
+        @Attribute
+        private String cameraId;
+        @Attribute
+        private double sdPixels;
+        @Attribute
+        private double sdMm;
+        @Attribute
+        private double rangePixels;
+        @Attribute
+        private int frames;
+        @Attribute(required = false)
+        private double framesPerSecond;
+
+        VisionNoise() {
+        }
+
+        public VisionNoise(String cameraId, double sdPixels, double sdMm, double rangePixels,
+                int frames, double framesPerSecond) {
+            this.cameraId = cameraId;
+            this.sdPixels = sdPixels;
+            this.sdMm = sdMm;
+            this.rangePixels = rangePixels;
+            this.frames = frames;
+            this.framesPerSecond = framesPerSecond;
+        }
+
+        public String getCameraId() {
+            return cameraId;
+        }
+
+        public double getSdPixels() {
+            return sdPixels;
+        }
+
+        public double getSdMm() {
+            return sdMm;
+        }
+
+        public double getRangePixels() {
+            return rangePixels;
+        }
+
+        public int getFrames() {
+            return frames;
+        }
+
+        public double getFramesPerSecond() {
+            return framesPerSecond;
+        }
+    }
+
     /** When a test group last finished, and the report it wrote. */
     public static class Run {
         @Attribute
@@ -360,7 +417,28 @@ public class MachineDiagnosticsResults {
     private Rotation rotation;
 
     @ElementList(required = false)
+    private ArrayList<VisionNoise> visionNoise = new ArrayList<>();
+
+    @ElementList(required = false)
     private ArrayList<Run> runs = new ArrayList<>();
+
+    public List<VisionNoise> getVisionNoise() {
+        return visionNoise;
+    }
+
+    public void setVisionNoise(List<VisionNoise> visionNoise) {
+        this.visionNoise = new ArrayList<>(visionNoise);
+    }
+
+    /** The noise floor measured on a camera, or null if it was never measured. */
+    public VisionNoise getVisionNoise(String cameraId) {
+        for (VisionNoise noise : visionNoise) {
+            if (noise.getCameraId().equals(cameraId)) {
+                return noise;
+            }
+        }
+        return null;
+    }
 
     public List<ControllerLimits> getControllerLimits() {
         return controllerLimits;
