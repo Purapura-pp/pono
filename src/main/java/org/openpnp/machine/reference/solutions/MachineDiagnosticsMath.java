@@ -171,6 +171,230 @@ public class MachineDiagnosticsMath {
         return Math.max(x0, Math.min(x2, vertex));
     }
 
+    /**
+     * A plane transform fitted between two sets of matching points, and what it is made of: the
+     * scale along each axis, the angle by which the axes are not square, the rotation, and what
+     * is left over at each point.
+     */
+    public static final class Affine {
+        /** x' = a*x + b*y + tx, y' = c*x + d*y + ty. */
+        public final double a, b, c, d, tx, ty;
+        /** Length of the transformed unit vectors: how long a nominal millimetre comes out. */
+        public final double scaleX, scaleY;
+        /** Degrees by which the transformed Y axis leans towards +X, short of square. */
+        public final double shearDegrees;
+        /** Rotation of the transformed X axis, degrees. */
+        public final double rotationDegrees;
+        /** Whether the transform flips handedness, which a mirrored board would. */
+        public final boolean mirrored;
+        public final double[] residualsX, residualsY;
+        public final double rmsResidual;
+
+        Affine(double a, double b, double c, double d, double tx, double ty, double[] residualsX,
+                double[] residualsY) {
+            this.a = a;
+            this.b = b;
+            this.c = c;
+            this.d = d;
+            this.tx = tx;
+            this.ty = ty;
+            this.residualsX = residualsX;
+            this.residualsY = residualsY;
+            scaleX = Math.hypot(a, c);
+            scaleY = Math.hypot(b, d);
+            rotationDegrees = Math.toDegrees(Math.atan2(c, a));
+            double determinant = a * d - b * c;
+            mirrored = determinant < 0;
+            // The angle between the transformed axes, less the right angle they should make.
+            double between = Math.toDegrees(Math.atan2(d, b)) - rotationDegrees;
+            while (between > 180) {
+                between -= 360;
+            }
+            while (between <= -180) {
+                between += 360;
+            }
+            // Positive when the Y axis leans towards +X: the angle between the axes is short of
+            // the right angle by this much.
+            shearDegrees = mirrored ? -(between + 90) : 90 - between;
+            double sum = 0;
+            for (int i = 0; i < residualsX.length; i++) {
+                sum += residualsX[i] * residualsX[i] + residualsY[i] * residualsY[i];
+            }
+            rmsResidual = residualsX.length > 0 ? Math.sqrt(sum / residualsX.length) : 0;
+        }
+
+        public double[] apply(double x, double y) {
+            return new double[] { a * x + b * y + tx, c * x + d * y + ty };
+        }
+    }
+
+    /**
+     * Least squares fit of the six-parameter affine transform taking {@code from} to {@code to}.
+     * Three points determine it; more leave residuals, which is the point of having more.
+     */
+    public static Affine affineFit(double[][] from, double[][] to) {
+        int n = from.length;
+        if (n < 3 || to.length != n) {
+            throw new IllegalArgumentException("An affine fit needs at least three matched points.");
+        }
+        // Normal equations for x' and y' separately, each in (x, y, 1).
+        double[][] m = new double[3][3];
+        double[] rx = new double[3];
+        double[] ry = new double[3];
+        for (int i = 0; i < n; i++) {
+            double[] p = { from[i][0], from[i][1], 1 };
+            for (int r = 0; r < 3; r++) {
+                for (int c = 0; c < 3; c++) {
+                    m[r][c] += p[r] * p[c];
+                }
+                rx[r] += p[r] * to[i][0];
+                ry[r] += p[r] * to[i][1];
+            }
+        }
+        double[] px = solve3(m, rx);
+        double[] py = solve3(m, ry);
+        double[] residualsX = new double[n];
+        double[] residualsY = new double[n];
+        for (int i = 0; i < n; i++) {
+            residualsX[i] = to[i][0] - (px[0] * from[i][0] + px[1] * from[i][1] + px[2]);
+            residualsY[i] = to[i][1] - (py[0] * from[i][0] + py[1] * from[i][1] + py[2]);
+        }
+        return new Affine(px[0], px[1], py[0], py[1], px[2], py[2], residualsX, residualsY);
+    }
+
+    private static double[] solve3(double[][] m, double[] r) {
+        double[][] a = { m[0].clone(), m[1].clone(), m[2].clone() };
+        double[] b = r.clone();
+        for (int col = 0; col < 3; col++) {
+            int pivot = col;
+            for (int row = col + 1; row < 3; row++) {
+                if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) {
+                    pivot = row;
+                }
+            }
+            double[] t = a[col];
+            a[col] = a[pivot];
+            a[pivot] = t;
+            double tb = b[col];
+            b[col] = b[pivot];
+            b[pivot] = tb;
+            if (Math.abs(a[col][col]) < 1e-12) {
+                throw new IllegalArgumentException("The points do not span a plane.");
+            }
+            for (int row = 0; row < 3; row++) {
+                if (row == col) {
+                    continue;
+                }
+                double f = a[row][col] / a[col][col];
+                for (int k = col; k < 3; k++) {
+                    a[row][k] -= f * a[col][k];
+                }
+                b[row] -= f * b[col];
+            }
+        }
+        return new double[] { b[0] / a[0][0], b[1] / a[1][1], b[2] / a[2][2] };
+    }
+
+    /**
+     * Sub-pixel positions of the ticks in a one-dimensional intensity profile: runs of samples
+     * that stand out from the background by more than {@code contrast}, each reduced to the
+     * centroid of how far it stands out. Bright ticks on dark and dark ticks on bright are both
+     * read; whichever side of the median has the larger excursions is taken as the ticks.
+     *
+     * @param profile  One value per column (or row), the tick band summed across.
+     * @param minWidth Runs shorter than this many samples are noise, not ticks.
+     */
+    public static double[] tickCentres(double[] profile, int minWidth) {
+        if (profile.length < 3) {
+            return new double[0];
+        }
+        List<Double> sorted = new ArrayList<>();
+        for (double v : profile) {
+            sorted.add(v);
+        }
+        double median = median(sorted);
+        double above = 0;
+        double below = 0;
+        for (double v : profile) {
+            above = Math.max(above, v - median);
+            below = Math.max(below, median - v);
+        }
+        boolean bright = above >= below;
+        double excursion = bright ? above : below;
+        if (excursion <= 0) {
+            return new double[0];
+        }
+        double threshold = excursion * 0.5;
+        List<Double> centres = new ArrayList<>();
+        int start = -1;
+        for (int i = 0; i <= profile.length; i++) {
+            double deviation = i < profile.length ? (bright ? profile[i] - median : median - profile[i]) : 0;
+            if (deviation > threshold) {
+                if (start < 0) {
+                    start = i;
+                }
+            }
+            else if (start >= 0) {
+                if (i - start >= minWidth) {
+                    // The run was found at half height; the centroid is taken over the whole
+                    // foot of the tick, out to where it sinks into the background, so that a
+                    // tick centred between two samples is not pulled towards the one whose
+                    // shoulder cleared the threshold.
+                    double foot = excursion * 0.1;
+                    int from = start;
+                    while (from > 0 && (bright ? profile[from - 1] - median : median - profile[from - 1]) > foot) {
+                        from--;
+                    }
+                    int to = i;
+                    while (to < profile.length && (bright ? profile[to] - median : median - profile[to]) > foot) {
+                        to++;
+                    }
+                    double weight = 0;
+                    double moment = 0;
+                    for (int k = from; k < to; k++) {
+                        double d = (bright ? profile[k] - median : median - profile[k]) - foot;
+                        if (d > 0) {
+                            weight += d;
+                            moment += d * k;
+                        }
+                    }
+                    centres.add(moment / weight);
+                }
+                start = -1;
+            }
+        }
+        double[] result = new double[centres.size()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = centres.get(i);
+        }
+        return result;
+    }
+
+    /** Amplitude and phase of a sinusoid of known period fitted to samples: the periodic error. */
+    public static double[] sinusoidFit(double[] x, double[] y, double period) {
+        double sc = 0, ss = 0, scc = 0, sss = 0, scs = 0, s1 = 0, ssum = 0, csum = 0, n = x.length;
+        double sy = 0;
+        for (int i = 0; i < x.length; i++) {
+            double w = 2 * Math.PI * x[i] / period;
+            double c = Math.cos(w);
+            double s = Math.sin(w);
+            sc += c * y[i];
+            ss += s * y[i];
+            scc += c * c;
+            sss += s * s;
+            scs += c * s;
+            csum += c;
+            ssum += s;
+            sy += y[i];
+        }
+        // Solve [scc scs csum; scs sss ssum; csum ssum n] [A B C] = [sc ss sy].
+        double[][] m = { { scc, scs, csum }, { scs, sss, ssum }, { csum, ssum, n } };
+        double[] p = solve3(m, new double[] { sc, ss, sy });
+        double amplitude = Math.hypot(p[0], p[1]);
+        double phase = Math.atan2(p[1], p[0]);
+        return new double[] { amplitude, phase, p[2] };
+    }
+
     /** The median: the middle value, or the mean of the two middle values. */
     public static double median(List<Double> values) {
         if (values == null || values.isEmpty()) {

@@ -588,6 +588,148 @@ public class MachineDiagnosticsResults {
         }
     }
 
+    /**
+     * What the machine's frame looks like against a board of known geometry: how long its
+     * millimetre is along each axis, how far its axes are from square, and what the camera's
+     * own scale is against a ruler that does not move.
+     */
+    public static class Datum {
+        @Attribute
+        private String board;
+        @Attribute
+        private String headId;
+        @Attribute
+        private double scaleX;
+        @Attribute
+        private double scaleY;
+        @Attribute
+        private double shearDegrees;
+        @Attribute
+        private double rotationDegrees;
+        @Attribute
+        private boolean mirrored;
+        @Attribute
+        private double rmsResidualMm;
+        @Attribute
+        private int points;
+        @Attribute(required = false)
+        private Double baselineScaleX;
+        @Attribute(required = false)
+        private Double cameraScaleErrorX;
+        @Attribute(required = false)
+        private Double cameraDistortionMm;
+        @Attribute(required = false)
+        private Double periodicAmplitudeMm;
+        @Attribute(required = false)
+        private Double periodicPeriodMm;
+        @Attribute(required = false)
+        private Double rulerScaleErrorX;
+
+        Datum() {
+        }
+
+        public Datum(String board, String headId, double scaleX, double scaleY,
+                double shearDegrees, double rotationDegrees, boolean mirrored, double rmsResidualMm,
+                int points) {
+            this.board = board;
+            this.headId = headId;
+            this.scaleX = scaleX;
+            this.scaleY = scaleY;
+            this.shearDegrees = shearDegrees;
+            this.rotationDegrees = rotationDegrees;
+            this.mirrored = mirrored;
+            this.rmsResidualMm = rmsResidualMm;
+            this.points = points;
+        }
+
+        public String getBoard() {
+            return board;
+        }
+
+        public String getHeadId() {
+            return headId;
+        }
+
+        /** Machine millimetres per board millimetre along X; 1.0 is exact. */
+        public double getScaleX() {
+            return scaleX;
+        }
+
+        public double getScaleY() {
+            return scaleY;
+        }
+
+        /** Degrees the machine's Y axis leans towards +X, short of square to X. */
+        public double getShearDegrees() {
+            return shearDegrees;
+        }
+
+        public double getRotationDegrees() {
+            return rotationDegrees;
+        }
+
+        public boolean isMirrored() {
+            return mirrored;
+        }
+
+        public double getRmsResidualMm() {
+            return rmsResidualMm;
+        }
+
+        public int getPoints() {
+            return points;
+        }
+
+        /** The X scale from the two outermost fiducials alone, the longest baseline. */
+        public Double getBaselineScaleX() {
+            return baselineScaleX;
+        }
+
+        public void setBaselineScaleX(Double baselineScaleX) {
+            this.baselineScaleX = baselineScaleX;
+        }
+
+        /** Units per Pixel error along X from the ruler in one frame, the machine not moving. */
+        public Double getCameraScaleErrorX() {
+            return cameraScaleErrorX;
+        }
+
+        public void setCameraScaleErrorX(Double cameraScaleErrorX) {
+            this.cameraScaleErrorX = cameraScaleErrorX;
+        }
+
+        public Double getCameraDistortionMm() {
+            return cameraDistortionMm;
+        }
+
+        public void setCameraDistortionMm(Double cameraDistortionMm) {
+            this.cameraDistortionMm = cameraDistortionMm;
+        }
+
+        /** Amplitude of the position error at the belt pitch, from stepping along the ruler. */
+        public Double getPeriodicAmplitudeMm() {
+            return periodicAmplitudeMm;
+        }
+
+        public Double getPeriodicPeriodMm() {
+            return periodicPeriodMm;
+        }
+
+        public void setPeriodic(Double amplitudeMm, Double periodMm) {
+            this.periodicAmplitudeMm = amplitudeMm;
+            this.periodicPeriodMm = periodMm;
+        }
+
+        /** The X scale of the machine over the ruler's 30 mm, from the same stepping. */
+        public Double getRulerScaleErrorX() {
+            return rulerScaleErrorX;
+        }
+
+        public void setRulerScaleErrorX(Double rulerScaleErrorX) {
+            this.rulerScaleErrorX = rulerScaleErrorX;
+        }
+    }
+
     /** When a test group last finished, and the report it wrote. */
     public static class Run {
         @Attribute
@@ -659,8 +801,19 @@ public class MachineDiagnosticsResults {
     @ElementList(required = false)
     private ArrayList<ZFocus> zFocus = new ArrayList<>();
 
+    @Element(required = false)
+    private Datum datum;
+
     @ElementList(required = false)
     private ArrayList<Run> runs = new ArrayList<>();
+
+    public Datum getDatum() {
+        return datum;
+    }
+
+    public void setDatum(Datum datum) {
+        this.datum = datum;
+    }
 
     public List<Vibration> getVibration() {
         return vibration;

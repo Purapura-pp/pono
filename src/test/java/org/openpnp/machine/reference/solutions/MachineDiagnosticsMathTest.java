@@ -310,6 +310,111 @@ public class MachineDiagnosticsMathTest {
                 new double[] { 1, 2, 3, 4, 5 }), 1e-9);
     }
 
+    /** The datum board's seven fiducials through a known scale, squareness and rotation. */
+    @Test
+    public void anAffineFitReadsBackScaleSquarenessAndRotation() {
+        double[][] board = { { 0, 0 }, { -10, 5 }, { 10, 5 }, { -10, -10 }, { 10, -10 },
+                { -35, -20 }, { 35, -20 } };
+        double scaleX = 1.0025, scaleY = 0.9990;
+        double shear = Math.toRadians(0.15);
+        double rotation = Math.toRadians(-1.2);
+        double[][] machine = new double[board.length][];
+        for (int i = 0; i < board.length; i++) {
+            // Scale, then lean Y by the shear, then rotate, then translate.
+            double x = board[i][0] * scaleX + board[i][1] * scaleY * Math.sin(shear);
+            double y = board[i][1] * scaleY * Math.cos(shear);
+            machine[i] = new double[] {
+                    217.3 + x * Math.cos(rotation) - y * Math.sin(rotation),
+                    196.5 + x * Math.sin(rotation) + y * Math.cos(rotation) };
+        }
+
+        MachineDiagnosticsMath.Affine fit = MachineDiagnosticsMath.affineFit(board, machine);
+
+        assertEquals(scaleX, fit.scaleX, 1e-6);
+        assertEquals(scaleY, fit.scaleY, 1e-6);
+        assertEquals(0.15, fit.shearDegrees, 1e-4);
+        assertEquals(-1.2, fit.rotationDegrees, 1e-4);
+        assertEquals(0, fit.rmsResidual, 1e-9);
+        assertTrue(!fit.mirrored);
+        assertEquals(217.3, fit.apply(0, 0)[0], 1e-9);
+    }
+
+    @Test
+    public void aMirroredBoardIsRecognisedAsSuch() {
+        double[][] board = { { 0, 0 }, { 10, 0 }, { 0, 10 }, { 10, 10 } };
+        double[][] machine = { { 0, 0 }, { 10, 0 }, { 0, -10 }, { 10, -10 } };
+
+        assertTrue(MachineDiagnosticsMath.affineFit(board, machine).mirrored);
+    }
+
+    /** One point off by 0.03 mm shows up as the residual, not as a change of scale. */
+    @Test
+    public void aStrayPointLandsInTheResiduals() {
+        double[][] board = { { 0, 0 }, { -10, 5 }, { 10, 5 }, { -10, -10 }, { 10, -10 },
+                { -35, -20 }, { 35, -20 } };
+        double[][] machine = new double[board.length][];
+        for (int i = 0; i < board.length; i++) {
+            machine[i] = new double[] { 100 + board[i][0], 50 + board[i][1] };
+        }
+        machine[3][0] += 0.03;
+
+        MachineDiagnosticsMath.Affine fit = MachineDiagnosticsMath.affineFit(board, machine);
+
+        assertEquals(1.0, fit.scaleX, 5e-4);
+        assertTrue(Math.abs(fit.residualsX[3]) > 0.015, "residual " + fit.residualsX[3]);
+        assertTrue(fit.rmsResidual > 0.005 && fit.rmsResidual < 0.03);
+    }
+
+    /** Bright ticks on a dark ground, read to a fraction of a sample. */
+    @Test
+    public void tickCentresAreReadToSubSamplePrecision() {
+        double[] profile = new double[400];
+        java.util.Arrays.fill(profile, 20);
+        double[] truth = { 40.3, 117.3, 194.3, 271.3, 348.3 };
+        for (double centre : truth) {
+            // An 11 sample wide tick with a soft edge, centred between samples.
+            for (int k = -7; k <= 7; k++) {
+                int i = (int) Math.round(centre) + k;
+                double distance = Math.abs(i - centre);
+                profile[i] += 200 * Math.max(0, Math.min(1, 6 - distance));
+            }
+        }
+
+        double[] found = MachineDiagnosticsMath.tickCentres(profile, 4);
+
+        assertEquals(truth.length, found.length);
+        for (int i = 0; i < truth.length; i++) {
+            assertEquals(truth[i], found[i], 0.15);
+        }
+        // Dark ticks on a bright ground read the same.
+        double[] inverted = new double[profile.length];
+        for (int i = 0; i < profile.length; i++) {
+            inverted[i] = 255 - profile[i];
+        }
+        double[] foundDark = MachineDiagnosticsMath.tickCentres(inverted, 4);
+        assertEquals(truth.length, foundDark.length);
+        assertEquals(truth[2], foundDark[2], 0.15);
+    }
+
+    /**
+     * A 2 mm belt pitch sampled every millimetre lands twice a period, which cannot separate the
+     * amplitude from the phase; the ruler is therefore stepped in quarter millimetres.
+     */
+    @Test
+    public void aSinusoidOfKnownPeriodReadsBackItsAmplitude() {
+        double[] x = new double[121];
+        double[] y = new double[121];
+        for (int i = 0; i < x.length; i++) {
+            x[i] = i * 0.25;
+            y[i] = 0.004 + 0.012 * Math.sin(2 * Math.PI * x[i] / 2.0 + 0.7);
+        }
+
+        double[] fit = MachineDiagnosticsMath.sinusoidFit(x, y, 2.0);
+
+        assertEquals(0.012, fit[0], 1e-9);
+        assertEquals(0.004, fit[2], 1e-9);
+    }
+
     private static void assertArrayEqualsWithin(double[] expected, double[] actual) {
         assertEquals(expected.length, actual.length);
         for (int i = 0; i < expected.length; i++) {

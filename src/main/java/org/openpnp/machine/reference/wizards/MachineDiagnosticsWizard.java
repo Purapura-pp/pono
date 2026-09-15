@@ -128,6 +128,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextField framesPerPoint;
     private JTextField stressSpeedFactors;
     private JTextField focusRange;
+    private JTextField rulerStep;
     private JTextField focusStep;
     private JTextField focusRepeats;
     private JTextField stressCycles;
@@ -907,6 +908,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addTestCheck(panel, TestGroup.Homing, "2, 10", false);
         addTestCheck(panel, TestGroup.RotationBacklash, "4, 10", false);
         addTestCheck(panel, TestGroup.ZFocus, "2, 12", false);
+        addTestCheck(panel, TestGroup.DatumBoard, "4, 12", false);
 
         btnRun = new JButton(runAction);
         panel.add(btnRun, "2, 14");
@@ -958,6 +960,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         focusRange = addField(panel, "FocusRange", "2, 30", "4, 30");
         focusStep = addField(panel, "FocusStep", "6, 30", "8, 30");
         focusRepeats = addField(panel, "FocusRepeats", "2, 32", "4, 32");
+        rulerStep = addField(panel, "RulerStep", "6, 32", "8, 32");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -1099,6 +1102,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "focusRangeMm", focusRange, "text", doubleConverter);
         addWrappedBinding(diagnostics, "focusStepMm", focusStep, "text", doubleConverter);
         addWrappedBinding(diagnostics, "focusRepeats", focusRepeats, "text", integerConverter);
+        addWrappedBinding(diagnostics, "rulerStepMm", rulerStep, "text", doubleConverter);
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

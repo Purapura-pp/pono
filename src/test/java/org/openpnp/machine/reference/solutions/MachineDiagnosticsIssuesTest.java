@@ -72,6 +72,10 @@ public class MachineDiagnosticsIssuesTest {
             "The axis loses steps at the speed it is planned with.";
     private static final String Z_HAS_SLACK =
             "The Z axis has slack between moving down and moving up that is not compensated.";
+    private static final String MILLIMETRE_IS_NOT_A_MILLIMETRE =
+            "A commanded millimetre on the axis is not a millimetre on the table.";
+    private static final String AXES_NOT_SQUARE =
+            "The X and Y axes are not square to each other.";
 
     @TempDir
     Path tempDir;
@@ -467,6 +471,40 @@ public class MachineDiagnosticsIssuesTest {
         zAxis.setBacklashOffset(new Length(0.08, LengthUnit.Millimeters));
         assertFalse(wordings(results).contains(Z_HAS_SLACK),
                 "an offset in the region of the slack is already doing the job");
+    }
+
+    @Test
+    public void aScaleErrorAgainstTheBoardNamesTheStepsPerMillimetreThatWouldFixIt() {
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setDatum(new MachineDiagnosticsResults.Datum("LumenPnP datum PCB-0004",
+                head.getId(), 1.0021, 1.0001, 0.02, -0.4, false, 0.012, 7));
+        // The scale is measured through the camera, so it is the camera's X axis that is named.
+        String cameraX = camera.getAxis(Axis.Type.X).getId();
+        results.setControllerLimits(
+                List.of(new ControllerLimits(cameraX, 80.0, 300.0, 800.0)));
+
+        Solutions.Issue issue = issue(results, MILLIMETRE_IS_NOT_A_MILLIMETRE);
+
+        assertFalse(issue.canBeAccepted(), "the firmware is not written from here");
+        assertTrue(issue.getExtendedDescription().contains("+0.210%"));
+        assertTrue(issue.getExtendedDescription().contains("80.1680"),
+                "80 steps per mm scaled by 1.0021: " + issue.getExtendedDescription());
+    }
+
+    @Test
+    public void axesOutOfSquareAreReportedWithTheTransformFactor() {
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setDatum(new MachineDiagnosticsResults.Datum("LumenPnP datum PCB-0004",
+                head.getId(), 1.0001, 0.9999, 0.25, 0.1, false, 0.01, 7));
+
+        Solutions.Issue issue = issue(results, AXES_NOT_SQUARE);
+
+        assertFalse(issue.canBeAccepted());
+        assertTrue(issue.getExtendedDescription().contains("-0.004363"),
+                "minus the tangent of 0.25 degrees: " + issue.getExtendedDescription());
+        List<String> reported = wordings(results);
+        assertFalse(reported.contains(MILLIMETRE_IS_NOT_A_MILLIMETRE),
+                "a hundredth of a percent is the board, not the machine");
     }
 
     /** The floor is kept per camera, and a new run replaces only the camera it measured. */

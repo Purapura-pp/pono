@@ -137,6 +137,14 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private static final double SLOW_DECAY_SECONDS = 0.3;
     /** Z slack worth compensating: the height tolerance of a placement. */
     private static final double Z_BACKLASH_TOLERANCE_MM = 0.05;
+    /** Machine scale error against the board worth a warning: 0.05 mm over 100 mm. */
+    private static final double DATUM_SCALE_TOLERANCE = 0.0005;
+    /** Squareness the board can vouch for; below this the board is as suspect as the machine. */
+    private static final double DATUM_SQUARENESS_TOLERANCE_DEGREES = 0.1;
+    /** Residual after the frame that is more than the fiducials' own placement tolerance. */
+    private static final double DATUM_RESIDUAL_TOLERANCE_MM = 0.03;
+    /** Periodic error at the belt pitch worth a warning. */
+    private static final double PERIODIC_ERROR_TOLERANCE_MM = 0.01;
     /** Margin over the measured backlash for a one-sided offset, which has to clear it. */
     private static final double BACKLASH_OFFSET_MARGIN = 1.2;
     /** Margin over the measured settle time for a fixed wait, which has to outlast it. */
@@ -154,6 +162,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             "https://github.com/openpnp/openpnp/wiki/Calibration-Solutions#advanced-camera-calibration";
     private static final String WIKI_VISION_SOLUTIONS =
             "https://github.com/openpnp/openpnp/wiki/Vision-Solutions"; //$NON-NLS-1$
+    private static final String WIKI_LINEAR_TRANSFORMED_AXES =
+            "https://github.com/openpnp/openpnp/wiki/Linear-Transformed-Axes"; //$NON-NLS-1$
     private static final String WIKI_VISUAL_HOMING =
             "https://github.com/openpnp/openpnp/wiki/Visual-Homing";
 
@@ -175,8 +185,14 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         RotationBacklash,
         /** Where Z really stops, read off the bottom camera's focus on the nozzle tip. */
         ZFocus,
+        /** The machine's frame against a board of known geometry. */
+        DatumBoard,
         ConfigSnapshot
     }
+
+    /** Step along the ruler; a quarter of the belt pitch, so the pitch can be seen. */
+    @Attribute(required = false)
+    private double rulerStepMm = 0.25;
 
     /** Half the Z range the focus sweep covers around the bottom camera's focus height. */
     @Attribute(required = false)
@@ -574,6 +590,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         findLostStepsIssues(solutions, results);
         for (MachineDiagnosticsResults.ZFocus focus : results.getZFocus()) {
             findZBacklashIssue(solutions, focus, measuredWhen(results, TestGroup.ZFocus));
+        }
+        if (results.getDatum() != null) {
+            findDatumIssues(solutions, results, results.getDatum(),
+                    measuredWhen(results, TestGroup.DatumBoard));
         }
         for (ControllerLimits limits : results.getControllerLimits()) {
             ReferenceControllerAxis axis = controllerAxis(limits.getAxisId());
@@ -982,6 +1002,90 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
+     * The machine's frame against the datum board: a millimetre that is not a millimetre, or
+     * axes that are not square. Neither is a setting this writes. A scale error lives in the
+     * controller's steps per millimetre, and the corrected figure is given where the firmware
+     * group reported the current one; squareness is corrected with a linear transformed axis,
+     * whose factor is given. Both are pointed at rather than applied, because rewriting the
+     * axis chain or the firmware from here is more than a click should do.
+     */
+    private void findDatumIssues(Solutions solutions, MachineDiagnosticsResults results,
+            MachineDiagnosticsResults.Datum datum, String when) {
+        Head head = machine.getHead(datum.getHeadId());
+        if (!(head instanceof ReferenceHead)) {
+            return;
+        }
+        ReferenceCamera camera = null;
+        for (Camera c : head.getCameras()) {
+            if (c instanceof ReferenceCamera && c.getLooking() == Camera.Looking.Down) {
+                camera = (ReferenceCamera) c;
+                break;
+            }
+        }
+        double[] scales = { datum.getScaleX(), datum.getScaleY() };
+        Axis.Type[] types = { Axis.Type.X, Axis.Type.Y };
+        for (int i = 0; i < 2; i++) {
+            double error = scales[i] - 1;
+            if (Math.abs(error) <= DATUM_SCALE_TOLERANCE || camera == null) {
+                continue;
+            }
+            ReferenceControllerAxis axis = findControllerAxis(camera, types[i]);
+            if (axis == null) {
+                for (Axis candidate : machine.getAxes()) {
+                    if (candidate instanceof ReferenceControllerAxis
+                            && candidate.getType() == types[i]) {
+                        axis = (ReferenceControllerAxis) candidate;
+                        break;
+                    }
+                }
+            }
+            if (axis == null) {
+                continue;
+            }
+            String steps = "";
+            for (ControllerLimits limits : results.getControllerLimits()) {
+                if (limits.getAxisId().equals(axis.getId()) && limits.getStepsPerUnit() != null) {
+                    // The machine moves too far when it steps too few per millimetre.
+                    steps = String.format(" The controller reports %.4f steps per mm for this "
+                            + "axis; %.4f would make the millimetre exact.", limits.getStepsPerUnit(),
+                            limits.getStepsPerUnit() * scales[i]);
+                }
+            }
+            solutions.add(new PointerIssue(axis,
+                    "A commanded millimetre on the axis is not a millimetre on the table.",
+                    "Correct the controller's steps per millimetre for the axis by the scale "
+                            + "measured, or map the axis through a linear transformed axis with that "
+                            + "factor.",
+                    Solutions.Severity.Warning, WIKI_MACHINE_AXES,
+                    String.format("Against the %s on %s, a millimetre commanded on axis %s came out "
+                            + "%+.3f%% long, over %d fiducials placed by one photoplot to about "
+                            + "0.02 mm. Over a 100 mm board that is %.3f mm at the far edge, which a "
+                            + "fiducial check on a smaller board scales away without saying so. The "
+                            + "correction belongs in the controller's steps per millimetre, which "
+                            + "is not written from here.%s", datum.getBoard(), when, axis.getName(),
+                            error * 100, datum.getPoints(), Math.abs(error) * 100, steps)));
+        }
+        if (Math.abs(datum.getShearDegrees()) > DATUM_SQUARENESS_TOLERANCE_DEGREES) {
+            double factor = -Math.tan(Math.toRadians(datum.getShearDegrees()));
+            solutions.add(new PointerIssue((ReferenceHead) head,
+                    "The X and Y axes are not square to each other.",
+                    "Compensate the squareness with a linear transformed X axis that takes the "
+                            + "measured fraction of Y.",
+                    Solutions.Severity.Warning, WIKI_LINEAR_TRANSFORMED_AXES,
+                    String.format("Against the %s on %s, the Y axis leans %+.3f degrees towards +X "
+                            + "from square, measured over %d fiducials. Over 100 mm of Y that "
+                            + "moves X by %.3f mm, and it turns every board by that angle relative "
+                            + "to its own fiducials. A linear transformed axis of type X, with the "
+                            + "X axis as its input at a factor of 1 and the Y axis at a factor of "
+                            + "%+.6f, takes it out; it is not added from here because it changes "
+                            + "which axis the head mountables are assigned to.", datum.getBoard(),
+                            when, datum.getShearDegrees(), datum.getPoints(),
+                            Math.abs(Math.tan(Math.toRadians(datum.getShearDegrees()))) * 100,
+                            factor)));
+        }
+    }
+
+    /**
      * Slack in Z that the compensation does not cover. Z on most machines is set to directional
      * compensation with an offset of zero, which is no compensation at all; the focus sweep says
      * what the offset should be.
@@ -1305,6 +1409,16 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     // Settings.
+
+    public double getRulerStepMm() {
+        return rulerStepMm;
+    }
+
+    public void setRulerStepMm(double rulerStepMm) {
+        double old = this.rulerStepMm;
+        this.rulerStepMm = rulerStepMm;
+        firePropertyChange("rulerStepMm", old, rulerStepMm);
+    }
 
     public double getFocusRangeMm() {
         return focusRangeMm;
@@ -1833,6 +1947,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             case ZFocus:
                 testZFocus(machine, report);
                 break;
+            case DatumBoard:
+                testDatumBoard(machine, report);
+                break;
             case ConfigSnapshot:
                 writeConfigSnapshot(machine, report);
                 break;
@@ -2151,6 +2268,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      */
     private Detection detect(ReferenceMachine machine, ReferenceCamera camera, Location expected,
             Length diameter, String diagnostics, int frames) throws Exception {
+        return detect(machine, camera, expected, diameter, diagnostics, frames, 0.0);
+    }
+
+    /**
+     * @param extraSearch How much further than usual to look, as a fraction of the image; the
+     *                    board's orientation is guessed before it is measured.
+     */
+    private Detection detect(ReferenceMachine machine, ReferenceCamera camera, Location expected,
+            Length diameter, String diagnostics, int frames, double extraSearch) throws Exception {
         VisionSolutions vision = machine.getVisionSolutions();
         Circle feature = vision.getExpectedOffsetsAndDiameter(camera, camera, expected, diameter,
                 false);
@@ -2167,7 +2293,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 ScoreRange score = new ScoreRange();
                 Circle circle;
                 try {
-                    circle = vision.getSubjectPixelLocation(camera, camera, feature, 0.0,
+                    circle = vision.getSubjectPixelLocation(camera, camera, feature, extraSearch,
                             xs.isEmpty() ? diagnostics : null, score, false, frame);
                 }
                 catch (Exception e) {
@@ -3372,6 +3498,481 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     + "repeatability of the endstops and it carries into every job. Visual homing "
                     + "against the fiducial would remove it.");
         }
+    }
+
+    // The datum board: the machine's frame against geometry that is known.
+
+    /** A fiducial of the board found on the machine: where it should be and where it was. */
+    private static final class Found {
+        final DatumBoard.Dot dot;
+        final Location location;
+        final Detection detection;
+
+        Found(DatumBoard.Dot dot, Location location, Detection detection) {
+            this.dot = dot;
+            this.location = location;
+            this.detection = detection;
+        }
+    }
+
+    /**
+     * Every test above measures the machine against itself: how well it returns to one point,
+     * how far one move overshoots another. None of them can say whether a commanded 70 mm is
+     * 70 mm, or whether X and Y are square, because there was nothing on the table whose
+     * geometry was known. The datum board is that thing. Its copper fiducials are placed by
+     * one photoplot to about 0.02 mm, so the transform that fits them to where the machine
+     * finds them is the machine's frame: the scale along each axis, the angle short of square,
+     * and, in the residuals, what does not fit a straight frame at all. The ruler on it gives
+     * the camera's own scale in a single frame, without the machine moving, which is the one
+     * thing the field of view scan could not separate from the machine's scale; and stepping
+     * along it in quarter millimetres reads the position error at a resolution fine enough to
+     * see the belt pitch.
+     */
+    private void testDatumBoard(ReferenceMachine machine, MachineDiagnosticsReport report)
+            throws Exception {
+        DatumBoard board = DatumBoard.lumenPnp();
+        report.section("The machine's frame against the " + board.getName());
+        ReferenceHead head = requireHead(machine);
+        ReferenceCamera camera = requireDownLookingCamera(head);
+        Location fiducial = requireFiducial(head).convertToUnits(LengthUnit.Millimeters);
+        Length configuredDiameter = head.getCalibrationPrimaryFiducialDiameter();
+        DatumBoard.Dot anchor = board.getAnchor();
+        if (Math.abs(configuredDiameter.convertToUnits(LengthUnit.Millimeters).getValue()
+                - anchor.diameterMm) > 0.3) {
+            throw new Exception(String.format("The primary fiducial is %.2f mm across and the "
+                    + "board's %s is %.2f mm: the primary fiducial is not %s of this board.",
+                    configuredDiameter.convertToUnits(LengthUnit.Millimeters).getValue(),
+                    anchor.name, anchor.diameterMm, anchor.name));
+        }
+        ReferenceControllerAxis xAxis = findControllerAxis(camera, Axis.Type.X);
+        ReferenceControllerAxis yAxis = findControllerAxis(camera, Axis.Type.Y);
+
+        // The anchor, approached the way everything else on the board will be.
+        if (xAxis != null) {
+            approachFrom(camera, xAxis, fiducial, -10, 1.0);
+        }
+        else {
+            MovableUtils.moveToLocationAtSafeZ(camera, fiducial);
+        }
+        Detection anchorSeen = detect(machine, camera, fiducial, configuredDiameter, anchor.name);
+        Location anchorMachine = anchorSeen.location.convertToUnits(LengthUnit.Millimeters);
+        List<Found> found = new ArrayList<>();
+        found.add(new Found(anchor, anchorMachine, anchorSeen));
+
+        // Which way round the board lies: the nearest fiducials are looked for under each of the
+        // eight ways it can, and the first way that finds them all is taken.
+        List<DatumBoard.Dot> near = board.getOrientationFiducials();
+        int turns = -1;
+        boolean mirrored = false;
+        search: for (boolean mirror : new boolean[] { false, true }) {
+            for (int quarter = 0; quarter < 4; quarter++) {
+                checkAborted();
+                List<Found> trial = new ArrayList<>();
+                for (DatumBoard.Dot dot : near) {
+                    double[] o = DatumBoard.orient(dot.x - anchor.x, dot.y - anchor.y, quarter, mirror);
+                    Location predicted = anchorMachine.add(new Location(LengthUnit.Millimeters,
+                            o[0], o[1], 0, 0));
+                    Found seen = lookFor(machine, camera, xAxis, dot, predicted, 0.3);
+                    if (seen == null) {
+                        break;
+                    }
+                    trial.add(seen);
+                }
+                if (trial.size() == near.size()) {
+                    turns = quarter;
+                    mirrored = mirror;
+                    found.addAll(trial);
+                    break search;
+                }
+                log("Board not lying %s%d quarter turns; trying the next way.",
+                        mirror ? "mirrored, " : "", quarter);
+            }
+        }
+        if (turns < 0) {
+            throw new Exception("The board's fiducials around " + anchor.name + " were not found "
+                    + "in any orientation. Is the primary fiducial " + anchor.name + " of this "
+                    + "board, and is the board unobstructed?");
+        }
+        report.line("  The board lies %s%d quarter turn(s) from its drawing.",
+                mirrored ? "mirrored and " : "", turns);
+
+        // The exact frame from what was found so far predicts the far fiducials well enough to
+        // find them, and then everything found fits the frame proper.
+        MachineDiagnosticsMath.Affine rough = fit(found);
+        for (DatumBoard.Dot dot : board.getFiducials()) {
+            boolean have = false;
+            for (Found f : found) {
+                have |= f.dot == dot;
+            }
+            if (have) {
+                continue;
+            }
+            checkAborted();
+            double[] p = rough.apply(dot.x, dot.y);
+            Found seen = lookFor(machine, camera, xAxis, dot,
+                    new Location(LengthUnit.Millimeters, p[0], p[1], fiducial.getZ(), 0), 0.15);
+            if (seen == null) {
+                report.line("  %s was not found where the frame predicts it; left out.", dot.name);
+                continue;
+            }
+            found.add(seen);
+        }
+        MachineDiagnosticsMath.Affine frame = fit(found);
+        List<Object[]> rows = new ArrayList<>();
+        report.blank();
+        report.line("  %-6s %-10s %-10s %-10s %-10s %-10s %-10s", "point", "board x", "board y",
+                "machine x", "machine y", "resid x", "resid y");
+        for (int i = 0; i < found.size(); i++) {
+            Found f = found.get(i);
+            rows.add(row(new Object[] { f.dot.name, f.dot.x, f.dot.y, f.location.getX(),
+                    f.location.getY(), frame.residualsX[i], frame.residualsY[i] }, elapsed(),
+                    f.detection));
+            report.line("  %-6s %-10.3f %-10.3f %-10.4f %-10.4f %-+10.4f %-+10.4f", f.dot.name,
+                    f.dot.x, f.dot.y, f.location.getX(), f.location.getY(), frame.residualsX[i],
+                    frame.residualsY[i]);
+        }
+        report.writeCsv("datum-fiducials.csv", columns(new String[] { "point", "board_x_mm",
+                "board_y_mm", "machine_x_mm", "machine_y_mm", "residual_x_mm", "residual_y_mm" }),
+                rows);
+        report.line("  scale X %+.3f%%, scale Y %+.3f%%, Y leans %+.3f deg towards +X, board "
+                + "rotated %.3f deg, residual %.4f mm rms over %d points", (frame.scaleX - 1) * 100,
+                (frame.scaleY - 1) * 100, frame.shearDegrees, frame.rotationDegrees,
+                frame.rmsResidual, found.size());
+        MachineDiagnosticsResults.Datum datum = new MachineDiagnosticsResults.Datum(board.getName(),
+                head.getId(), frame.scaleX, frame.scaleY, frame.shearDegrees,
+                frame.rotationDegrees, frame.mirrored, frame.rmsResidual, found.size());
+
+        // The longest baseline on its own, as a check on the fit.
+        Found left = null, right = null;
+        for (Found f : found) {
+            if (f.dot.name.equals("FID6")) {
+                left = f;
+            }
+            if (f.dot.name.equals("FID7")) {
+                right = f;
+            }
+        }
+        if (left != null && right != null) {
+            double nominal = Math.hypot(right.dot.x - left.dot.x, right.dot.y - left.dot.y);
+            double measured = Math.hypot(right.location.getX() - left.location.getX(),
+                    right.location.getY() - left.location.getY());
+            datum.setBaselineScaleX(measured / nominal);
+            report.line("  %s to %s: %.4f mm for a nominal %.1f mm, scale %+.3f%%", left.dot.name,
+                    right.dot.name, measured, nominal, (measured / nominal - 1) * 100);
+        }
+        String noise = againstNoiseFloor(camera, frame.rmsResidual);
+        report.finding(Math.abs(frame.scaleX - 1) > DATUM_SCALE_TOLERANCE
+                || Math.abs(frame.scaleY - 1) > DATUM_SCALE_TOLERANCE ? Severity.Warning : Severity.Info,
+                "Against the board, a machine millimetre is %+.3f%% long in X and %+.3f%% in Y. "
+                + "Over a 100 mm board that is %.3f mm and %.3f mm of placement error at the far "
+                + "edge, which no fiducial check on a smaller board can see.",
+                (frame.scaleX - 1) * 100, (frame.scaleY - 1) * 100,
+                Math.abs(frame.scaleX - 1) * 100, Math.abs(frame.scaleY - 1) * 100);
+        report.finding(Math.abs(frame.shearDegrees) > DATUM_SQUARENESS_TOLERANCE_DEGREES
+                ? Severity.Warning : Severity.Info,
+                "The Y axis leans %+.3f degrees towards +X from square. Over 100 mm of Y that "
+                + "moves X by %.3f mm. The board's own fiducials are square to about 0.05 degrees, "
+                + "so smaller angles than that are the board as much as the machine.",
+                frame.shearDegrees, Math.abs(Math.tan(Math.toRadians(frame.shearDegrees))) * 100);
+        report.finding(frame.rmsResidual > DATUM_RESIDUAL_TOLERANCE_MM ? Severity.Warning : Severity.Info,
+                "What does not fit a straight frame: %.4f mm rms across the %d fiducials.%s A "
+                + "residual this size is what no scale or squareness correction can remove.",
+                frame.rmsResidual, found.size(), noise);
+
+        // The discs: what the mask and the silkscreen are registered to, and how a bright and a
+        // dark target of the same size fare with the same pipeline.
+        for (DatumBoard.Dot disc : board.getDiscs()) {
+            checkAborted();
+            double[] p = frame.apply(disc.x, disc.y);
+            Location predicted = new Location(LengthUnit.Millimeters, p[0], p[1], fiducial.getZ(), 0);
+            try {
+                MovableUtils.moveToLocationAtSafeZ(camera, predicted);
+                Detection seen = detect(machine, camera, predicted,
+                        new Length(disc.diameterMm, LengthUnit.Millimeters), disc.name, framesPerPoint, 0.1);
+                Location at = seen.location.convertToUnits(LengthUnit.Millimeters);
+                double dx = at.getX() - predicted.getX();
+                double dy = at.getY() - predicted.getY();
+                report.line("  %s (%s): %+.4f, %+.4f mm from where the copper puts it, score %.2f, "
+                        + "frame scatter %.3f px", disc.name, disc.layer, dx, dy, seen.score,
+                        seen.sdPixels);
+                if (Math.hypot(dx, dy) > 0.1) {
+                    report.finding(Severity.Info, "The %s is registered %.3f mm from the copper: "
+                            + "that is this board's %s-to-copper registration, and the reason the "
+                            + "grid is not used for anything precise.", disc.name,
+                            Math.hypot(dx, dy), disc.layer.toString().toLowerCase());
+                }
+            }
+            catch (Exception e) {
+                report.line("  %s (%s): not found (%s)", disc.name, disc.layer, e.getMessage());
+                report.finding(Severity.Warning, "The %s, a %.0f mm %s target, was not found by "
+                        + "the fiducial pipeline: the lighting or the pipeline is tuned to one "
+                        + "polarity of target.", disc.name, disc.diameterMm,
+                        disc.layer == DatumBoard.Layer.Silk ? "bright" : "dark-on-bright");
+            }
+        }
+
+        // The ruler.
+        try {
+            measureRuler(machine, report, camera, board, frame, fiducial.getZ(), datum);
+        }
+        catch (AbortedException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            Logger.warn(e, "Machine diagnostics: ruler");
+            report.line("  Ruler: %s", e.getMessage());
+            report.finding(Severity.Warning, "The ruler could not be read: %s", e.getMessage());
+        }
+        recordResults(TestGroup.DatumBoard, report, results -> results.setDatum(datum));
+    }
+
+    private MachineDiagnosticsMath.Affine fit(List<Found> found) {
+        double[][] from = new double[found.size()][];
+        double[][] to = new double[found.size()][];
+        for (int i = 0; i < found.size(); i++) {
+            from[i] = new double[] { found.get(i).dot.x, found.get(i).dot.y };
+            to[i] = new double[] { found.get(i).location.getX(), found.get(i).location.getY() };
+        }
+        return MachineDiagnosticsMath.affineFit(from, to);
+    }
+
+    /** Go to where a fiducial is predicted and look for it; null if it is not there. */
+    private Found lookFor(ReferenceMachine machine, ReferenceCamera camera,
+            ReferenceControllerAxis xAxis, DatumBoard.Dot dot, Location predicted,
+            double extraSearch) throws Exception {
+        if (xAxis != null) {
+            approachFrom(camera, xAxis, predicted, -10, 1.0);
+        }
+        else {
+            MovableUtils.moveToLocationAtSafeZ(camera, predicted);
+        }
+        try {
+            Detection seen = detect(machine, camera, predicted,
+                    new Length(dot.diameterMm, LengthUnit.Millimeters), dot.name, framesPerPoint,
+                    extraSearch);
+            return new Found(dot, seen.location.convertToUnits(LengthUnit.Millimeters), seen);
+        }
+        catch (AbortedException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            Logger.trace(e, "Machine diagnostics: {} not at {}", dot.name, predicted);
+            return null;
+        }
+    }
+
+    /**
+     * The ruler twice over. In one frame, the tick spacing in pixels against the 1.000 mm the
+     * copper says it is gives the camera's scale with the machine standing still. Then the
+     * camera steps along the ruler in quarter millimetres and, in every frame, reads where the
+     * ticks nearest the centre are against where the machine says it is: that is the machine's
+     * position error along 30 mm at a resolution fine enough to see the 2 mm pitch of a GT2
+     * belt, which one fiducial can never show.
+     */
+    private void measureRuler(ReferenceMachine machine, MachineDiagnosticsReport report,
+            ReferenceCamera camera, DatumBoard board, MachineDiagnosticsMath.Affine frame, double z,
+            MachineDiagnosticsResults.Datum datum) throws Exception {
+        DatumBoard.Ruler ruler = board.getRuler();
+        double[] centre = ruler.centre();
+        Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+        double pixelsPerMm = 1 / upp.getX();
+        report.blank();
+        report.line("Ruler, %d ticks %.1f mm apart", ruler.ticks, ruler.pitchMm);
+
+        // One frame at the ruler's centre.
+        double[] c = frame.apply(centre[0], centre[1]);
+        Location at = new Location(LengthUnit.Millimeters, c[0], c[1], z, 0);
+        MovableUtils.moveToLocationAtSafeZ(camera, at);
+        camera.waitForCompletion(CompletionType.WaitForStillstand);
+        Thread.sleep(machineSettleMs);
+        RulerFrame first = readRuler(camera, board, frame, at, z);
+        if (first.ticks.length < 5) {
+            throw new Exception("Only " + first.ticks.length + " ticks were read in the frame.");
+        }
+        double[] index = new double[first.ticks.length];
+        for (int i = 0; i < index.length; i++) {
+            index[i] = i;
+        }
+        // Consecutive ticks a pitch apart; a missed tick would break the index, so the index is
+        // rebuilt from the spacing.
+        double expected = pixelsPerMm * ruler.pitchMm;
+        double running = 0;
+        for (int i = 1; i < index.length; i++) {
+            running += Math.max(1, Math.round((first.ticks[i] - first.ticks[i - 1]) / expected));
+            index[i] = running;
+        }
+        LinearFit spacing = MachineDiagnosticsMath.linearFit(index, first.ticks);
+        double measuredPixelsPerMm = spacing.slope / ruler.pitchMm;
+        double cameraScaleError = pixelsPerMm / measuredPixelsPerMm - 1;
+        double worst = 0;
+        for (int i = 0; i < index.length; i++) {
+            worst = Math.max(worst, Math.abs(first.ticks[i] - spacing.valueAt(index[i])));
+        }
+        double distortionMm = worst / measuredPixelsPerMm;
+        datum.setCameraScaleErrorX(cameraScaleError);
+        datum.setCameraDistortionMm(distortionMm);
+        report.line("  %d ticks in one frame: %.3f px per mm against %.3f px per mm from Units "
+                + "per Pixel; camera scale error %+.3f%%, worst tick %.4f mm off a straight "
+                + "line", first.ticks.length, measuredPixelsPerMm, pixelsPerMm,
+                cameraScaleError * 100, distortionMm);
+        report.finding(Math.abs(cameraScaleError) > SCALE_ERROR_TOLERANCE ? Severity.Warning : Severity.Info,
+                "With the machine standing still, the ruler says Units per Pixel in X is off by "
+                + "%+.3f%%. This is the camera alone: the field of view scan measures the camera "
+                + "against the machine's moves and cannot tell the two apart, this can.",
+                cameraScaleError * 100);
+
+        // Stepping along it.
+        double step = Math.max(0.05, rulerStepMm);
+        double half = (ruler.ticks - 1) * ruler.pitchMm / 2 - 1.0;
+        List<Object[]> rows = new ArrayList<>();
+        List<Double> positions = new ArrayList<>();
+        List<Double> errors = new ArrayList<>();
+        camera.actuateLightBeforeCapture();
+        try {
+            for (double x = -half; x <= half + 1e-9; x += step) {
+                checkAborted();
+                double[] p = frame.apply(centre[0] + x, centre[1]);
+                Location target = new Location(LengthUnit.Millimeters, p[0], p[1], z, 0);
+                camera.moveTo(target);
+                RulerFrame seen = readRuler(camera, board, frame, target, z);
+                // Each tick near the centre says where the machine really is: its board
+                // position is a whole pitch, and its offset from the image centre in pixels
+                // is how far the camera is from it.
+                List<Double> estimates = new ArrayList<>();
+                for (double tick : seen.ticks) {
+                    double offsetMm = (tick - seen.centrePixel) / measuredPixelsPerMm;
+                    if (Math.abs(offsetMm) > 3.0) {
+                        continue;
+                    }
+                    double boardX = x + offsetMm;
+                    double nearest = Math.round(boardX / ruler.pitchMm) * ruler.pitchMm;
+                    estimates.add(boardX - nearest);
+                }
+                if (estimates.isEmpty()) {
+                    continue;
+                }
+                double error = MachineDiagnosticsMath.median(estimates);
+                positions.add(x);
+                errors.add(error);
+                rows.add(new Object[] { x, error, estimates.size(), elapsed() });
+            }
+        }
+        finally {
+            camera.actuateLightAfterCapture();
+        }
+        report.writeCsv("ruler-steps.csv",
+                new String[] { "board_x_mm", "error_mm", "ticks_used", "t_s" }, rows);
+        if (positions.size() < 8) {
+            throw new Exception("Too few readings along the ruler.");
+        }
+        double[] xs = toArray(positions);
+        double[] es = toArray(errors);
+        LinearFit trend = MachineDiagnosticsMath.linearFit(xs, es);
+        double[] detrended = new double[es.length];
+        for (int i = 0; i < es.length; i++) {
+            detrended[i] = es[i] - trend.valueAt(xs[i]);
+        }
+        double period = 2.0;
+        double[] periodic = MachineDiagnosticsMath.sinusoidFit(xs, detrended, period);
+        Stats scatter = MachineDiagnosticsMath.stats(errors);
+        datum.setRulerScaleErrorX(trend.slope);
+        datum.setPeriodic(periodic[0], period);
+        report.line("  %d readings along %.0f mm: machine scale %+.3f%% over the ruler, error "
+                + "range %.4f mm, %.4f mm amplitude at a %.1f mm period", positions.size(),
+                2 * half, trend.slope * 100, scatter.getRange(), periodic[0], period);
+        report.finding(periodic[0] > PERIODIC_ERROR_TOLERANCE_MM ? Severity.Warning : Severity.Info,
+                "Stepping along the ruler, the X position error repeats every %.1f mm with %.4f mm "
+                + "of amplitude. A 2 mm period is the pitch of a GT2 belt: tooth engagement, or "
+                + "a pulley that is not round.", period, periodic[0]);
+    }
+
+    /** The ticks of the ruler as read in one frame, in pixels along the ruler's direction. */
+    private static final class RulerFrame {
+        final double[] ticks;
+        final double centrePixel;
+
+        RulerFrame(double[] ticks, double centrePixel) {
+            this.ticks = ticks;
+            this.centrePixel = centrePixel;
+        }
+    }
+
+    /**
+     * Read the ruler's ticks in the current frame. The image is turned so that the ruler runs
+     * along its rows, the band the ticks stand in is summed column by column, and the columns
+     * that stand out are the ticks.
+     */
+    private RulerFrame readRuler(ReferenceCamera camera, DatumBoard board,
+            MachineDiagnosticsMath.Affine frame, Location cameraAt, double z) throws Exception {
+        DatumBoard.Ruler ruler = board.getRuler();
+        BufferedImage image = camera.settleAndCapture();
+        Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+        // Where board points fall in the image, through the frame and the camera's own
+        // transform, tells which way the ruler runs and where its tick band is.
+        double[] c = ruler.centre();
+        org.openpnp.model.Point p0 = pixelOf(camera, frame, c[0], c[1], z);
+        org.openpnp.model.Point p1 = pixelOf(camera, frame, c[0] + 1, c[1], z);
+        double angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+        // The tick band: from the ticks' base to the top of the shortest ticks.
+        org.openpnp.model.Point base = pixelOf(camera, frame, c[0], c[1] - ruler.tickLengthMm / 2, z);
+        org.openpnp.model.Point top = pixelOf(camera, frame, c[0], c[1] - ruler.tickLengthMm / 2 + 1.0, z);
+        Mat mat = OpenCvUtils.toMat(image);
+        Mat gray = new Mat();
+        Mat turned = new Mat();
+        try {
+            if (mat.channels() > 1) {
+                org.opencv.imgproc.Imgproc.cvtColor(mat, gray, org.opencv.imgproc.Imgproc.COLOR_BGR2GRAY);
+            }
+            else {
+                gray = mat.clone();
+            }
+            org.opencv.core.Point pivot = new org.opencv.core.Point(image.getWidth() / 2.0,
+                    image.getHeight() / 2.0);
+            Mat rotation = org.opencv.imgproc.Imgproc.getRotationMatrix2D(pivot,
+                    Math.toDegrees(angle), 1.0);
+            org.opencv.imgproc.Imgproc.warpAffine(gray, turned, rotation, gray.size());
+            double[] baseTurned = turn(rotation, base.x, base.y);
+            double[] topTurned = turn(rotation, top.x, top.y);
+            int rowFrom = (int) Math.max(0, Math.min(baseTurned[1], topTurned[1]));
+            int rowTo = (int) Math.min(turned.rows() - 1, Math.max(baseTurned[1], topTurned[1]));
+            if (rowTo - rowFrom < 3) {
+                throw new Exception("The tick band is not in the frame.");
+            }
+            double[] profile = new double[turned.cols()];
+            for (int col = 0; col < turned.cols(); col++) {
+                double sum = 0;
+                for (int row = rowFrom; row <= rowTo; row++) {
+                    sum += turned.get(row, col)[0];
+                }
+                profile[col] = sum / (rowTo - rowFrom + 1);
+            }
+            int minWidth = Math.max(2, (int) (ruler.tickWidthMm / upp.getX() * 0.5));
+            double[] ticks = MachineDiagnosticsMath.tickCentres(profile, minWidth);
+            // The image centre is where the camera is; after turning about it, it stays put.
+            return new RulerFrame(ticks, pivot.x);
+        }
+        finally {
+            mat.release();
+            gray.release();
+            turned.release();
+        }
+    }
+
+    private static org.openpnp.model.Point pixelOf(ReferenceCamera camera, MachineDiagnosticsMath.Affine frame,
+            double boardX, double boardY, double z) {
+        double[] p = frame.apply(boardX, boardY);
+        return VisionUtils.getLocationPixels(camera, new Location(LengthUnit.Millimeters, p[0],
+                p[1], z, 0));
+    }
+
+    private static double[] turn(Mat rotation, double x, double y) {
+        double[] r0 = rotation.get(0, 0);
+        double[] r1 = rotation.get(0, 1);
+        double[] r2 = rotation.get(0, 2);
+        double[] s0 = rotation.get(1, 0);
+        double[] s1 = rotation.get(1, 1);
+        double[] s2 = rotation.get(1, 2);
+        return new double[] { r0[0] * x + r1[0] * y + r2[0], s0[0] * x + s1[0] * y + s2[0] };
     }
 
     // Z, read off the bottom camera's focus on the nozzle tip.
