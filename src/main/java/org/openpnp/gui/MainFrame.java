@@ -99,6 +99,7 @@ import org.openpnp.gui.support.SwingUserInteraction;
 import org.openpnp.gui.shell.CameraStage;
 import org.openpnp.gui.shell.DroPanel;
 import org.openpnp.gui.shell.InspectorPanel;
+import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.shell.NavigationRail;
 import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
 import org.openpnp.gui.shell.OverlayCard;
@@ -789,9 +790,26 @@ public class MainFrame extends JFrame {
         contentPane.add(navigationRail, BorderLayout.WEST);
 
         navigationRail.addChangeListener(new ChangeListener() {
+            private boolean reverting;
+
             @Override
             public void stateChanged(ChangeEvent e) {
-                updateMenuState(navigationRail.getSelectedComponent());
+                Component page = navigationRail.getSelectedComponent();
+                updateMenuState(page);
+                if (reverting || inspectorPanel == null) {
+                    return;
+                }
+                // The properties column follows the page. If the user will not let go of
+                // unapplied edits in the sheets it would replace, the page switch is undone.
+                if (inspectorPanel.setActivePage(page) == Result.Cancelled) {
+                    reverting = true;
+                    try {
+                        navigationRail.setSelectedComponent(inspectorPanel.getActivePage());
+                    }
+                    finally {
+                        reverting = false;
+                    }
+                }
             }});
         
         topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel);
@@ -807,6 +825,7 @@ public class MainFrame extends JFrame {
                 PREF_INSPECTOR_COLLAPSED_DEF));
         inspectorPanel.addPropertyChangeListener("collapsed", //$NON-NLS-1$
                 e -> prefs.putBoolean(PREF_INSPECTOR_COLLAPSED, inspectorPanel.isCollapsed()));
+        inspectorPanel.setActivePage(navigationRail.getSelectedComponent());
         contentPane.add(inspectorPanel, BorderLayout.EAST);
 
         // No title on the camera: the camera selector inside it already says which one this is,

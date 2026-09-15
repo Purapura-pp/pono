@@ -14,6 +14,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.pmw.tinylog.Logger;
 
@@ -33,6 +34,7 @@ import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
 import org.openpnp.gui.components.AutoSelectTextTable;
+import org.openpnp.gui.shell.InspectorPanel;
 import org.openpnp.gui.shell.PropertySheetPresenter;
 import org.openpnp.gui.support.Helpers;
 import org.openpnp.gui.support.Icons;
@@ -100,21 +102,21 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
                 }
 
                 // One wizard, whichever kind of vision settings this is.
-                List<PropertySheet> sheets = new ArrayList<>();
-                if (selectedVisionSettings != null) {
+                Supplier<List<PropertySheet>> sheets = () -> {
+                    List<PropertySheet> built = new ArrayList<>();
                     Wizard wizard = configurationWizardFor(selectedVisionSettings);
                     if (wizard != null) {
-                        sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
+                        built.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
                                 (JPanel) wizard));
                     }
-                }
-                MainFrame.get().getInspector().show(selectedVisionSettings,
-                        VisionSettingsPanel.this,
+                    return built;
+                };
+                MainFrame.get().getInspector().show(VisionSettingsPanel.this,
+                        selectedVisionSettings, VisionSettingsPanel.this,
                         selectedVisionSettings == null ? null : selectedVisionSettings.getName(),
                         selectedVisionSettings == null
                                 ? null
-                                : MainFrame.get().getInspector()
-                                        .typeOf(selectedVisionSettings),
+                                : InspectorPanel.typeOf(selectedVisionSettings),
                         Icons.captureCamera, sheets);
             });
         });

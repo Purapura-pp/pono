@@ -24,7 +24,11 @@ import java.awt.Component;
 import java.awt.Font;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -145,48 +149,142 @@ public class InspectorPanel extends JPanel {
     }
 
     /**
+     * One thing to inspect: what it is, where its wizards report back to, and how to head it.
+     * <p>
+     * Built afresh each time it is presented rather than kept: presenting disposes of the wizards
+     * it replaces, so a page's sheets have to be made again when the user comes back to that page.
+     */
+    public static final class Inspection {
+        final Object subject;
+        final WizardContainer container;
+        final String title;
+        final String type;
+        final Icon icon;
+        final List<PropertySheet> sheets;
+
+        public Inspection(Object subject, WizardContainer container, String title, String type,
+                Icon icon, List<PropertySheet> sheets) {
+            this.subject = subject;
+            this.container = container;
+            this.title = title;
+            this.type = type;
+            this.icon = icon;
+            this.sheets = sheets;
+        }
+
+        /** A holder's own sheets, headed by its own title and icon unless told otherwise. */
+        public static Inspection of(PropertySheetHolder holder, WizardContainer container,
+                String title, Icon icon) {
+            PropertySheet[] reported = holder.getPropertySheets();
+            return new Inspection(holder, container,
+                    title != null ? title : holder.getPropertySheetHolderTitle(),
+                    typeOf(holder),
+                    icon != null ? icon : holder.getPropertySheetHolderIcon(),
+                    reported == null ? List.of() : Arrays.asList(reported));
+        }
+    }
+
+    /**
+     * What each page last asked to have shown. Only the active page's request is on screen: the
+     * others are kept so that they can be presented when the user comes back to their page.
+     */
+    private final Map<Component, Supplier<Inspection>> requests = new HashMap<>();
+
+    private Component activePage;
+
+    /**
+     * Show what a page has selected, if that page is the one on screen.
+     * <p>
+     * Every table used to write straight into this column, whichever page the user was looking
+     * at - so the issues page's background scan replaced whatever the parts page had put here,
+     * and switching pages left the previous page's sheets behind. A request from a page that is
+     * not active is remembered and presented when the page is.
+     * 
+     * @param page       The navigation page asking, which is how the request is matched to what is
+     *                   on screen.
+     * @param inspection How to build what to show; null for nothing selected.
+     * @return Cancelled when the user would not let go of unapplied edits, in which case the
+     *         caller should put its selection back where it was. A request from a page that is
+     *         not on screen is always Shown, since nobody was asked anything.
+     */
+    public Result show(Component page, Supplier<Inspection> inspection) {
+        requests.put(page, inspection);
+        if (page != activePage) {
+            return Result.Shown;
+        }
+        return present(inspection);
+    }
+
+    /**
      * Show one thing's properties.
      * 
      * @param holder    What to show. Null clears the panel.
      * @param container Where the wizards report back to, which is still the panel that owns the
      *                  table: a wizard completing may have to refresh a row or a board's outline.
      * @param title     The name as the table shows it, which is not always the holder's own title.
-     * @return Cancelled when the user would not let go of unapplied edits, in which case the
-     *         caller should put its selection back where it was.
      */
-    public Result show(PropertySheetHolder holder, WizardContainer container, String title,
-            Icon icon) {
-        Result result = presenter.show(holder, container, title);
-        return headerFor(result, holder,
-                title != null || holder == null ? title : holder.getPropertySheetHolderTitle(),
-                holder == null ? null : typeOf(holder),
-                icon != null || holder == null ? icon : holder.getPropertySheetHolderIcon());
+    public Result show(Component page, PropertySheetHolder holder, WizardContainer container,
+            String title, Icon icon) {
+        return show(page, holder == null ? null
+                : () -> Inspection.of(holder, container, title, icon));
     }
 
     /**
      * Show sheets that were assembled rather than reported, as a part's are: they come from the
      * machine's part alignments and its fiducial locator, and a part reports no sheets of its own.
      * 
-     * @param type What kind of thing this is, under its name. A package for a part, the driver's
-     *             class for a driver - whatever the table beside it would have called it.
+     * @param type   What kind of thing this is, under its name. A package for a part, the driver's
+     *               class for a driver - whatever the table beside it would have called it.
+     * @param sheets Builds the sheets. Called again whenever they have to be shown afresh.
      */
-    public Result show(Object subject, WizardContainer container, String title, String type,
-            Icon icon, List<PropertySheet> propertySheets) {
-        Result result = presenter.show(subject, container, title, propertySheets);
-        return headerFor(result, subject, title, type, icon);
+    public Result show(Component page, Object subject, WizardContainer container, String title,
+            String type, Icon icon, Supplier<List<PropertySheet>> sheets) {
+        return show(page, subject == null ? null
+                : () -> new Inspection(subject, container, title, type, icon, sheets.get()));
     }
 
-    private Result headerFor(Result result, Object subject, String title, String type, Icon icon) {
+    /**
+     * The page now on screen. Its last request is presented, and if the user will not let go of
+     * unapplied edits in the sheets being replaced, the answer is Cancelled and the caller should
+     * put the previous page back.
+     */
+    public Result setActivePage(Component page) {
+        Component previous = activePage;
+        activePage = page;
+        Result result = present(requests.get(page));
+        if (result == Result.Cancelled) {
+            activePage = previous;
+        }
+        return result;
+    }
+
+    public Component getActivePage() {
+        return activePage;
+    }
+
+    private Result present(Supplier<Inspection> request) {
+        Inspection inspection = request == null ? null : request.get();
+        if (inspection == null) {
+            Result result = presenter.show(null, null, null, null);
+            if (result == Result.Shown) {
+                clear();
+            }
+            return result;
+        }
+        Result result = presenter.show(inspection.subject, inspection.container,
+                inspection.title, inspection.sheets);
         if (result != Result.Shown) {
             return result;
         }
-        if (subject == null || sheets.getTabCount() == 0) {
+        if (sheets.getTabCount() == 0) {
             clear();
             return result;
         }
-        iconLabel.setIcon(icon);
-        nameLabel.setText(title == null ? String.valueOf(subject) : title);
-        typeLabel.setText(type == null || type.isEmpty() ? " " : type); //$NON-NLS-1$
+        iconLabel.setIcon(inspection.icon);
+        nameLabel.setText(inspection.title == null ? String.valueOf(inspection.subject)
+                : inspection.title);
+        typeLabel.setText(inspection.type == null || inspection.type.isEmpty() ? " " //$NON-NLS-1$
+                : inspection.type);
         setBody(sheets);
         return result;
     }
@@ -232,7 +330,7 @@ public class InspectorPanel extends JPanel {
      * What kind of thing is being edited, under its name. A feeder is a strip feeder or a tray
      * feeder, and which one it is decides what the sheets below even contain.
      */
-    public String typeOf(Object holder) {
+    public static String typeOf(Object holder) {
         String name = holder.getClass().getSimpleName();
         return name.startsWith("Reference") ? name.substring("Reference".length()) : name; //$NON-NLS-1$ //$NON-NLS-2$
     }

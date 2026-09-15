@@ -256,7 +256,8 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 
                 if (table.getSelectedRow() != priorRowIndex) {
                     Feeder feeder = getSelection();
-                    Result shown = mainFrame.getInspector().show(feeder, FeedersPanel.this,
+                    Result shown = mainFrame.getInspector().show(FeedersPanel.this, feeder,
+                            FeedersPanel.this,
                             feeder == null ? null : feeder.getName(),
                             feeder == null ? null : feeder.getPropertySheetHolderIcon());
                     if (shown == Result.Busy) {

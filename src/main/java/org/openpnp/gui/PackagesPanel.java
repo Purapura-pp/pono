@@ -36,6 +36,7 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -471,36 +472,38 @@ public class PackagesPanel extends JPanel implements WizardContainer {
 
         // A package reports no property sheets of its own: four of these wizards are built here
         // and the rest come from the machine's part alignments and its fiducial locator.
-        List<PropertySheet> sheets = new ArrayList<>();
-        if (selectedPackage != null) {
-            sheets.add(PropertySheetPresenter.sheet(
+        Package shownPackage = getSelectedPackage();
+        Supplier<List<PropertySheet>> sheets = () -> {
+            List<PropertySheet> built = new ArrayList<>();
+            built.add(PropertySheetPresenter.sheet(
                     Translations.getString("PackagesPanel.NozzleTipsTab.title"), //$NON-NLS-1$
-                    new PackageNozzleTipsWizard(selectedPackage)));
-            sheets.add(PropertySheetPresenter.sheet(
+                    new PackageNozzleTipsWizard(shownPackage)));
+            built.add(PropertySheetPresenter.sheet(
                     Translations.getString("PackagesPanel.SettingsTab.title"), //$NON-NLS-1$
-                    new PackageSettingsWizard(selectedPackage)));
-            sheets.add(PropertySheetPresenter.sheet(
+                    new PackageSettingsWizard(shownPackage)));
+            built.add(PropertySheetPresenter.sheet(
                     Translations.getString("PackagesPanel.VisionTab.title"), //$NON-NLS-1$
-                    new PackageVisionWizard(selectedPackage)));
-            sheets.add(PropertySheetPresenter.sheet(
+                    new PackageVisionWizard(shownPackage)));
+            built.add(PropertySheetPresenter.sheet(
                     Translations.getString("PackagesPanel.VisionCompositingTab.title"), //$NON-NLS-1$
-                    new PackageCompositingWizard(selectedPackage)));
+                    new PackageCompositingWizard(shownPackage)));
             Machine machine = configuration.getMachine();
             for (PartAlignment partAlignment : machine.getPartAlignments()) {
-                Wizard wizard = partAlignment.getPartConfigurationWizard(selectedPackage);
+                Wizard wizard = partAlignment.getPartConfigurationWizard(shownPackage);
                 if (wizard != null) {
-                    sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
+                    built.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
                             (JPanel) wizard));
                 }
             }
             Wizard wizard =
-                    machine.getFiducialLocator().getPartConfigurationWizard(selectedPackage);
+                    machine.getFiducialLocator().getPartConfigurationWizard(shownPackage);
             if (wizard != null) {
-                sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(), (JPanel) wizard));
+                built.add(PropertySheetPresenter.sheet(wizard.getWizardName(), (JPanel) wizard));
             }
-        }
-        Package shownPackage = getSelectedPackage();
-        if (MainFrame.get().getInspector().show(shownPackage, PackagesPanel.this,
+            return built;
+        };
+        if (MainFrame.get().getInspector().show(PackagesPanel.this, shownPackage,
+                PackagesPanel.this,
                 shownPackage == null ? null : shownPackage.getId(),
                 Translations.getString("MainFrame.RightComponent.tabs.Packages"), //$NON-NLS-1$
                 Icons.footprintQuad, sheets) == Result.Cancelled) {

@@ -35,6 +35,7 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -475,15 +476,15 @@ public class PartsPanel extends JPanel implements WizardContainer {
 
         // A part reports no property sheets of its own: its wizards come from the machine's part
         // alignments and its fiducial locator, so they are assembled here and handed over.
-        List<PropertySheet> sheets = new ArrayList<>();
-        if (selectedPart != null) {
-            sheets.add(PropertySheetPresenter.sheet(
+        Supplier<List<PropertySheet>> sheets = () -> {
+            List<PropertySheet> built = new ArrayList<>();
+            built.add(PropertySheetPresenter.sheet(
                     Translations.getString("PartsPanel.SettingsTab.title"), //$NON-NLS-1$
                     (JPanel) new PartSettingsWizard(selectedPart)));
             for (PartAlignment partAlignment : configuration.getMachine().getPartAlignments()) {
                 Wizard wizard = partAlignment.getPartConfigurationWizard(selectedPart);
                 if (wizard != null) {
-                    sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
+                    built.add(PropertySheetPresenter.sheet(wizard.getWizardName(),
                             (JPanel) wizard));
                 }
             }
@@ -491,11 +492,13 @@ public class PartsPanel extends JPanel implements WizardContainer {
                     configuration.getMachine().getFiducialLocator()
                             .getPartConfigurationWizard(selectedPart);
             if (wizard != null) {
-                sheets.add(PropertySheetPresenter.sheet(wizard.getWizardName(), (JPanel) wizard));
+                built.add(PropertySheetPresenter.sheet(wizard.getWizardName(), (JPanel) wizard));
             }
-        }
+            return built;
+        };
         MainFrame mainFrame = MainFrame.get();
-        Result shown = mainFrame.getInspector().show(selectedPart, PartsPanel.this,
+        Result shown = mainFrame.getInspector().show(PartsPanel.this, selectedPart,
+                PartsPanel.this,
                 selectedPart == null ? null : selectedPart.getId(),
                 selectedPart == null || selectedPart.getPackage() == null
                         ? null

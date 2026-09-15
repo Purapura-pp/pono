@@ -359,14 +359,13 @@ public class IssuesAndSolutionsPanel extends JPanel {
         issuePane.repaint();
         // No wizard container: an issue's solution is not a configuration wizard, it is this
         // page's own panel with its own buttons.
-        frame.getInspector().show(issue, null,
+        frame.getInspector().show(this, issue, null,
                 issue == null ? null : issue.getSubject().getSubjectText(),
                 issue == null ? null : issue.getSeverity().name(),
                 issue == null ? null : issue.getSubject().getSubjectIcon(),
-                issue == null ? null
-                        : List.of(PropertySheetPresenter.sheet(
-                                Translations.getString("MainFrame.RightComponent.tabs.IssuesAndSolutions"), //$NON-NLS-1$
-                                issuePane)));
+                () -> List.of(PropertySheetPresenter.sheet(
+                        Translations.getString("MainFrame.RightComponent.tabs.IssuesAndSolutions"), //$NON-NLS-1$
+                        issuePane)));
         updateIssueIndicator();
     }
 

@@ -237,7 +237,8 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
                 holder = node.obj;
             }
         }
-        MainFrame.get().getInspector().show(holder, MachineSetupPanel.this,
+        MainFrame.get().getInspector().show(MachineSetupPanel.this, holder,
+                MachineSetupPanel.this,
                 holder == null ? null : holder.getPropertySheetHolderTitle(),
                 holder == null ? null : holder.getPropertySheetHolderIcon());
 
