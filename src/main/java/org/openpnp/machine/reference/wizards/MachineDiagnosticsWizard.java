@@ -126,6 +126,10 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextArea logArea;
     private JTextField repeats;
     private JTextField framesPerPoint;
+    private JTextField stressSpeedFactors;
+    private JTextField stressCycles;
+    private JTextField stressDistance;
+    private JTextField latencySpeedFactor;
     private JTextField noiseFrames;
     private JTextField backlashRepeats;
     private JTextField settleRepeats;
@@ -881,25 +885,29 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                         FormSpecs.RELATED_GAP_ROWSPEC,
                         FormSpecs.DEFAULT_ROWSPEC,
                         FormSpecs.RELATED_GAP_ROWSPEC,
+                        FormSpecs.DEFAULT_ROWSPEC,
+                        FormSpecs.RELATED_GAP_ROWSPEC,
                         FormSpecs.DEFAULT_ROWSPEC, }));
 
         // Firmware and the snapshot move nothing, so they are the safe pair to start with and are
-        // the only ones on by default.
+        // the only ones on by default. The rest are in the order they run.
         addTestCheck(panel, TestGroup.Firmware, "2, 2", true);
         addTestCheck(panel, TestGroup.ConfigSnapshot, "4, 2", true);
-        addTestCheck(panel, TestGroup.Kinematics, "2, 4", false);
-        addTestCheck(panel, TestGroup.XyPositioning, "4, 4", false);
-        addTestCheck(panel, TestGroup.CameraSettle, "2, 6", false);
-        addTestCheck(panel, TestGroup.Homing, "4, 6", false);
-        addTestCheck(panel, TestGroup.RotationBacklash, "2, 8", false);
-        addTestCheck(panel, TestGroup.VisionNoise, "4, 8", false);
+        addTestCheck(panel, TestGroup.VisionNoise, "2, 4", false);
+        addTestCheck(panel, TestGroup.CameraLatency, "4, 4", false);
+        addTestCheck(panel, TestGroup.Kinematics, "2, 6", false);
+        addTestCheck(panel, TestGroup.LostSteps, "4, 6", false);
+        addTestCheck(panel, TestGroup.XyPositioning, "2, 8", false);
+        addTestCheck(panel, TestGroup.CameraSettle, "4, 8", false);
+        addTestCheck(panel, TestGroup.Homing, "2, 10", false);
+        addTestCheck(panel, TestGroup.RotationBacklash, "4, 10", false);
 
         btnRun = new JButton(runAction);
-        panel.add(btnRun, "2, 10");
+        panel.add(btnRun, "2, 12");
         btnStop = new JButton(stopAction);
-        panel.add(btnStop, "4, 10");
+        panel.add(btnStop, "4, 12");
         btnOpenReport = new JButton(openReportAction);
-        panel.add(btnOpenReport, "6, 10, left, default");
+        panel.add(btnOpenReport, "6, 12, left, default");
     }
 
     private void addTestCheck(JPanel panel, TestGroup group, String constraints, boolean selected) {
@@ -925,7 +933,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 ColumnSpec.decode("max(70dlu;default)"),
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), };
-        RowSpec[] rows = new RowSpec[26];
+        RowSpec[] rows = new RowSpec[30];
         for (int i = 0; i < rows.length; i++) {
             rows[i] = i % 2 == 0 ? FormSpecs.RELATED_GAP_ROWSPEC : FormSpecs.DEFAULT_ROWSPEC;
         }
@@ -937,6 +945,10 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         noiseFrames = addField(panel, "NoiseFrames", "6, 22", "8, 22");
         backlashRepeats = addField(panel, "BacklashRepeats", "2, 24", "4, 24");
         settleRepeats = addField(panel, "SettleRepeats", "6, 24", "8, 24");
+        stressSpeedFactors = addField(panel, "StressSpeedFactors", "2, 26", "4, 26");
+        stressCycles = addField(panel, "StressCycles", "6, 26", "8, 26");
+        stressDistance = addField(panel, "StressDistance", "2, 28", "4, 28");
+        latencySpeedFactor = addField(panel, "LatencySpeedFactor", "6, 28", "8, 28");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -962,12 +974,12 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.text")); //$NON-NLS-1$
         lblFirmwareCommands.setToolTipText(Translations.getString(
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.toolTipText")); //$NON-NLS-1$
-        panel.add(lblFirmwareCommands, "2, 26, right, top");
+        panel.add(lblFirmwareCommands, "2, 30, right, top");
         firmwareCommands = new JTextArea();
         firmwareCommands.setRows(4);
         JScrollPane firmwareScroll = new JScrollPane(firmwareCommands);
         firmwareScroll.setPreferredSize(new Dimension(200, 70));
-        panel.add(firmwareScroll, "4, 26, 5, 1, fill, fill");
+        panel.add(firmwareScroll, "4, 30, 5, 1, fill, fill");
     }
 
     private JTextField addField(JPanel panel, String key, String labelConstraints,
@@ -1071,6 +1083,10 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "noiseFrames", noiseFrames, "text", integerConverter);
         addWrappedBinding(diagnostics, "backlashRepeats", backlashRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "settleRepeats", settleRepeats, "text", integerConverter);
+        addWrappedBinding(diagnostics, "stressSpeedFactors", stressSpeedFactors, "text");
+        addWrappedBinding(diagnostics, "stressCycles", stressCycles, "text", integerConverter);
+        addWrappedBinding(diagnostics, "stressDistanceMm", stressDistance, "text", doubleConverter);
+        addWrappedBinding(diagnostics, "latencySpeedFactor", latencySpeedFactor, "text", doubleConverter);
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

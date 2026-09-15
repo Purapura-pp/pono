@@ -25,6 +25,7 @@ import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -128,6 +129,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * lit fiducial holds a tenth of that; more says the lighting or the exposure is marginal.
      */
     private static final double VISION_NOISE_TOLERANCE_PIXELS = 0.5;
+    /** Pipeline delay a camera may have before its settle wait has to be told about it. */
+    private static final double CAMERA_LATENCY_TOLERANCE_SECONDS = 0.1;
+    /** Drift after a run of fast moves that is more than the machine repeats to anyway. */
+    private static final double LOST_STEPS_TOLERANCE_MM = 0.02;
     /** Margin over the measured backlash for a one-sided offset, which has to clear it. */
     private static final double BACKLASH_OFFSET_MARGIN = 1.2;
     /** Margin over the measured settle time for a fixed wait, which has to outlast it. */
@@ -155,13 +160,33 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
          * the camera and this is what the camera's own scatter is.
          */
         VisionNoise,
+        /** How late the camera's frames are, which the settle measurements are read through. */
+        CameraLatency,
         Kinematics,
+        /** Whether fast travel loses steps, which the timing above cannot see. */
+        LostSteps,
         XyPositioning,
         CameraSettle,
         Homing,
         RotationBacklash,
         ConfigSnapshot
     }
+
+    /** Speed factors the stress test drives at; 1.0 is the configured limit and the top. */
+    @Element(required = false)
+    private String stressSpeedFactors = "0.25, 0.5, 0.75, 1";
+
+    /** Back-and-forth cycles per speed factor of the stress test. */
+    @Attribute(required = false)
+    private int stressCycles = 20;
+
+    /** Length of one leg of the stress test, centred on the fiducial. */
+    @Attribute(required = false)
+    private double stressDistanceMm = 100;
+
+    /** Speed factor of the latency test's move: slow enough that nothing vibrates afterwards. */
+    @Attribute(required = false)
+    private double latencySpeedFactor = 0.05;
 
     /**
      * Ten rather than five: the spread of five samples says what it is to about a third, which
@@ -524,6 +549,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         for (MachineDiagnosticsResults.VisionNoise noise : results.getVisionNoise()) {
             findVisionNoiseIssue(solutions, noise, measuredWhen(results, TestGroup.VisionNoise));
         }
+        for (MachineDiagnosticsResults.CameraLatency latency : results.getCameraLatency()) {
+            findCameraLatencyIssue(solutions, latency,
+                    measuredWhen(results, TestGroup.CameraLatency));
+        }
+        findLostStepsIssues(solutions, results);
         for (ControllerLimits limits : results.getControllerLimits()) {
             ReferenceControllerAxis axis = controllerAxis(limits.getAxisId());
             if (axis != null) {
@@ -827,6 +857,110 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
+     * A fixed settle wait shorter than the camera's own pipeline delay: the frame captured at the
+     * end of the wait was taken before the wait began. The measured settle time already includes
+     * the latency, so this only fires when the settle group has not been run; once it has, the
+     * settle issue carries the same conclusion with the better number.
+     */
+    private void findCameraLatencyIssue(Solutions solutions,
+            MachineDiagnosticsResults.CameraLatency latency, String when) {
+        ReferenceCamera camera = camera(latency.getCameraId());
+        if (camera == null || camera.getSettleMethod() != AbstractSettlingCamera.SettleMethod.FixedTime) {
+            return;
+        }
+        long configured = camera.getSettleTimeMs();
+        if (configured >= latency.getLatencySeconds() * 1000) {
+            return;
+        }
+        if (lastResults != null) {
+            for (Settling settling : lastResults.getSettling()) {
+                if (settling.getCameraId().equals(camera.getId())) {
+                    return;
+                }
+            }
+        }
+        solutions.add(new SettleTimeIssue(camera,
+                "The camera waits a fixed time shorter than the delay of its own frames.",
+                "Wait at least as long as the camera's frames were measured being late.",
+                Solutions.Severity.Error,
+                String.format("Frames from %s arrive %.0f ms late, measured on %s from frames that "
+                        + "still showed a move after the controller had reported it complete, and "
+                        + "the camera waits %d ms before it captures. Whatever is captured after "
+                        + "a move is therefore an image from before the move finished, whatever "
+                        + "the machine has settled to since. The offered wait covers the latency "
+                        + "with a margin; the camera settling test measures the mechanical "
+                        + "settling on top of it.", camera.getName(),
+                        latency.getLatencySeconds() * 1000, when, configured),
+                configured, settleMilliseconds(latency.getLatencySeconds() * SETTLE_MARGIN)));
+    }
+
+    /**
+     * An axis that lost steps at some speed factor. The offered fix is the feed rate scaled to
+     * the highest factor that came back clean, which is the one thing that is known to be safe;
+     * acceleration is the other suspect and the description says so.
+     */
+    private void findLostStepsIssues(Solutions solutions, MachineDiagnosticsResults results) {
+        Map<String, List<MachineDiagnosticsResults.LostSteps>> byAxis = new LinkedHashMap<>();
+        for (MachineDiagnosticsResults.LostSteps loss : results.getLostSteps()) {
+            byAxis.computeIfAbsent(loss.getAxisId(), k -> new ArrayList<>()).add(loss);
+        }
+        String when = measuredWhen(results, TestGroup.LostSteps);
+        for (Map.Entry<String, List<MachineDiagnosticsResults.LostSteps>> entry : byAxis.entrySet()) {
+            ReferenceControllerAxis axis = controllerAxis(entry.getKey());
+            if (axis == null) {
+                continue;
+            }
+            double lowestLosingFactor = Double.NaN;
+            double highestCleanFactor = 0;
+            double worstDrift = 0;
+            double travel = 0;
+            double feedRateAtTest = 0;
+            for (MachineDiagnosticsResults.LostSteps loss : entry.getValue()) {
+                boolean lost = Math.abs(loss.getDriftMm()) > LOST_STEPS_TOLERANCE_MM;
+                if (lost) {
+                    if (Double.isNaN(lowestLosingFactor) || loss.getSpeedFactor() < lowestLosingFactor) {
+                        lowestLosingFactor = loss.getSpeedFactor();
+                        worstDrift = loss.getDriftMm();
+                        travel = loss.getTravelMm();
+                    }
+                }
+                else if (loss.getSpeedFactor() > highestCleanFactor) {
+                    highestCleanFactor = loss.getSpeedFactor();
+                }
+                feedRateAtTest = loss.getFeedRateAtTest();
+            }
+            if (Double.isNaN(lowestLosingFactor)) {
+                continue;
+            }
+            double configured = axis.getMotionLimit(1);
+            if (feedRateAtTest > 0 && configured < feedRateAtTest * lowestLosingFactor) {
+                // Already slowed below the speed that lost steps since the measurement.
+                continue;
+            }
+            double offered = (feedRateAtTest > 0 ? feedRateAtTest : configured)
+                    * (highestCleanFactor > 0 ? highestCleanFactor : 0.5);
+            solutions.add(new LengthSettingIssue(axis,
+                    "The axis loses steps at the speed it is planned with.",
+                    "Lower the feed rate to the highest speed that was measured arriving where "
+                            + "it was sent.",
+                    Solutions.Severity.Error, WIKI_MACHINE_AXES,
+                    "Feed rate per second",
+                    "The feed rate the axis will be planned with.",
+                    String.format("After %.0f mm of travel at %.2f of its feed rate on %s, axis %s "
+                            + "came back %.4f mm from where it started, and the controller's "
+                            + "position count did not know. At %.2f of the feed rate it came back "
+                            + "where it started. The offered feed rate is that fraction of the one "
+                            + "it was tested with; if the loss is from acceleration rather than "
+                            + "speed, lowering the acceleration instead would let the feed rate "
+                            + "stay.", travel, lowestLosingFactor, when, axis.getName(), worstDrift,
+                            highestCleanFactor),
+                    axis.getFeedratePerSecond(),
+                    new Length(offered, AxesLocation.getUnits()),
+                    (value, solved) -> axis.setFeedratePerSecond(value)));
+        }
+    }
+
+    /**
      * Homing scatter against visual homing. The endstops repeat to whatever precision they
      * repeat to, and that scatter moves the origin of every coordinate in the machine; visual
      * homing pins the origin to a fiducial instead, which is an offer Issues and Solutions
@@ -1095,6 +1229,46 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     // Settings.
+
+    public String getStressSpeedFactors() {
+        return stressSpeedFactors;
+    }
+
+    public void setStressSpeedFactors(String stressSpeedFactors) {
+        String old = this.stressSpeedFactors;
+        this.stressSpeedFactors = stressSpeedFactors;
+        firePropertyChange("stressSpeedFactors", old, stressSpeedFactors);
+    }
+
+    public int getStressCycles() {
+        return stressCycles;
+    }
+
+    public void setStressCycles(int stressCycles) {
+        int old = this.stressCycles;
+        this.stressCycles = Math.max(1, stressCycles);
+        firePropertyChange("stressCycles", old, this.stressCycles);
+    }
+
+    public double getStressDistanceMm() {
+        return stressDistanceMm;
+    }
+
+    public void setStressDistanceMm(double stressDistanceMm) {
+        double old = this.stressDistanceMm;
+        this.stressDistanceMm = stressDistanceMm;
+        firePropertyChange("stressDistanceMm", old, stressDistanceMm);
+    }
+
+    public double getLatencySpeedFactor() {
+        return latencySpeedFactor;
+    }
+
+    public void setLatencySpeedFactor(double latencySpeedFactor) {
+        double old = this.latencySpeedFactor;
+        this.latencySpeedFactor = latencySpeedFactor;
+        firePropertyChange("latencySpeedFactor", old, latencySpeedFactor);
+    }
 
     public int getFramesPerPoint() {
         return framesPerPoint;
@@ -1529,8 +1703,14 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             case VisionNoise:
                 testVisionNoise(machine, report);
                 break;
+            case CameraLatency:
+                testCameraLatency(machine, report);
+                break;
             case Kinematics:
                 testKinematics(machine, report);
+                break;
+            case LostSteps:
+                testLostSteps(machine, report);
                 break;
             case XyPositioning:
                 testXyPositioning(machine, report);
@@ -2101,6 +2281,274 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             kept.add(noise);
             results.setVisionNoise(kept);
         });
+    }
+
+    // Camera latency: how old a frame is when it arrives.
+
+    /**
+     * Frames are taken continuously while the camera makes a slow move onto the fiducial. At the
+     * speed used nothing vibrates, so the image stops moving the instant the axis does; frames
+     * that still show the motion after the controller has reported stillstand are frames that
+     * were already old when they arrived. That is the delay of the camera's pipeline - the
+     * buffering in the driver and the capture stack - and every settle wait has to exceed it
+     * before the frame it captures is even of the present.
+     */
+    private void testCameraLatency(ReferenceMachine machine, MachineDiagnosticsReport report)
+            throws Exception {
+        report.section("Camera latency, from frames still showing a move the controller "
+                + "reported complete");
+        ReferenceHead head = requireHead(machine);
+        ReferenceCamera camera = requireDownLookingCamera(head);
+        Location fiducial = requireFiducial(head);
+        Length diameter = head.getCalibrationPrimaryFiducialDiameter();
+        ReferenceControllerAxis xAxis = findControllerAxis(camera, Axis.Type.X);
+        if (xAxis == null) {
+            throw new Exception("The camera has no X axis to move with.");
+        }
+        double upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters).getX();
+        int diameterPixels = (int) Math.round(
+                diameter.convertToUnits(LengthUnit.Millimeters).getValue() / upp);
+        double distance = 3.0;
+        double speed = Math.max(0.01, Math.min(1.0, latencySpeedFactor));
+
+        // Start beside the fiducial, from the same side each time.
+        approachFrom(camera, xAxis, fiducial, -10, 1.0);
+        Location start = fiducial.add(new Location(LengthUnit.Millimeters, -distance, 0, 0, 0));
+        camera.moveTo(start, 1.0);
+        camera.waitForCompletion(CompletionType.WaitForStillstand);
+        Thread.sleep(machineSettleMs);
+
+        // Frames are taken on a thread of their own for the whole of the move, timestamped as
+        // they arrive; the move is commanded and waited for on this one.
+        List<double[]> samples = Collections.synchronizedList(new ArrayList<>());
+        java.util.concurrent.atomic.AtomicBoolean capturing = new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicReference<Exception> captureError = new java.util.concurrent.atomic.AtomicReference<>();
+        camera.actuateLightBeforeCapture();
+        Thread grabber = new Thread(() -> {
+            try {
+                Double lastX = null;
+                Double lastY = null;
+                while (capturing.get()) {
+                    BufferedImage image = camera.capture();
+                    double t = NanosecondTime.getRuntimeSeconds();
+                    Circle circle = locateCircle(image, diameterPixels);
+                    if (circle == null) {
+                        continue;
+                    }
+                    if (lastX != null && circle.x == lastX && circle.y == lastY) {
+                        continue;
+                    }
+                    lastX = circle.x;
+                    lastY = circle.y;
+                    samples.add(new double[] { t, circle.x, circle.y });
+                }
+            }
+            catch (Exception e) {
+                captureError.set(e);
+            }
+        }, "MachineDiagnostics latency frames");
+        double tCommand;
+        double tComplete;
+        try {
+            grabber.start();
+            Thread.sleep(500);
+            tCommand = NanosecondTime.getRuntimeSeconds();
+            camera.moveTo(fiducial, speed);
+            camera.waitForCompletion(CompletionType.WaitForStillstand);
+            tComplete = NanosecondTime.getRuntimeSeconds();
+            Thread.sleep(1500);
+        }
+        finally {
+            capturing.set(false);
+            grabber.join(3000);
+            camera.actuateLightAfterCapture();
+        }
+        if (captureError.get() != null) {
+            throw captureError.get();
+        }
+        List<double[]> frames = new ArrayList<>(samples);
+        if (frames.size() < 10) {
+            throw new Exception("Too few frames with the fiducial in them to measure latency. "
+                    + "Check the fiducial diameter and the lighting.");
+        }
+        // Where the fiducial ended up in the image, from the frames of the last half second.
+        double tEnd = frames.get(frames.size() - 1)[0];
+        List<Double> finalXs = new ArrayList<>();
+        for (double[] f : frames) {
+            if (f[0] > tEnd - 0.5) {
+                finalXs.add(f[1]);
+            }
+        }
+        double finalX = MachineDiagnosticsMath.median(finalXs);
+        double threshold = 1.0; // px: the move is 3 mm, hundreds of pixels
+        Double tFirstMotion = null;
+        Double tLastMotion = null;
+        double startX = frames.get(0)[1];
+        for (double[] f : frames) {
+            if (tFirstMotion == null && Math.abs(f[1] - startX) > threshold) {
+                tFirstMotion = f[0];
+            }
+            if (Math.abs(f[1] - finalX) > threshold) {
+                tLastMotion = f[0];
+            }
+        }
+        double fps = (frames.size() - 1) / (tEnd - frames.get(0)[0]);
+        double framePeriod = fps > 0 ? 1 / fps : 0;
+        List<Object[]> rows = new ArrayList<>();
+        for (double[] f : frames) {
+            rows.add(new Object[] { f[0] - tCommand, f[1] - finalX, f[2] });
+        }
+        report.writeCsv("camera-latency.csv",
+                new String[] { "t_from_command_s", "dx_from_final_px", "y_px" }, rows);
+        if (tLastMotion == null || tFirstMotion == null) {
+            throw new Exception("The move was not seen in the frames at all; the fiducial may be "
+                    + "outside the search window at the start position.");
+        }
+        double latency = Math.max(0, tLastMotion - tComplete) + framePeriod / 2;
+        double commandToImage = tFirstMotion - tCommand;
+        double buffered = latency * fps;
+        report.line("  %d frames at %.1f frames/s over the move", frames.size(), fps);
+        report.line("  move commanded at 0 ms, controller reported complete at %.0f ms",
+                (tComplete - tCommand) * 1000);
+        report.line("  first frame showing motion at %.0f ms, last at %.0f ms",
+                (tFirstMotion - tCommand) * 1000, (tLastMotion - tCommand) * 1000);
+        report.line("  pipeline latency %.0f ms, about %.1f frames", latency * 1000, buffered);
+        log("Camera latency: %.0f ms (%.1f frames at %.1f fps)", latency * 1000, buffered, fps);
+        Severity severity = latency > CAMERA_LATENCY_TOLERANCE_SECONDS ? Severity.Warning
+                : Severity.Info;
+        report.finding(severity, "%s delivers frames %.0f ms late: after the controller reported "
+                + "the move complete, %.1f more frames still showed it moving. A frame captured "
+                + "sooner than that after any move is a frame of the past.", camera.getName(),
+                latency * 1000, buffered);
+        report.finding(Severity.Info, "From the move command to the first frame showing motion "
+                + "took %.0f ms, which is the command round trip and the camera latency together.",
+                commandToImage * 1000);
+        if (camera instanceof AbstractSettlingCamera) {
+            AbstractSettlingCamera settling = (AbstractSettlingCamera) camera;
+            if (settling.getSettleMethod() == AbstractSettlingCamera.SettleMethod.FixedTime
+                    && settling.getSettleTimeMs() < latency * 1000) {
+                report.finding(Severity.Problem, "%s waits a fixed %d ms before capturing, less "
+                        + "than its own %.0f ms of latency: every capture after a move is of the "
+                        + "image before the move finished.", camera.getName(),
+                        settling.getSettleTimeMs(), latency * 1000);
+            }
+        }
+        MachineDiagnosticsResults.CameraLatency measured =
+                new MachineDiagnosticsResults.CameraLatency(camera.getId(), latency, fps, buffered);
+        recordResults(TestGroup.CameraLatency, report, results -> {
+            List<MachineDiagnosticsResults.CameraLatency> kept = new ArrayList<>();
+            for (MachineDiagnosticsResults.CameraLatency other : results.getCameraLatency()) {
+                if (!other.getCameraId().equals(camera.getId())) {
+                    kept.add(other);
+                }
+            }
+            kept.add(measured);
+            results.setCameraLatency(kept);
+        });
+    }
+
+    // Lost steps: whether fast travel arrives where it was sent.
+
+    /**
+     * The timing group says how fast the axes move; nothing in it says whether they arrived. An
+     * axis driven past what its motor can hold slips or loses steps, silently, and the
+     * controller's position count keeps going as if it had not. Here each axis makes a run of
+     * long fast moves at each speed factor and is then brought back to the fiducial from the
+     * same side as before: whatever it is off by is what the run lost.
+     */
+    private void testLostSteps(ReferenceMachine machine, MachineDiagnosticsReport report)
+            throws Exception {
+        report.section("Lost steps, from returning to the fiducial after a run of fast moves");
+        ReferenceHead head = requireHead(machine);
+        ReferenceCamera camera = requireDownLookingCamera(head);
+        Location fiducial = requireFiducial(head);
+        Length diameter = head.getCalibrationPrimaryFiducialDiameter();
+        double[] speeds = MachineDiagnosticsMath.parseSeries(stressSpeedFactors);
+        int cycles = Math.max(1, stressCycles);
+        List<Object[]> rows = new ArrayList<>();
+        List<MachineDiagnosticsResults.LostSteps> conclusions = new ArrayList<>();
+        report.line("  %d cycles of %.0f mm each way per speed factor; the machine is brought back "
+                + "to the fiducial from the same side before and after.", cycles, stressDistanceMm);
+        report.line("  %-6s %-8s %-12s %-12s %-14s", "axis", "speed", "travel mm", "drift mm",
+                "per 1000 mm");
+        for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
+            ReferenceControllerAxis axis = findControllerAxis(camera, type);
+            if (axis == null) {
+                continue;
+            }
+            Location unit = unitLocation(type);
+            // The leg is centred on the fiducial and clipped to the axis travel.
+            double half = stressDistanceMm / 2;
+            Location low = fiducial.add(unit.multiply(-half, -half, 0, 0));
+            Location high = fiducial.add(unit.multiply(half, half, 0, 0));
+            double achieved = Math.abs(axisCoordinate(camera, axis, high)
+                    - axisCoordinate(camera, axis, low));
+            if (achieved < stressDistanceMm * 0.5) {
+                report.line("  %s: only %.0f mm of travel around the fiducial, skipped.",
+                        axis.getName(), achieved);
+                continue;
+            }
+            double travelPerCycle = 2 * achieved;
+            approachFrom(camera, axis, fiducial, -10, 1.0);
+            Detection before = detect(machine, camera, fiducial, diameter,
+                    String.format("Lost steps %s before", axis.getName()));
+            for (double speed : speeds) {
+                checkAborted();
+                for (int cycle = 0; cycle < cycles; cycle++) {
+                    checkAborted();
+                    camera.moveTo(low, speed);
+                    camera.moveTo(high, speed);
+                }
+                camera.waitForCompletion(CompletionType.WaitForStillstand);
+                approachFrom(camera, axis, fiducial, -10, 1.0);
+                Detection after = detect(machine, camera, fiducial, diameter,
+                        String.format("Lost steps %s %.2fx", axis.getName(), speed));
+                Location drift = after.location.convertToUnits(LengthUnit.Millimeters)
+                        .subtract(before.location.convertToUnits(LengthUnit.Millimeters));
+                double along = type == Axis.Type.X ? drift.getX() : drift.getY();
+                double travel = travelPerCycle * cycles;
+                double perMetre = along * 1000 / travel;
+                rows.add(row(new Object[] { axis.getName(), speed, cycles, travel, drift.getX(),
+                        drift.getY(), along, perMetre }, elapsed(), after));
+                report.line("  %-6s %-8.2f %-12.0f %-12.4f %-14.4f", axis.getName(), speed, travel,
+                        along, perMetre);
+                log("%s at %.2fx: drift %.4f mm over %.0f mm", axis.getName(), speed, along, travel);
+                conclusions.add(new MachineDiagnosticsResults.LostSteps(axis.getId(), speed,
+                        travel, along, axis.getMotionLimit(1)));
+                // Each speed is measured against the same starting point, so a loss at one
+                // speed does not hide a gain at the next: reset the reference after each.
+                before = after;
+            }
+        }
+        report.writeCsv("lost-steps.csv", columns(new String[] { "axis", "speed", "cycles",
+                "travel_mm", "drift_x_mm", "drift_y_mm", "drift_along_mm", "drift_per_1000mm" }),
+                rows);
+        for (MachineDiagnosticsResults.LostSteps loss : conclusions) {
+            ReferenceControllerAxis axis = controllerAxis(loss.getAxisId());
+            String name = axis != null ? axis.getName() : loss.getAxisId();
+            Double floor = noiseFloorMm(camera);
+            double significant = Math.max(LOST_STEPS_TOLERANCE_MM,
+                    floor != null ? floor * 4 : 0);
+            if (Math.abs(loss.getDriftMm()) > significant) {
+                report.finding(Severity.Problem, "Axis %s came back %.4f mm off after %.0f mm of "
+                        + "travel at %.2f of its speed: it is losing steps or slipping at that "
+                        + "speed, and the controller's position count does not know.%s", name,
+                        loss.getDriftMm(), loss.getTravelMm(), loss.getSpeedFactor(),
+                        againstNoiseFloor(camera, Math.abs(loss.getDriftMm())));
+            }
+        }
+        if (!conclusions.isEmpty()) {
+            boolean anyLoss = false;
+            for (MachineDiagnosticsResults.LostSteps loss : conclusions) {
+                anyLoss |= Math.abs(loss.getDriftMm()) > LOST_STEPS_TOLERANCE_MM;
+            }
+            if (!anyLoss) {
+                report.finding(Severity.Info, "No axis lost steps at any speed factor up to the "
+                        + "configured limit over %.0f mm of travel per factor.",
+                        conclusions.get(0).getTravelMm());
+            }
+        }
+        recordResults(TestGroup.LostSteps, report, results -> results.setLostSteps(conclusions));
     }
 
     // Test group 3: where the machine actually ends up.

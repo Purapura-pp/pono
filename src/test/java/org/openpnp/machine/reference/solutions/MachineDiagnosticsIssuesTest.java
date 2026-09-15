@@ -66,6 +66,10 @@ public class MachineDiagnosticsIssuesTest {
             "Units per Pixel does not agree with what the camera sees across its field of view.";
     private static final String CAMERA_IS_NOISY =
             "The camera cannot locate a standing fiducial to within half a pixel from frame to frame.";
+    private static final String WAIT_SHORTER_THAN_LATENCY =
+            "The camera waits a fixed time shorter than the delay of its own frames.";
+    private static final String LOSES_STEPS =
+            "The axis loses steps at the speed it is planned with.";
 
     @TempDir
     Path tempDir;
@@ -358,6 +362,77 @@ public class MachineDiagnosticsIssuesTest {
                 0.12, 0.0016, 0.4, 30, 30)));
 
         assertFalse(wordings(results).contains(CAMERA_IS_NOISY));
+    }
+
+    @Test
+    public void aSettleWaitShorterThanTheCameraLatencyIsRaisedAndLengthened() throws Exception {
+        camera.setSettleMethod(SettleMethod.FixedTime);
+        camera.setSettleTimeMs(50);
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setCameraLatency(List.of(new MachineDiagnosticsResults.CameraLatency(
+                camera.getId(), 0.180, 30, 5.4)));
+
+        issue(results, WAIT_SHORTER_THAN_LATENCY).setState(Solutions.State.Solved);
+
+        assertTrue(camera.getSettleTimeMs() >= 180,
+                "the wait has to cover the latency, got " + camera.getSettleTimeMs());
+    }
+
+    @Test
+    public void theLatencyIssueStepsAsideOnceSettlingWasMeasured() {
+        camera.setSettleMethod(SettleMethod.FixedTime);
+        camera.setSettleTimeMs(50);
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setCameraLatency(List.of(new MachineDiagnosticsResults.CameraLatency(
+                camera.getId(), 0.180, 30, 5.4)));
+        results.setSettling(List.of(new Settling(camera.getId(), 0.4, 100)));
+        diagnostics.setLastResults(results);
+
+        List<String> reported = wordings(results);
+
+        assertFalse(reported.contains(WAIT_SHORTER_THAN_LATENCY),
+                "the settle issue carries the same conclusion with the better number");
+        assertTrue(reported.contains(SETTLES_AFTER_THE_WAIT));
+    }
+
+    @Test
+    public void lostStepsLowerTheFeedRateToTheHighestCleanSpeed() throws Exception {
+        xAxis.setFeedratePerSecond(new Length(400, LengthUnit.Millimeters));
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setLostSteps(List.of(
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.25, 4000, 0.003, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.5, 4000, 0.004, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.75, 4000, 0.310, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 1.0, 4000, 1.250, 400)));
+
+        Solutions.Issue issue = issue(results, LOSES_STEPS);
+        assertTrue(issue.getExtendedDescription().contains("0.3100 mm"),
+                "the first speed that lost steps is the one described");
+        issue.setState(Solutions.State.Solved);
+
+        assertEquals(200, millimetres(xAxis.getFeedratePerSecond()),
+                "half the tested feed rate: the highest factor that came back clean");
+    }
+
+    @Test
+    public void anAxisThatArrivedAtEverySpeedIsNotReported() {
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setLostSteps(List.of(
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.5, 4000, 0.004, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 1.0, 4000, -0.008, 400)));
+
+        assertFalse(wordings(results).contains(LOSES_STEPS));
+    }
+
+    @Test
+    public void lostStepsAreNotReportedOnceTheAxisWasSlowedBelowThatSpeed() {
+        xAxis.setFeedratePerSecond(new Length(150, LengthUnit.Millimeters));
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setLostSteps(List.of(
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.5, 4000, 0.004, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 1.0, 4000, 0.9, 400)));
+
+        assertFalse(wordings(results).contains(LOSES_STEPS));
     }
 
     /** The floor is kept per camera, and a new run replaces only the camera it measured. */

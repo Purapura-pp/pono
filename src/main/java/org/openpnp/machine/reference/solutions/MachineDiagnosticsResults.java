@@ -360,6 +360,104 @@ public class MachineDiagnosticsResults {
         }
     }
 
+    /**
+     * How far an axis drifted from the fiducial after a stretch of fast travel: lost steps, or
+     * slipping, per speed factor tried.
+     */
+    public static class LostSteps {
+        @Attribute
+        private String axisId;
+        @Attribute
+        private double speedFactor;
+        @Attribute
+        private double travelMm;
+        @Attribute
+        private double driftMm;
+        @Attribute(required = false)
+        private double feedRateAtTest;
+
+        LostSteps() {
+        }
+
+        public LostSteps(String axisId, double speedFactor, double travelMm, double driftMm,
+                double feedRateAtTest) {
+            this.axisId = axisId;
+            this.speedFactor = speedFactor;
+            this.travelMm = travelMm;
+            this.driftMm = driftMm;
+            this.feedRateAtTest = feedRateAtTest;
+        }
+
+        public String getAxisId() {
+            return axisId;
+        }
+
+        public double getSpeedFactor() {
+            return speedFactor;
+        }
+
+        public double getTravelMm() {
+            return travelMm;
+        }
+
+        public double getDriftMm() {
+            return driftMm;
+        }
+
+        /** The feed rate the axis was planned with when this was measured. */
+        public double getFeedRateAtTest() {
+            return feedRateAtTest;
+        }
+
+        /** Drift per 1000 mm of travel, which is the figure a job's worth of moves multiplies. */
+        public double getDriftPerMetre() {
+            return travelMm > 0 ? driftMm * 1000 / travelMm : 0;
+        }
+    }
+
+    /**
+     * How long after the controller reports a move complete the camera is still delivering
+     * frames of the motion: the delay of the camera's pipeline, which every settle wait must
+     * exceed before the image it captures is even of the present.
+     */
+    public static class CameraLatency {
+        @Attribute
+        private String cameraId;
+        @Attribute
+        private double latencySeconds;
+        @Attribute
+        private double framesPerSecond;
+        @Attribute
+        private double bufferedFrames;
+
+        CameraLatency() {
+        }
+
+        public CameraLatency(String cameraId, double latencySeconds, double framesPerSecond,
+                double bufferedFrames) {
+            this.cameraId = cameraId;
+            this.latencySeconds = latencySeconds;
+            this.framesPerSecond = framesPerSecond;
+            this.bufferedFrames = bufferedFrames;
+        }
+
+        public String getCameraId() {
+            return cameraId;
+        }
+
+        public double getLatencySeconds() {
+            return latencySeconds;
+        }
+
+        public double getFramesPerSecond() {
+            return framesPerSecond;
+        }
+
+        public double getBufferedFrames() {
+            return bufferedFrames;
+        }
+    }
+
     /** When a test group last finished, and the report it wrote. */
     public static class Run {
         @Attribute
@@ -420,7 +518,39 @@ public class MachineDiagnosticsResults {
     private ArrayList<VisionNoise> visionNoise = new ArrayList<>();
 
     @ElementList(required = false)
+    private ArrayList<LostSteps> lostSteps = new ArrayList<>();
+
+    @ElementList(required = false)
+    private ArrayList<CameraLatency> cameraLatency = new ArrayList<>();
+
+    @ElementList(required = false)
     private ArrayList<Run> runs = new ArrayList<>();
+
+    public List<LostSteps> getLostSteps() {
+        return lostSteps;
+    }
+
+    public void setLostSteps(List<LostSteps> lostSteps) {
+        this.lostSteps = new ArrayList<>(lostSteps);
+    }
+
+    public List<CameraLatency> getCameraLatency() {
+        return cameraLatency;
+    }
+
+    public void setCameraLatency(List<CameraLatency> cameraLatency) {
+        this.cameraLatency = new ArrayList<>(cameraLatency);
+    }
+
+    /** The pipeline delay measured on a camera, or null if it was never measured. */
+    public CameraLatency getCameraLatency(String cameraId) {
+        for (CameraLatency latency : cameraLatency) {
+            if (latency.getCameraId().equals(cameraId)) {
+                return latency;
+            }
+        }
+        return null;
+    }
 
     public List<VisionNoise> getVisionNoise() {
         return visionNoise;
