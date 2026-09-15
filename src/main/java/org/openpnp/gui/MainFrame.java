@@ -99,6 +99,8 @@ import org.openpnp.gui.support.SwingUserInteraction;
 import org.openpnp.gui.support.CameraItem;
 import org.openpnp.spi.Camera;
 import javax.swing.BorderFactory;
+import javax.swing.SwingConstants;
+import java.awt.GridBagLayout;
 import org.openpnp.gui.shell.CameraStage;
 import org.openpnp.gui.shell.CameraToolsBar;
 import org.openpnp.gui.shell.PillBar;
@@ -106,6 +108,7 @@ import org.openpnp.gui.shell.Chip;
 import org.openpnp.gui.shell.CommandPalette;
 import org.openpnp.gui.shell.DroPanel;
 import org.openpnp.gui.shell.InspectorPanel;
+import org.openpnp.gui.shell.JogCard;
 import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.shell.NavigationRail;
 import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
@@ -271,6 +274,7 @@ public class MainFrame extends JFrame {
     private JPanel contentPane;
     private NavigationRail navigationRail;
     private InspectorPanel inspectorPanel;
+    private JogCard jogCard;
     private JSplitPane splitPaneInspector;
     private CameraStage cameraStage;
     private OverlayCard instructionsCard;
@@ -684,14 +688,21 @@ public class MainFrame extends JFrame {
         panelCameraAndInstructions.setLayout(new BorderLayout(0, 0));
         panelMachine.add(panelCameraAndInstructions, BorderLayout.CENTER);
 
+        // The stylesheet's .instr: a 640 pixel banner with a 3 pixel accent rule down its left,
+        // the activity mark in a circle, the title over the text, and the buttons at the right.
         panelInstructions = new JPanel();
         panelInstructions.setVisible(false);
-        panelInstructions.setBorder(new EmptyBorder(4, 4, 4, 4));
-        panelInstructions.setLayout(new BorderLayout(0, 0));
+        panelInstructions.setOpaque(false);
+        panelInstructions.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 3, 0, 0, org.openpnp.gui.shell.Ui.accent()),
+                new EmptyBorder(6, 8, 6, 4)));
+        panelInstructions.setLayout(new BorderLayout(12, 0));
+        panelInstructions.setPreferredSize(new Dimension(640, 0));
 
         // The wizard sets this per step, which is what the etched border's title used to carry.
         lblInstructionsTitle = new JLabel(Translations.getString("General.Instructions")); //$NON-NLS-1$
-        panelInstructions.add(lblInstructionsTitle, BorderLayout.NORTH);
+        lblInstructionsTitle.setFont(org.openpnp.gui.shell.Ui.font(org.openpnp.gui.shell.Ui.BASE, Font.BOLD));
+        lblInstructionsTitle.setBorder(new EmptyBorder(0, 0, 2, 0));
 
         panelInstructionActions = new JPanel();
         panelInstructionActions.setAlignmentY(Component.BOTTOM_ALIGNMENT);
@@ -704,7 +715,9 @@ public class MainFrame extends JFrame {
         flowLayout_2.setHgap(0);
         panelInstructionActions.add(panel_2, BorderLayout.SOUTH);
 
-        btnInstructionsCancel = new JButton(Translations.getString("General.Cancel")); //$NON-NLS-1$
+        btnInstructionsCancel = org.openpnp.gui.shell.Ui.button(
+                Translations.getString("General.Cancel"), null, //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.Size.Sm, org.openpnp.gui.shell.Ui.Variant.Default);
         btnInstructionsCancel.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent arg0) {
                 if (instructionsCancelActionListener != null) {
@@ -714,7 +727,11 @@ public class MainFrame extends JFrame {
         });
         panel_2.add(btnInstructionsCancel);
 
-        btnInstructionsNext = new JButton(Translations.getString("General.Next")); //$NON-NLS-1$
+        btnInstructionsNext = org.openpnp.gui.shell.Ui.button(
+                Translations.getString("General.Next"), //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.iconSm("chevright"), //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.Size.Sm, org.openpnp.gui.shell.Ui.Variant.Primary);
+        btnInstructionsNext.setHorizontalTextPosition(SwingConstants.LEFT);
         btnInstructionsNext.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent arg0) {
                 if (instructionsProceedActionListener != null) {
@@ -725,22 +742,41 @@ public class MainFrame extends JFrame {
         panel_2.add(btnInstructionsNext);
 
         panel_1 = new JPanel();
+        panel_1.setOpaque(false);
         panelInstructions.add(panel_1, BorderLayout.CENTER);
         panel_1.setLayout(new BorderLayout(0, 0));
+        panel_1.add(lblInstructionsTitle, BorderLayout.NORTH);
+        flowLayout_2.setHgap(6);
+        panel_2.setOpaque(false);
+        panelInstructionActions.setOpaque(false);
+        panelInstructionActions.remove(panel_2);
+        panelInstructionActions.setLayout(new GridBagLayout());
+        panelInstructionActions.add(panel_2);
 
         lblInstructions = new JTextPane();
         // does not seem to work with html
         //lblInstructions.setFont(new Font("Lucida Grande", Font.PLAIN, 14)); //$NON-NLS-1$
         // instead use the HONOR_DISPLAY_PROPERTIES to set the proper system dialog font and size 
         lblInstructions.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
-        lblInstructions.setBackground(UIManager.getColor("Panel.background")); //$NON-NLS-1$
+        lblInstructions.setOpaque(false);
+        lblInstructions.setFont(org.openpnp.gui.shell.Ui.font(12f));
+        lblInstructions.setForeground(org.openpnp.gui.shell.Ui.text2());
         lblInstructions.setContentType("text/html"); //$NON-NLS-1$
         lblInstructions.setEditable(false);
         panel_1.add(lblInstructions);
 
         labelIcon = new JLabel(); 
         labelIcon.setIcon(Icons.processActivity1Icon);
-        panelInstructions.add(labelIcon, BorderLayout.WEST);
+        labelIcon.setHorizontalAlignment(SwingConstants.CENTER);
+        org.openpnp.gui.shell.RoundedPanel stepCircle = new org.openpnp.gui.shell.RoundedPanel(34,
+                org.openpnp.gui.shell.Ui::accentSoft, () -> null);
+        stepCircle.setLayout(new BorderLayout());
+        stepCircle.setPreferredSize(new Dimension(34, 34));
+        stepCircle.add(labelIcon, BorderLayout.CENTER);
+        JPanel stepHolder = new JPanel(new GridBagLayout());
+        stepHolder.setOpaque(false);
+        stepHolder.add(stepCircle);
+        panelInstructions.add(stepHolder, BorderLayout.WEST);
 
         machineControlsPanel = new MachineControlsPanel(configuration, jobPanel);
         droPanel = new DroPanel(configuration);
@@ -800,7 +836,12 @@ public class MainFrame extends JFrame {
         // Ctrl-Shift-J folds the jog controls off the camera image and back. A bare J would fire
         // whenever the focus is not in a text field, which includes every table in the window.
         hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_J, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.toggleJogControlsAction);
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        jogCard.toggleAction.actionPerformed(e);
+                    }
+                });
 
         isShiftDown = false;
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(
@@ -966,7 +1007,8 @@ public class MainFrame extends JFrame {
         // The readout goes bottom left and the machine controls bottom right, as the mockups have
         // them; the instructions arrive at the top, over the image they are talking about.
         cameraStage.overlay(droPanel, Anchor.SouthWest);
-        cameraStage.overlay(machineControlsPanel, Anchor.SouthEast);
+        jogCard = new JogCard(configuration, machineControlsPanel);
+        cameraStage.anchor(jogCard, Anchor.SouthEast);
         instructionsCard = cameraStage.overlay(panelInstructions, Anchor.North);
         instructionsCard.setVisible(false);
         panelCameraAndInstructions.add(cameraStage, BorderLayout.CENTER);

@@ -158,6 +158,20 @@ public class JogControlsPanel extends JPanel {
         return boardProtectionCheck.isSelected();
     }
 
+    public void setBoardProtectionEnabled(boolean enabled) {
+        boardProtectionCheck.setSelected(enabled);
+    }
+
+    /** The five-step distance control, for the card on the image to show. */
+    public IncrementSelector getIncrementSelector() {
+        return incrementSelector;
+    }
+
+    /** The speed slider, for the card on the image to show. */
+    public JSlider getSpeedSlider() {
+        return speedSlider;
+    }
+
     private void jog(final int x, final int y, final int z, final int c) {
         if(UiUtils.isModalDialogBoxOpen()) {
             Logger.info("jog blocked while modal dialog is open");

@@ -50,6 +50,7 @@ public class DroPanel extends JPanel {
 
     private final JLabel[] axisLabels = new JLabel[AXES.length];
     private final JLabel[] valueLabels = new JLabel[AXES.length];
+    private final JLabel[] unitLabels = new JLabel[AXES.length];
     private final Configuration configuration;
     private boolean marked;
 
@@ -58,20 +59,30 @@ public class DroPanel extends JPanel {
         setLayout(new GridBagLayout());
         setOpaque(false);
 
+        // The stylesheet's .dro: four columns 18 pixels apart, the letter above the value with the
+        // unit tucked after it, the whole thing padded 10 by 14.
+        setBorder(new javax.swing.border.EmptyBorder(10, 14, 10, 14));
         GridBagConstraints gc = new GridBagConstraints();
         for (int i = 0; i < AXES.length; i++) {
-            axisLabels[i] = new JLabel(AXES[i], SwingConstants.CENTER);
+            axisLabels[i] = new JLabel(AXES[i], SwingConstants.LEFT);
             valueLabels[i] = new JLabel(" ", SwingConstants.RIGHT); //$NON-NLS-1$
+            unitLabels[i] = new JLabel(i == AXES.length - 1 ? "\u00b0" : "", SwingConstants.LEFT); //$NON-NLS-1$ //$NON-NLS-2$
 
-            gc.gridx = i;
-            gc.insets = new Insets(0, i == 0 ? 0 : 10, 0, 3);
+            gc.gridx = i * 2;
+            gc.gridwidth = 2;
+            gc.insets = new Insets(0, i == 0 ? 0 : 18, 0, 0);
             gc.gridy = 0;
-            gc.anchor = GridBagConstraints.SOUTH;
+            gc.anchor = GridBagConstraints.SOUTHWEST;
             add(axisLabels[i], gc);
 
             gc.gridy = 1;
+            gc.gridwidth = 1;
             gc.anchor = GridBagConstraints.EAST;
             add(valueLabels[i], gc);
+            gc.gridx = i * 2 + 1;
+            gc.insets = new Insets(0, 3, 0, 0);
+            gc.anchor = GridBagConstraints.SOUTHWEST;
+            add(unitLabels[i], gc);
         }
         applyStyle();
         clear();
@@ -91,8 +102,12 @@ public class DroPanel extends JPanel {
         String format = configuration.getLengthDisplayFormat();
         double[] coordinates = { location.getX(), location.getY(), location.getZ(),
                 location.getRotation() };
+        String unit = location.getUnits() == null ? "" : location.getUnits().getShortName(); //$NON-NLS-1$
         for (int i = 0; i < AXES.length; i++) {
             valueLabels[i].setText(String.format(Locale.US, format, coordinates[i]));
+            if (i < AXES.length - 1) {
+                unitLabels[i].setText(unit);
+            }
         }
         applyColors();
     }
@@ -117,11 +132,15 @@ public class DroPanel extends JPanel {
         Object scale = UIManager.get("Pono.dro.fontScale"); //$NON-NLS-1$
         float factor = scale instanceof Number ? ((Number) scale).floatValue() : DEFAULT_FONT_SCALE;
         Font valueFont = mono.deriveFont(Font.BOLD, base.getSize2D() * factor);
-        Font axisFont = base.deriveFont(base.getSize2D() * 0.85f);
+        // The letter is 10 pixels, bold, spaced out; the unit 10 pixels, medium.
+        Font axisFont = base.deriveFont(Font.BOLD, 10f).deriveFont(
+                java.util.Map.of(java.awt.font.TextAttribute.TRACKING, 0.1f));
+        Font unitFont = base.deriveFont(10f);
 
         for (int i = 0; i < AXES.length; i++) {
             axisLabels[i].setFont(axisFont);
             valueLabels[i].setFont(valueFont);
+            unitLabels[i].setFont(unitFont);
             // Reserving the width here rather than per update keeps the numbers from shifting
             // sideways as digits come and go.
             valueLabels[i].setPreferredSize(null);
@@ -138,6 +157,7 @@ public class DroPanel extends JPanel {
         for (int i = 0; i < AXES.length; i++) {
             if (axisColor != null) {
                 axisLabels[i].setForeground(axisColor);
+                unitLabels[i].setForeground(axisColor);
             }
             if (valueColor != null) {
                 valueLabels[i].setForeground(valueColor);

@@ -334,6 +334,20 @@ public final class Ui {
                         + "toolbar.selectedBackground: $Pono.accent"); //$NON-NLS-1$
     }
 
+    /**
+     * One segment of the stylesheet's {@code .seg}: 24 high, at least 38 wide, 5 pixel arc, mono
+     * 11.5 pixel text, the accent as a fill when selected.
+     */
+    public static void seg(javax.swing.AbstractButton button) {
+        button.setFocusable(false);
+        button.setFont(mono(11.5f, Font.PLAIN));
+        button.putClientProperty(FlatClientProperties.STYLE,
+                "arc: 5; focusWidth: 0; borderWidth: 0; minimumHeight: 24; minimumWidth: 36; margin: 0,6,0,6; " //$NON-NLS-1$
+                        + "background: null; borderColor: null; foreground: $Pono.textSecondary; " //$NON-NLS-1$
+                        + "hoverBackground: $Pono.hover; hoverBorderColor: null; pressedBackground: $Pono.surface3; " //$NON-NLS-1$
+                        + "selectedBackground: $Pono.accent; selectedForeground: $Pono.onAccent"); //$NON-NLS-1$
+    }
+
     /** An icon-only pill, 7 pixel padding, whose "on" state is the surface-3 fill. */
     public static void iconPill(javax.swing.AbstractButton button) {
         pill(button);

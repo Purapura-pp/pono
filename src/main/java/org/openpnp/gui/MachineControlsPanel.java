@@ -185,6 +185,11 @@ public class MachineControlsPanel extends JPanel {
     public JogControlsPanel getJogControlsPanel() {
         return jogControlsPanel;
     }
+
+    /** The tool selector, for the card on the image to show. */
+    public JComboBox getHeadMountableCombo() {
+        return comboBoxHeadMountable;
+    }
     
     public JobPanel getJobPanel() {
     	return jobPanel;

@@ -56,15 +56,15 @@ public class IncrementSelector extends JPanel {
     private boolean applying;
 
     public IncrementSelector() {
-        setLayout(new GridLayout(1, LEVELS, 0, 0));
+        // The stylesheet's .seg: 3 pixel padding, 2 pixel gaps, 24 pixel segments.
+        setLayout(new GridLayout(1, LEVELS, 2, 0));
         setOpaque(false);
+        setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 3, 3, 3));
         ButtonGroup group = new ButtonGroup();
-        Font font = UIManager.getFont("Label.font"); //$NON-NLS-1$
         for (int index = 0; index < LEVELS; index++) {
             final int buttonLevel = index + 1;
             JToggleButton button = new JToggleButton();
-            button.setFont(font.deriveFont(font.getSize2D() * 0.9f));
-            button.setMargin(new Insets(2, 4, 2, 4));
+            Ui.seg(button);
             button.addActionListener(e -> setLevel(buttonLevel));
             group.add(button);
             add(button);
@@ -157,5 +157,22 @@ public class IncrementSelector extends JPanel {
         for (JToggleButton button : buttons) {
             button.setEnabled(enabled);
         }
+    }
+
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+        java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+        try {
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(Ui.surface2());
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+            g2.setColor(Ui.border());
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
+        }
+        finally {
+            g2.dispose();
+        }
+        super.paintComponent(g);
     }
 }
