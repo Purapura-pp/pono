@@ -1881,6 +1881,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         running = true;
         aborting = false;
         recoveries = 0;
+        lastFiducialOffsetMm = 0;
         runStartedSeconds = NanosecondTime.getRuntimeSeconds();
         synchronized (logText) {
             logText.setLength(0);
@@ -1925,6 +1926,24 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "this run to find the fiducial again. It loses its position under the "
                         + "moves these tests make; every result here that spans such a point is "
                         + "suspect, and a job would be losing placements the same way.", recoveries);
+            }
+            // A run that leaves the machine off its origin leaves the crosshair beside the
+            // fiducial and the next job placing everything by that much off. Home it.
+            if (!aborting && machine.isEnabled() && lastFiducialOffsetMm > 0.1) {
+                try {
+                    log("The fiducial was last seen %.3f mm from its position: homing so that the "
+                            + "machine is left usable", lastFiducialOffsetMm);
+                    report.finding(Severity.Problem, "The run ended with the machine %.3f mm off "
+                            + "its origin - the position it had lost during the tests. It was "
+                            + "homed at the end so that it is left usable; a job run without that "
+                            + "homing would have placed everything %.3f mm off.",
+                            lastFiducialOffsetMm, lastFiducialOffsetMm);
+                    machine.home();
+                    lastFiducialOffsetMm = 0;
+                }
+                catch (Exception e) {
+                    Logger.warn(e, "Machine diagnostics: homing at the end of the run");
+                }
             }
             running = false;
             aborting = false;
@@ -2490,6 +2509,46 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     /** How many times the machine had to be homed to find the fiducial again, this run. */
     private int recoveries;
 
+    /** How far from its configured position the fiducial was last found, in millimetres. */
+    private double lastFiducialOffsetMm;
+
+    /** A move to make before looking: the approach whose result is being measured. */
+    private interface Approach {
+        void move() throws Exception;
+    }
+
+    /**
+     * Approach and look, and if the fiducial is not there, get it back and do the approach
+     * again. The second real run lost the fiducial in the middle of the repeatability cells -
+     * ten approaches of 50 mm at full speed are half a metre of travel on a machine that loses
+     * a millimetre a metre - and the whole group died on "Subject not found". The loss is the
+     * finding; the measurement goes on after it, from the same approach.
+     *
+     * @return The detection, or null if the fiducial could not be found even after recovery,
+     *         in which case the caller records a miss and moves on.
+     */
+    private Detection measure(ReferenceMachine machine, ReferenceCamera camera,
+            ReferenceControllerAxis approachAxis, Location fiducial, Length diameter, String label,
+            MachineDiagnosticsReport report, Approach approach) throws Exception {
+        approach.move();
+        Detection seen = tryDetect(machine, camera, fiducial, diameter, label, 0.0);
+        if (seen == null) {
+            seen = tryDetect(machine, camera, fiducial, diameter, label, 0.35);
+        }
+        if (seen != null) {
+            return seen;
+        }
+        log("%s: fiducial lost; getting it back before going on", label);
+        report.line("  %s: the fiducial was lost here and had to be found again.", label);
+        acquire(machine, camera, approachAxis, fiducial, diameter, label + " (recovery)", report);
+        approach.move();
+        seen = tryDetect(machine, camera, fiducial, diameter, label, 0.0);
+        if (seen == null) {
+            seen = tryDetect(machine, camera, fiducial, diameter, label, 0.35);
+        }
+        return seen;
+    }
+
     /**
      * Go to the fiducial and find it, whatever the machine has done since it was last seen.
      * <p>
@@ -2519,7 +2578,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Location drift = seen.location.convertToUnits(LengthUnit.Millimeters)
                         .subtract(fiducial.convertToUnits(LengthUnit.Millimeters));
                 double off = Math.hypot(drift.getX(), drift.getY());
-                if (off > 0.2) {
+                lastFiducialOffsetMm = off;
+                if (off > 0.05) {
                     log("%s: fiducial found %.3f mm from where it is configured (%+.3f, %+.3f)",
                             label, off, drift.getX(), drift.getY());
                     if (report != null) {
@@ -3046,6 +3106,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.line("  %-6s %-6s %-10s %-10s %-10s %-10s", "axis", "from", "distance", "mean mm",
                 "sd mm", "range mm");
         List<Double> allErrors = new ArrayList<>();
+        int lost = 0;
+        ReferenceControllerAxis approachAxis = findControllerAxis(camera, Axis.Type.X);
         for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
             ReferenceControllerAxis axis = findControllerAxis(camera, type);
             if (axis == null) {
@@ -3056,16 +3118,26 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 for (int sign = 1; sign >= -1; sign -= 2) {
                     checkAborted();
                     List<Double> errors = new ArrayList<>();
+                    final double displacement = sign * distance;
                     for (int repeat = 0; repeat < repeats; repeat++) {
                         checkAborted();
-                        approachFrom(camera, axis, fiducial, sign * distance, 1.0);
-                        Detection detection = detect(machine, camera, fiducial, diameter,
-                                String.format("Repeatability %s %+.0fmm", axis.getName(), sign * distance));
+                        String label = String.format("Repeatability %s %+.0fmm", axis.getName(), displacement);
+                        Detection detection = measure(machine, camera, approachAxis, fiducial, diameter,
+                                label, report, () -> approachFrom(camera, axis, fiducial, displacement, 1.0));
+                        if (detection == null) {
+                            lost++;
+                            continue;
+                        }
                         double error = shortfallMm(detection.location, fiducial, unit);
                         errors.add(error);
                         allErrors.add(error);
                         rows.add(row(new Object[] { axis.getName(), sign > 0 ? "+" : "-", distance,
                                 repeat, error }, elapsed(), detection));
+                    }
+                    if (errors.isEmpty()) {
+                        report.line("  %-6s %-6s %-10.3f lost every time", axis.getName(),
+                                sign > 0 ? "+" : "-", distance);
+                        continue;
                     }
                     Stats stats = MachineDiagnosticsMath.stats(errors);
                     report.line("  %-6s %-6s %-10.3f %-10.4f %-10.4f %-10.4f", axis.getName(),
@@ -3080,6 +3152,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         report.writeCsv("repeatability.csv",
                 columns(new String[] { "axis", "approach", "distance", "repeat", "error_mm" }), rows);
+        if (lost > 0) {
+            report.finding(Severity.Problem, "%d of the repeatability approaches lost the fiducial "
+                    + "altogether and it had to be found again. At full speed the machine loses "
+                    + "its position faster than these approaches can measure it.", lost);
+        }
         if (!allErrors.isEmpty()) {
             Stats overall = MachineDiagnosticsMath.stats(allErrors);
             report.line("  Overall spread across every approach: %.4f mm", overall.getRange());
@@ -3108,6 +3185,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Math.max(1, backlashRepeats));
         report.line("  %-6s %-8s %-10s %-12s %-10s", "axis", "speed", "distance", "backlash mm",
                 "sd mm");
+        ReferenceControllerAxis approachAxis = findControllerAxis(camera, Axis.Type.X);
         List<BacklashSetting> saved = suspendBacklashCompensation(machine, Axis.Type.X, Axis.Type.Y);
         try {
             for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
@@ -3121,12 +3199,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         List<Double> pairs = new ArrayList<>();
                         for (int repeat = 0; repeat < Math.max(1, backlashRepeats); repeat++) {
                             checkAborted();
-                            approachFrom(camera, axis, fiducial, -distance, speed);
-                            Detection fromMinus = detect(machine, camera, fiducial, diameter,
-                                    String.format("Backlash %s %.2fx -", axis.getName(), speed));
-                            approachFrom(camera, axis, fiducial, distance, speed);
-                            Detection fromPlus = detect(machine, camera, fiducial, diameter,
-                                    String.format("Backlash %s %.2fx +", axis.getName(), speed));
+                            Detection fromMinus = measure(machine, camera, approachAxis, fiducial, diameter,
+                                    String.format("Backlash %s %.2fx -", axis.getName(), speed), report,
+                                    () -> approachFrom(camera, axis, fiducial, -distance, speed));
+                            Detection fromPlus = fromMinus == null ? null
+                                    : measure(machine, camera, approachAxis, fiducial, diameter,
+                                            String.format("Backlash %s %.2fx +", axis.getName(), speed), report,
+                                            () -> approachFrom(camera, axis, fiducial, distance, speed));
+                            if (fromMinus == null || fromPlus == null) {
+                                report.line("  %-6s %-8.2f %-10.3f pair %d lost", axis.getName(), speed,
+                                        distance, repeat + 1);
+                                continue;
+                            }
                             // The difference between where the machine physically stopped coming
                             // from one side and from the other.
                             double backlash = shortfallMm(fromMinus.location, fiducial, unit)
@@ -3134,6 +3218,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             pairs.add(backlash);
                             rawRows.add(row(new Object[] { axis.getName(), speed, distance, repeat,
                                     backlash }, elapsed(), fromPlus));
+                        }
+                        if (pairs.isEmpty()) {
+                            continue;
                         }
                         Stats cell = MachineDiagnosticsMath.stats(pairs);
                         double backlash = cell.mean;
@@ -3232,8 +3319,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     checkAborted();
                     Location target = fiducial.add(unit.multiply(offset, offset, 0, 0));
                     camera.moveTo(target, speed);
-                    Detection detection = detect(machine, camera, fiducial, diameter,
-                            String.format("Step %s %.2fx", axis.getName(), speed));
+                    Detection detection = tryDetect(machine, camera, fiducial, diameter,
+                            String.format("Step %s %.2fx", axis.getName(), speed), 0.35);
+                    if (detection == null) {
+                        report.line("  %s at %.2fx: the fiducial was lost at step %d; the staircase "
+                                + "ends here.", axis.getName(), speed, step);
+                        acquire(machine, camera, findControllerAxis(camera, Axis.Type.X), fiducial,
+                                diameter, "step test recovery", report);
+                        break;
+                    }
                     double shortfall = shortfallMm(detection.location, fiducial, unit);
                     // Where the camera physically is, relative to the fiducial.
                     double actual = offset - shortfall;
@@ -3311,9 +3405,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 double dx = -halfWidth + 2 * halfWidth * ix / (fieldOfViewGridSteps - 1.0);
                 Location target = fiducial.add(new Location(LengthUnit.Millimeters, dx, dy, 0, 0));
                 // Z never changes here, so the moves stay in plane rather than routing via safe Z.
-                camera.moveTo(target, measureSpeedFactor);
-                Detection detection = detect(machine, camera, fiducial, diameter,
-                        "Field of view scan");
+                Detection detection = measure(machine, camera, findControllerAxis(camera, Axis.Type.X),
+                        fiducial, diameter, "Field of view scan", report,
+                        () -> camera.moveTo(target, measureSpeedFactor));
+                if (detection == null) {
+                    continue;
+                }
                 Location detected = detection.location.convertToUnits(LengthUnit.Millimeters);
                 double errorX = detected.getX() - fiducial.convertToUnits(LengthUnit.Millimeters).getX();
                 double errorY = detected.getY() - fiducial.convertToUnits(LengthUnit.Millimeters).getY();
@@ -3410,7 +3507,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         String.format("settling, %.0f mm along %s", distance, directionNames[d]), report);
                 for (int run = 0; run < runsPerDistance; run++) {
                     checkAborted();
-                    SettleRun thisRun = sampleSettling(camera, fiducial, distance, directions[d],
+                    SettleRun thisRun = sampleSettling(machine, camera, fiducial, distance, directions[d],
                             directionNames[d], diameterPixels, graph, rows, color, run);
                     if (thisRun.settled == null) {
                         neverSettled = true;
@@ -3547,9 +3644,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
     }
 
-    private SettleRun sampleSettling(ReferenceCamera camera, Location fiducial, double distance,
-            double[] direction, String directionName, int diameterPixels, SimpleGraph graph,
-            List<Object[]> rows, Color color, int run) throws Exception {
+    private SettleRun sampleSettling(ReferenceMachine machine, ReferenceCamera camera,
+            Location fiducial, double distance, double[] direction, String directionName,
+            int diameterPixels, SimpleGraph graph, List<Object[]> rows, Color color, int run)
+                    throws Exception {
         MovableUtils.moveToLocationAtSafeZ(camera, fiducial.add(new Location(LengthUnit.Millimeters,
                 -distance * direction[0], -distance * direction[1], 0, 0)), measureSpeedFactor);
         camera.waitForCompletion(CompletionType.WaitForStillstand);
@@ -3621,11 +3719,30 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             row(graph, "px", String.format("%.0f mm %s #%d", distance, directionName, run + 1),
                     color, true, true).recordDataPoint(timeArray[i], deviations[i]);
         }
-        Double settled = MachineDiagnosticsMath.settleTime(timeArray, deviations,
-                settleThresholdPixels);
+        // A sub-pixel detector quantises; a deviation half a quantum over the threshold is the
+        // threshold. And the first frames after the controller reports stillstand are frames of
+        // the move itself when the camera is late: the second real run read a 2 mm arrival as
+        // 160 px of "vibration" from one such frame. The settle time keeps them - the wait has
+        // to cover the latency too - but the oscillation is read from the frames after it.
+        double quantum = 1.0 / Math.max(1, machine.getVisionSolutions().getSuperSampling());
+        double threshold = settleThresholdPixels + quantum / 2;
+        Double settled = MachineDiagnosticsMath.settleTime(timeArray, deviations, threshold);
+        double latency = 0.15;
+        if (lastResults != null && lastResults.getCameraLatency(camera.getId()) != null) {
+            latency = lastResults.getCameraLatency(camera.getId()).getLatencySeconds() + 0.02;
+        }
+        int from = 0;
+        while (from < timeArray.length - 3 && timeArray[from] < latency) {
+            from++;
+        }
+        double[] laterTimes = java.util.Arrays.copyOfRange(timeArray, from, timeArray.length);
+        double[] laterAlong = java.util.Arrays.copyOfRange(along, from, along.length);
         MachineDiagnosticsMath.Oscillation oscillation = MachineDiagnosticsMath.oscillation(
-                timeArray, along, settleThresholdPixels);
+                laterTimes, laterAlong, threshold);
         double fps = times.size() > 1 ? (times.size() - 1) / (tEnd - times.get(0)) : 0;
+        if (from > 0 && deviations[0] > 20) {
+            rows.add(new Object[] { distance, directionName, run, -1.0, deviations[0], along[0] });
+        }
         return new SettleRun(settled, oscillation, fps);
     }
 

@@ -145,7 +145,13 @@ public class MachineDiagnosticsMath {
         return new Oscillation(amplitude, frequency, decay, crossings);
     }
 
-    /** The vertex of the parabola through the best point and its two neighbours; the peak. */
+    /**
+     * The peak of a curve: the vertex of a parabola fitted by least squares to every point
+     * within the top of the curve, or, when the top is too narrow for that, through the best
+     * point and its two neighbours. A focus curve is flat-topped over the depth of field, and
+     * three points on a flat top put the vertex anywhere among them; the second real run read
+     * 0.15 mm of Z "repeatability" out of exactly that.
+     */
     public static double parabolicPeak(double[] xs, double[] ys) {
         int best = 0;
         for (int i = 1; i < ys.length; i++) {
@@ -155,6 +161,47 @@ public class MachineDiagnosticsMath {
         }
         if (best == 0 || best == ys.length - 1) {
             return xs[best];
+        }
+        double floor = 0;
+        for (double y : ys) {
+            floor = Math.min(floor, y);
+        }
+        double cut = floor + (ys[best] - floor) * 0.7;
+        int from = best;
+        int to = best;
+        while (from > 0 && ys[from - 1] >= cut) {
+            from--;
+        }
+        while (to < ys.length - 1 && ys[to + 1] >= cut) {
+            to++;
+        }
+        if (to - from + 1 >= 5) {
+            // Least squares parabola y = a x^2 + b x + c over [from, to], centred for conditioning.
+            double centre = xs[best];
+            double s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, sy = 0, sxy = 0, sx2y = 0;
+            for (int i = from; i <= to; i++) {
+                double x = xs[i] - centre;
+                double x2 = x * x;
+                s0 += 1;
+                s1 += x;
+                s2 += x2;
+                s3 += x2 * x;
+                s4 += x2 * x2;
+                sy += ys[i];
+                sxy += x * ys[i];
+                sx2y += x2 * ys[i];
+            }
+            double[][] m = { { s4, s3, s2 }, { s3, s2, s1 }, { s2, s1, s0 } };
+            try {
+                double[] p = solve3(m, new double[] { sx2y, sxy, sy });
+                if (p[0] < 0) {
+                    double vertex = centre - p[1] / (2 * p[0]);
+                    return Math.max(xs[from], Math.min(xs[to], vertex));
+                }
+            }
+            catch (IllegalArgumentException e) {
+                // Fall through to the three point vertex.
+            }
         }
         double x0 = xs[best - 1], x1 = xs[best], x2 = xs[best + 1];
         double y0 = ys[best - 1], y1 = ys[best], y2 = ys[best + 1];

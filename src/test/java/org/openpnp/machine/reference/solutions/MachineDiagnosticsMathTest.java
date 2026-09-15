@@ -294,6 +294,22 @@ public class MachineDiagnosticsMathTest {
         assertEquals(0.1, seen.amplitude, 1e-9);
     }
 
+    /** A focus curve is flat on top over the depth of field; the peak is the middle of the top. */
+    @Test
+    public void theParabolicPeakOfAFlatToppedCurveIsItsMiddle() {
+        double[] z = new double[21];
+        double[] score = new double[21];
+        for (int i = 0; i < z.length; i++) {
+            z[i] = 8.6 + i * 0.05;
+            // A broad hump centred on 9.10 with a flat top and some noise.
+            double d = Math.abs(z[i] - 9.10);
+            score[i] = 100 - 40 * Math.max(0, d - 0.1) * Math.max(0, d - 0.1) * 25
+                    + ((i * 7) % 3 - 1) * 0.6;
+        }
+
+        assertEquals(9.10, MachineDiagnosticsMath.parabolicPeak(z, score), 0.03);
+    }
+
     /** The peak of a focus curve lies between the samples; the parabola finds it. */
     @Test
     public void theParabolicPeakLiesBetweenTheSamples() {
