@@ -34,6 +34,7 @@ import java.util.Map;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.DefaultCellEditor;
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -62,7 +63,12 @@ import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.CustomBooleanRenderer;
 import org.openpnp.gui.support.Helpers;
 import org.openpnp.gui.support.Icons;
+import org.openpnp.gui.shell.DockPanel;
+import org.openpnp.gui.shell.DockRenderers;
+import org.openpnp.gui.shell.PillBar;
 import org.openpnp.gui.shell.PropertySheetPresenter.Result;
+import org.openpnp.gui.shell.RoundedPanel;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
@@ -110,6 +116,10 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 
     
     private int priorRowIndex = -1;
+    private DockPanel dock;
+    private DockPanel.Tab feedersTab;
+    private DockPanel.Tab attentionTab;
+    private PillBar scope;
     
     public FeedersPanel(Configuration configuration, MainFrame mainFrame) {
         this.configuration = configuration;
@@ -118,35 +128,41 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         setLayout(new BorderLayout(0, 0));
         tableModel = new FeedersTableModel(configuration);
 
-        JPanel panel = new JPanel();
-        add(panel, BorderLayout.NORTH);
-        panel.setLayout(new BorderLayout(0, 0));
-
-        JToolBar toolBar = new JToolBar();
-        toolBar.setFloatable(false);
-        panel.add(toolBar, BorderLayout.CENTER);
-
-        JButton btnNewFeeder = new JButton(newFeederAction);
-        btnNewFeeder.setHideActionText(true);
-        toolBar.add(btnNewFeeder);
-
-        JButton btnDeleteFeeder = new JButton(deleteFeederAction);
-        btnDeleteFeeder.setHideActionText(true);
-        toolBar.add(btnDeleteFeeder);
-
-        toolBar.addSeparator();
-        toolBar.add(pickFeederAction);
-        toolBar.add(feedFeederAction);
-        toolBar.add(moveCameraToPickLocation);
-        toolBar.add(moveToolToPickLocation);
-
-        JPanel panel_1 = new JPanel();
-        panel.add(panel_1, BorderLayout.EAST);
-
-        JLabel lblSearch = new JLabel(Translations.getString("FeedersPanel.SearchLabel.text")); //$NON-NLS-1$
-        panel_1.add(lblSearch);
-
-        searchTextField = new JTextField();
+        // The stylesheet's toolbar: New feeder in the accent, the movements and the feed/pick
+        // pair with words on them, the scope segments, and the filter at the right end.
+        DockPanel.Toolbar toolBar = new DockPanel.Toolbar();
+        JButton btnNewFeeder = toolBar.button(newFeederAction, "plus", "Dock.Action.NewFeeder", //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Variant.Primary);
+        btnNewFeeder.setIcon(Ui.iconSm("plus")); //$NON-NLS-1$
+        toolBar.iconButton(deleteFeederAction, "trash"); //$NON-NLS-1$
+        toolBar.separator();
+        toolBar.button(moveCameraToPickLocation, "camera", "Dock.Action.MoveCameraHere"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.button(moveToolToPickLocation, "nozzle", "Dock.Action.MoveToolHere"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.separator();
+        toolBar.button(feedFeederAction, "step", "Dock.Action.Feed"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.button(pickFeederAction, "hand", "Dock.Action.Pick"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.separator();
+        scope = new PillBar();
+        scope.setLabeller(item -> Translations.getString("FeedersPanel.Filter." + item)); //$NON-NLS-1$
+        for (Scope choice : Scope.values()) {
+            scope.addItem(choice);
+        }
+        scope.setSelectedItem(Scope.All);
+        scope.addActionListener(e -> search());
+        for (Component pill : scope.getComponents()) {
+            if (pill instanceof javax.swing.AbstractButton) {
+                Ui.seg((javax.swing.AbstractButton) pill);
+                ((javax.swing.AbstractButton) pill).setFont(Ui.font(11.5f));
+            }
+        }
+        RoundedPanel scopeBox = new RoundedPanel(6, Ui::surface2, Ui::border);
+        scopeBox.setLayout(new BorderLayout());
+        scopeBox.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
+        scopeBox.add(scope);
+        toolBar.add(scopeBox);
+        toolBar.glue();
+        searchTextField = toolBar.filter(
+                Translations.getString("FeedersPanel.Filter.Placeholder"), this); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -163,8 +179,6 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 				search();
 			}
 		});
-		panel_1.add(searchTextField);
-		searchTextField.setColumns(15);
         JComboBox<Type> feedOptionsComboBox = new JComboBox(ReferenceFeeder.FeedOptions.values());
         JComboBox<Type> priorityComboBox = new JComboBox(ReferenceFeeder.Priority.values());
 
@@ -221,8 +235,37 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         table.getColumnModel().moveColumn(1,  2);
 
         // The property sheets of the selected feeder are shown by the window's one properties
-        // column now, so the table gets the whole panel and there is no divider to remember.
-        add(new JScrollPane(table), BorderLayout.CENTER);
+        // column now. The table and its toolbar are one tab of the dock; a second tab shows only
+        // the feeders that want a look.
+        table.setDefaultRenderer(Boolean.class, DockRenderers.toggle());
+        JPanel page = new JPanel(new BorderLayout());
+        page.setOpaque(false);
+        page.add(toolBar, BorderLayout.NORTH);
+        page.add(DockPanel.table(table), BorderLayout.CENTER);
+        dock = new DockPanel();
+        // Both tabs show the same table, the second one narrowed: the table moves between two
+        // holders as the tabs change, since a component can only be in one place.
+        JPanel allHolder = new JPanel(new BorderLayout());
+        allHolder.setOpaque(false);
+        allHolder.add(page, BorderLayout.CENTER);
+        JPanel attentionHolder = new JPanel(new BorderLayout());
+        attentionHolder.setOpaque(false);
+        feedersTab = dock.addTab(Ui.iconSm("feeder"), //$NON-NLS-1$
+                Translations.getString("FeedersPanel.Tab.Feeders"), allHolder); //$NON-NLS-1$
+        attentionTab = dock.addTab(Ui.iconSm("alert"), //$NON-NLS-1$
+                Translations.getString("FeedersPanel.Tab.Attention"), attentionHolder); //$NON-NLS-1$
+        dock.addChangeListener(e -> {
+            JPanel holder = dock.getSelectedTab() == attentionTab ? attentionHolder : allHolder;
+            if (page.getParent() != holder) {
+                holder.add(page, BorderLayout.CENTER);
+            }
+            search();
+            dock.revalidate();
+            dock.repaint();
+        });
+        tableModel.addTableModelListener(e -> countTabs());
+        setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
+        add(dock, BorderLayout.CENTER);
         table.setRowSorter(tableSorter);
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
@@ -375,17 +418,82 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         return selections;
     }
 
+    /** What the segments beside the filter narrow the table to. */
+    private enum Scope {
+        All, Enabled, InJob
+    }
+
     private void search() {
-        RowFilter<FeedersTableModel, Object> rf = null;
+        RowFilter<FeedersTableModel, Object> text = null;
         // If current expression doesn't parse, don't update.
         try {
-            rf = RowFilter.regexFilter("(?i)" + searchTextField.getText().trim());
+            text = RowFilter.regexFilter("(?i)" + searchTextField.getText().trim());
         }
         catch (PatternSyntaxException e) {
             Logger.warn(e, "Search failed");
             return;
         }
-        tableSorter.setRowFilter(rf);
+        List<RowFilter<FeedersTableModel, Object>> filters = new ArrayList<>();
+        filters.add(text);
+        Scope chosen = scope == null ? Scope.All : (Scope) scope.getSelectedItem();
+        boolean attention = dock != null && dock.getSelectedTab() == attentionTab;
+        filters.add(new RowFilter<FeedersTableModel, Object>() {
+            @Override
+            public boolean include(Entry<? extends FeedersTableModel, ?> entry) {
+                Feeder feeder = entry.getModel().getRowObjectAt((Integer) entry.getIdentifier());
+                if (attention && !needsAttention(feeder)) {
+                    return false;
+                }
+                switch (chosen) {
+                    case Enabled:
+                        return feeder.isEnabled();
+                    case InJob:
+                        return feeder.getPart() != null && isUsedByJob(feeder.getPart());
+                    default:
+                        return true;
+                }
+            }
+        });
+        tableSorter.setRowFilter(RowFilter.andFilter(filters));
+        countTabs();
+    }
+
+    /** A feeder that is switched off, or has no part, is one the operator should look at. */
+    private boolean needsAttention(Feeder feeder) {
+        return !feeder.isEnabled() || feeder.getPart() == null;
+    }
+
+    private boolean isUsedByJob(Part part) {
+        Job job = mainFrame.getJobTab().getJob();
+        if (job == null) {
+            return false;
+        }
+        for (BoardLocation boardLocation : job.getBoardLocations()) {
+            if (!boardLocation.isEnabled()) {
+                continue;
+            }
+            for (Placement placement : boardLocation.getBoard().getPlacements()) {
+                if (placement.getType() == Placement.Type.Placement && placement.isEnabled()
+                        && placement.getPart() == part) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private void countTabs() {
+        if (feedersTab == null) {
+            return;
+        }
+        feedersTab.setCount(tableModel.getRowCount());
+        int attention = 0;
+        for (int row = 0; row < tableModel.getRowCount(); row++) {
+            if (needsAttention(tableModel.getRowObjectAt(row))) {
+                attention++;
+            }
+        }
+        attentionTab.setCount(attention);
     }
 
     @Override

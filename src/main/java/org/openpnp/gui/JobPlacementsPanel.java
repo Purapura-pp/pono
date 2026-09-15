@@ -66,6 +66,8 @@ import org.openpnp.events.DefinitionStructureChangedEvent;
 import org.openpnp.Translations;
 import org.openpnp.events.PlacementSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
+import org.openpnp.gui.shell.DockPanel;
+import org.openpnp.gui.shell.DockRenderers;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.CustomBooleanRenderer;
 import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
@@ -331,60 +333,28 @@ public class JobPlacementsPanel extends JPanel {
 
         table.setComponentPopupMenu(popupMenu);
 
-        JScrollPane scrollPane = new JScrollPane(table);
-        add(scrollPane, BorderLayout.CENTER);
-        
-        JPanel panel = new JPanel();
-        add(panel, BorderLayout.NORTH);
-        panel.setLayout(new BorderLayout(0, 0));
-        JToolBar toolBarPlacements = new JToolBar();
-        panel.add(toolBarPlacements);
-        
-        toolBarPlacements.setFloatable(false);
-        JButton btnNewPlacement = new JButton(newAction);
-        btnNewPlacement.setHideActionText(true);
-        toolBarPlacements.add(btnNewPlacement);
-        JButton btnRemovePlacement = new JButton(removeAction);
-        btnRemovePlacement.setHideActionText(true);
-        toolBarPlacements.add(btnRemovePlacement);
-        toolBarPlacements.addSeparator();
-        
-        JButton btnPositionCameraPositionLocation = new JButton(moveCameraToPlacementLocation);
-        btnPositionCameraPositionLocation.setHideActionText(true);
-        toolBarPlacements.add(btnPositionCameraPositionLocation);
-        
-        JButton btnPositionCameraPositionNextLocation =
-                new JButton(moveCameraToPlacementLocationNext);
-        btnPositionCameraPositionNextLocation.setHideActionText(true);
-        toolBarPlacements.add(btnPositionCameraPositionNextLocation);
+        add(DockPanel.table(table), BorderLayout.CENTER);
+        table.setDefaultRenderer(Boolean.class, DockRenderers.check());
+        table.setDefaultRenderer(Side.class, DockRenderers.side());
 
-        JButton btnPositionToolPositionLocation = new JButton(moveToolToPlacementLocation);
-        btnPositionToolPositionLocation.setHideActionText(true);
-        toolBarPlacements.add(btnPositionToolPositionLocation);
-
-        toolBarPlacements.addSeparator();
-
-        JButton btnCaptureCameraPlacementLocation = new JButton(captureCameraPlacementLocation);
-        btnCaptureCameraPlacementLocation.setHideActionText(true);
-        toolBarPlacements.add(btnCaptureCameraPlacementLocation);
-
-        JButton btnCaptureToolPlacementLocation = new JButton(captureToolPlacementLocation);
-        btnCaptureToolPlacementLocation.setHideActionText(true);
-        toolBarPlacements.add(btnCaptureToolPlacementLocation);
-
-        toolBarPlacements.addSeparator();
-
-        JButton btnEditFeeder = new JButton(editPlacementFeederAction);
-        btnEditFeeder.setHideActionText(true);
-        toolBarPlacements.add(btnEditFeeder);
-
-        JPanel panel_1 = new JPanel();
-        panel.add(panel_1, BorderLayout.EAST);
-
-        JLabel lblNewLabel = new JLabel(Translations.getString("JobPlacementsPanel.SearchLabel.text")); //$NON-NLS-1$
-        panel_1.add(lblNewLabel);
-
-        searchTextField = new JTextField();
+        // The stylesheet's toolbar: words on the buttons, the filter at the right end.
+        DockPanel.Toolbar toolbar = new DockPanel.Toolbar();
+        add(toolbar, BorderLayout.NORTH);
+        toolbar.button(newAction, "plus", "Dock.Action.New"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.iconButton(removeAction, "trash"); //$NON-NLS-1$
+        toolbar.separator();
+        toolbar.button(moveCameraToPlacementLocation, "camera", "Dock.Action.MoveCamera"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.iconButton(moveCameraToPlacementLocationNext, "chevright"); //$NON-NLS-1$
+        toolbar.button(captureCameraPlacementLocation, "target", "Dock.Action.CaptureCamera"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.button(moveToolToPlacementLocation, "nozzle", "Dock.Action.MoveTool"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.iconButton(captureToolPlacementLocation, "pin"); //$NON-NLS-1$
+        toolbar.separator();
+        toolbar.button(new SetPlacedAction(true), "check", "Dock.Action.SetPlaced"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.button(new SetPlacedAction(false), "refresh", "Dock.Action.Reset"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.iconButton(editPlacementFeederAction, "feeder"); //$NON-NLS-1$
+        toolbar.glue();
+        searchTextField = toolbar.filter(
+                Translations.getString("JobPlacementsPanel.Filter.Placeholder"), this); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -401,8 +371,6 @@ public class JobPlacementsPanel extends JPanel {
                 search();
             }
         });
-        panel_1.add(searchTextField);
-        searchTextField.setColumns(15);
         
         configuration.getBus().register(this);
     }

@@ -326,6 +326,21 @@ public class MainFrame extends JFrame {
         cameraStage.revalidate();
     }
 
+    private boolean dockMaximised;
+    private int dividerBeforeMaximise;
+
+    /** Give the tables the whole middle of the window and back: the image folds away above them. */
+    public void toggleDockMaximised() {
+        if (!dockMaximised) {
+            dividerBeforeMaximise = splitPaneMachineAndTabs.getDividerLocation();
+            splitPaneMachineAndTabs.setDividerLocation(0);
+        }
+        else {
+            splitPaneMachineAndTabs.setDividerLocation(dividerBeforeMaximise);
+        }
+        dockMaximised = !dockMaximised;
+    }
+
     private boolean cameraFullScreen;
     private int dividerBeforeFullScreen;
     private boolean inspectorBeforeFullScreen;

@@ -162,13 +162,9 @@ public class LogPanel extends JPanel {
             }
         }, 0, 500, TimeUnit.MILLISECONDS);
 
-        MainFrame.get().getNavigation().addChangeListener(new ChangeListener() {
-
-            @Override
-            public void stateChanged(ChangeEvent e) {
-                refreshLogIfOnTop();
-            }
-        });
+        // The half-second timer above already refreshes whenever this is on screen. The log is
+        // both a page of its own and a tab inside the job page, so "on screen" is what counts,
+        // not which page the rail has selected.
     }
 
     private JCheckBox createSystemOutputCheckbox() {
@@ -294,7 +290,7 @@ public class LogPanel extends JPanel {
     }
 
     protected void refreshLogIfOnTop() {
-        if (MainFrame.get().getNavigation().getSelectedComponent() == LogPanel.this) {
+        if (isShowing()) {
             if (logEntries.isRefreshNeeded()) {
                 logEntries.refresh();
             }

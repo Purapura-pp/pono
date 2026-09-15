@@ -151,14 +151,13 @@ public class TopBarPanel extends JPanel {
         menuBar.setOpaque(false);
         menuBar.setBorder(null);
         menuBar.putClientProperty(FlatClientProperties.STYLE,
-                "background: null; borderColor: null; itemMargins: 5,7,5,7; " //$NON-NLS-1$
+                "background: null; itemMargins: 5,7,5,7; " //$NON-NLS-1$
                         + "hoverBackground: $Pono.hover; selectionBackground: $Pono.surface3; " //$NON-NLS-1$
                         + "selectionForeground: $Label.foreground"); //$NON-NLS-1$
         for (int i = 0; i < menuBar.getMenuCount(); i++) {
             JMenu menu = menuBar.getMenu(i);
             if (menu != null) {
                 menu.setForeground(Ui.text2());
-                menu.putClientProperty(FlatClientProperties.STYLE, "arc: 6"); //$NON-NLS-1$
             }
         }
         menuBar.setMaximumSize(menuBar.getPreferredSize());

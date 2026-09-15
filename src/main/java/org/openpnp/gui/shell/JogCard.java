@@ -131,10 +131,11 @@ public class JogCard extends OverlayCard {
         JPanel head = row(8);
         JComboBox<?> tool = controls.getHeadMountableCombo();
         tool.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 6; minimumHeight: 30; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
+                "arc: 6; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
                         + "buttonBackground: null; buttonArrowColor: $Pono.textMuted; focusWidth: 0"); //$NON-NLS-1$
         tool.setFont(Ui.font(Ui.BASE, Font.BOLD));
         tool.setRenderer(new ToolRenderer());
+        tool.setPreferredSize(new Dimension(tool.getPreferredSize().width, 30));
         tool.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
         head.add(tool);
         JButton home = Ui.iconButton(Ui.icon("home"), Ui.Size.Sm, Ui.Variant.Default, //$NON-NLS-1$

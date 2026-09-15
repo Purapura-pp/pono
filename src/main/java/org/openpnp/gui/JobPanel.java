@@ -60,6 +60,7 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
+import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
@@ -79,6 +80,9 @@ import org.openpnp.gui.JobPanel.OpenRecentJobAction;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.ExistingBoardOrPanelDialog;
 import org.openpnp.gui.processes.MultiPlacementBoardLocationProcess;
+import org.openpnp.gui.shell.Chip;
+import org.openpnp.gui.shell.DockPanel;
+import org.openpnp.gui.shell.DockRenderers;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.CustomBooleanRenderer;
 import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
@@ -149,7 +153,8 @@ public class JobPanel extends JPanel {
 
     private PlacementsHolderLocationsTableModel jobTableModel;
     private JTable jobTable;
-    private JSplitPane splitPane;
+    private DockPanel dock;
+    private Chip currentBoardChip;
 
     private PlacementsHolderLocationViewerDialog jobViewer;
     
@@ -306,6 +311,7 @@ public class JobPanel extends JPanel {
                                 singleSelectionActionGroup.setEnabled(true);
                             }
                             jobPlacementsPanel.setBoardOrPanelLocation(selections.get(0));
+                showCurrentBoard(selections.get(0));
                             if (updateLinkedTables) {
                                 if (selections.get(0).getParent() != job.getRootPanelLocation()) {
                                     configuration.getBus()
@@ -355,37 +361,19 @@ public class JobPanel extends JPanel {
 
         setLayout(new BorderLayout(0, 0));
 
-        splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setBorder(null);
-        splitPane.setContinuousLayout(true);
-        splitPane
-                .setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() { //$NON-NLS-1$
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
-
+        // The stylesheet's dock: the boards and the placements are tabs of one card, with the
+        // running log as a third, rather than two tables stacked behind a divider.
         JPanel pnlBoards = new JPanel();
-        pnlBoards.setBorder(new TitledBorder(null,
-                Translations.getString("JobPanel.Tab.Boards"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null));
+        pnlBoards.setOpaque(false);
         pnlBoards.setLayout(new BorderLayout(0, 0));
 
-        JToolBar toolBarBoards = new JToolBar();
-        toolBarBoards.setFloatable(false);
+        DockPanel.Toolbar toolBarBoards = new DockPanel.Toolbar();
         pnlBoards.add(toolBarBoards, BorderLayout.NORTH);
 
         // Start, step and stop are in the top bar, which belongs to the window rather than to
         // this tab. The Job menu and the Ctrl+Shift+R/S/A shortcuts are unaffected.
-        JButton btnDeferErrors = new JButton(deferErrorsAction);
-        btnDeferErrors.setHideActionText(true);
-        toolBarBoards.add(btnDeferErrors);
-        toolBarBoards.addSeparator();
-        JButton btnAddBoard = new JButton(addBoardAction);
-        btnAddBoard.setHideActionText(true);
+        JButton btnAddBoard = toolBarBoards.button(addBoardAction, "plus", "Dock.Action.New", //$NON-NLS-1$ //$NON-NLS-2$
+                org.openpnp.gui.shell.Ui.Variant.Primary);
         btnAddBoard.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -398,61 +386,49 @@ public class JobPanel extends JPanel {
                 menu.show(btnAddBoard, (int) btnAddBoard.getWidth(), (int) btnAddBoard.getHeight());
             }
         });
-        toolBarBoards.add(btnAddBoard);
-        JButton btnRemoveBoard = new JButton(removeBoardAction);
-        btnRemoveBoard.setHideActionText(true);
-        toolBarBoards.add(btnRemoveBoard);
-        
-        toolBarBoards.addSeparator();
-        
-        JButton btnPositionCameraBoardLocation = new JButton(moveCameraToBoardLocationAction);
-        btnPositionCameraBoardLocation.setHideActionText(true);
-        toolBarBoards.add(btnPositionCameraBoardLocation);
+        toolBarBoards.iconButton(removeBoardAction, "trash"); //$NON-NLS-1$
+        toolBarBoards.separator();
+        toolBarBoards.button(moveCameraToBoardLocationAction, "camera", "Dock.Action.MoveCamera"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBarBoards.iconButton(moveCameraToBoardLocationNextAction, "chevright"); //$NON-NLS-1$
+        toolBarBoards.button(moveToolToBoardLocationAction, "nozzle", "Dock.Action.MoveTool"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBarBoards.separator();
+        toolBarBoards.button(captureCameraBoardLocationAction, "target", "Dock.Action.CaptureCamera"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBarBoards.iconButton(captureToolBoardLocationAction, "pin"); //$NON-NLS-1$
+        toolBarBoards.separator();
+        toolBarBoards.button(twoPointLocateBoardLocationAction, "move", "Dock.Action.TwoPoint"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBarBoards.button(fiducialCheckAction, "crosshair", "Dock.Action.FiducialCheck"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBarBoards.separator();
+        toolBarBoards.iconButton(deferErrorsAction, "zap"); //$NON-NLS-1$
+        toolBarBoards.iconButton(viewerAction, "eye"); //$NON-NLS-1$
 
-        JButton btnPositionCameraBoardLocationNext =
-                new JButton(moveCameraToBoardLocationNextAction);
-        btnPositionCameraBoardLocationNext.setHideActionText(true);
-        toolBarBoards.add(btnPositionCameraBoardLocationNext);
-        
-        JButton btnPositionToolBoardLocation = new JButton(moveToolToBoardLocationAction);
-        btnPositionToolBoardLocation.setHideActionText(true);
-        toolBarBoards.add(btnPositionToolBoardLocation);
-        
-        toolBarBoards.addSeparator();
-
-        JButton btnCaptureCameraBoardLocation = new JButton(captureCameraBoardLocationAction);
-        btnCaptureCameraBoardLocation.setHideActionText(true);
-        toolBarBoards.add(btnCaptureCameraBoardLocation);
-
-        JButton btnCaptureToolBoardLocation = new JButton(captureToolBoardLocationAction);
-        btnCaptureToolBoardLocation.setHideActionText(true);
-        toolBarBoards.add(btnCaptureToolBoardLocation);
-
-        
-        toolBarBoards.addSeparator();
-
-        JButton btnTwoPointBoardLocation = new JButton(twoPointLocateBoardLocationAction);
-        toolBarBoards.add(btnTwoPointBoardLocation);
-        btnTwoPointBoardLocation.setHideActionText(true);
-
-        JButton btnFiducialCheck = new JButton(fiducialCheckAction);
-        toolBarBoards.add(btnFiducialCheck);
-        btnFiducialCheck.setHideActionText(true);
-        
-        toolBarBoards.addSeparator();
-        
-        JButton btnViewer = new JButton(viewerAction);
-        btnViewer.setHideActionText(true);
-        toolBarBoards.add(btnViewer);
-
-        pnlBoards.add(new JScrollPane(jobTable));
-
-        splitPane.setLeftComponent(pnlBoards);
+        pnlBoards.add(DockPanel.table(jobTable), BorderLayout.CENTER);
+        jobTable.setDefaultRenderer(Boolean.class, DockRenderers.check());
+        jobTable.setDefaultRenderer(Side.class, DockRenderers.side());
 
         jobPlacementsPanel = new JobPlacementsPanel(this);
-        splitPane.setRightComponent(jobPlacementsPanel);
-        
-        add(splitPane);
+
+        dock = new DockPanel();
+        DockPanel.Tab boardsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("board"), //$NON-NLS-1$
+                Translations.getString("JobPanel.Tab.Boards"), pnlBoards); //$NON-NLS-1$
+        DockPanel.Tab placementsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("parts"), //$NON-NLS-1$
+                Translations.getString("JobPlacementsPanel.Border.title"), jobPlacementsPanel); //$NON-NLS-1$
+        dock.addTab(org.openpnp.gui.shell.Ui.iconSm("log"), //$NON-NLS-1$
+                Translations.getString("JobPanel.Tab.RunLog"), new LogPanel()); //$NON-NLS-1$
+        jobTableModel.addTableModelListener(e -> boardsTab.setCount(jobTable.getRowCount()));
+        jobPlacementsPanel.getTable().getModel().addTableModelListener(
+                e -> placementsTab.setCount(jobPlacementsPanel.getTable().getRowCount()));
+        boardsTab.setCount(jobTable.getRowCount());
+        placementsTab.setCount(jobPlacementsPanel.getTable().getRowCount());
+        currentBoardChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$
+        currentBoardChip.setVisible(false);
+        JButton maximise = org.openpnp.gui.shell.Ui.iconButton(
+                org.openpnp.gui.shell.Ui.iconSm("maximize"), //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.Size.Xs, org.openpnp.gui.shell.Ui.Variant.Ghost,
+                Translations.getString("Dock.Maximize")); //$NON-NLS-1$
+        maximise.addActionListener(e -> MainFrame.get().toggleDockMaximised());
+        dock.setTools(currentBoardChip, maximise);
+        setBorder(new EmptyBorder(0, 10, 10, 10));
+        add(dock);
 
         mnOpenRecent = new JMenu(Translations.getString("JobPanel.Action.Job.RecentJobs")); //$NON-NLS-1$
         mnOpenRecent.setMnemonic(KeyEvent.VK_R);
@@ -608,6 +584,17 @@ public class JobPanel extends JPanel {
 
     public JobPlacementsPanel getJobPlacementsPanel() {
         return jobPlacementsPanel;
+    }
+
+    /** The chip at the right of the tab row: which board the placements belong to. */
+    private void showCurrentBoard(PlacementsHolderLocation<?> location) {
+        if (location == null || location.getPlacementsHolder() == null) {
+            currentBoardChip.setVisible(false);
+            return;
+        }
+        currentBoardChip.setText(Translations.getString("JobPanel.CurrentBoard") //$NON-NLS-1$
+                + location.getPlacementsHolder().getName() + " \u00b7 " + location.getGlobalSide()); //$NON-NLS-1$
+        currentBoardChip.setVisible(true);
     }
 
     public PlacementsHolderLocationViewerDialog getJobViewer() {
