@@ -738,14 +738,26 @@ public class MachineDiagnosticsResults {
         private long millis;
         @Attribute(required = false)
         private String reportDirectory;
+        @Attribute(required = false)
+        private long durationMillis;
 
         Run() {
         }
 
         public Run(String group, long millis, String reportDirectory) {
+            this(group, millis, reportDirectory, 0);
+        }
+
+        public Run(String group, long millis, String reportDirectory, long durationMillis) {
             this.group = group;
             this.millis = millis;
             this.reportDirectory = reportDirectory;
+            this.durationMillis = durationMillis;
+        }
+
+        /** How long the group took, or 0 when that was not recorded. */
+        public long getDurationMillis() {
+            return durationMillis;
         }
 
         public String getGroup() {
@@ -949,7 +961,11 @@ public class MachineDiagnosticsResults {
     }
 
     public void setRun(TestGroup group, long millis, String reportDirectory) {
+        setRun(group, millis, reportDirectory, 0);
+    }
+
+    public void setRun(TestGroup group, long millis, String reportDirectory, long durationMillis) {
         runs.removeIf(run -> run.getGroup().equals(group.name()));
-        runs.add(new Run(group.name(), millis, reportDirectory));
+        runs.add(new Run(group.name(), millis, reportDirectory, durationMillis));
     }
 }

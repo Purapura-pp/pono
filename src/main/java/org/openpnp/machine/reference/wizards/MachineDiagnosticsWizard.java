@@ -175,10 +175,12 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     public MachineDiagnosticsWizard(ReferenceMachine machine) {
         this.machine = machine;
         this.diagnostics = machine.getMachineDiagnostics();
+        // What to run comes first: it is what the page is for, and it was buried under six
+        // tables, which is where the user could not find it.
+        createTestsPanel();
         createOverviewPanel();
         createCalibrationPanel();
         createIssuesPanel();
-        createTestsPanel();
         createParametersPanel();
         createProgressPanel();
         createGraphsPanel();
@@ -238,6 +240,35 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         describeCameras();
         describeNozzles();
         describeCalibration();
+        describeRuns();
+    }
+
+    /** Each test group's check says when it last ran and how long it took. */
+    private void describeRuns() {
+        MachineDiagnosticsResults results = diagnostics.getLastResults();
+        for (Map.Entry<TestGroup, JCheckBox> entry : testChecks.entrySet()) {
+            MachineDiagnosticsResults.Run run = results == null ? null
+                    : results.getRun(entry.getKey());
+            String name = Translations.getString(
+                    "MachineDiagnosticsWizard.Test." + entry.getKey().name()); //$NON-NLS-1$
+            if (run == null) {
+                entry.getValue().setText(name);
+                continue;
+            }
+            String when = DATE_FORMAT.format(run.getWhen());
+            String took = run.getDurationMillis() <= 0 ? "" //$NON-NLS-1$
+                    : " \u00b7 " + duration(run.getDurationMillis()); //$NON-NLS-1$
+            entry.getValue().setText("<html>" + name + " <font color='gray'>" + when + took //$NON-NLS-1$ //$NON-NLS-2$
+                    + "</font></html>"); //$NON-NLS-1$
+        }
+    }
+
+    private static String duration(long millis) {
+        long seconds = Math.round(millis / 1000.0);
+        if (seconds < 60) {
+            return seconds + " s"; //$NON-NLS-1$
+        }
+        return String.format("%d min %02d s", seconds / 60, seconds % 60); //$NON-NLS-1$
     }
 
     private void adaptDialog() {

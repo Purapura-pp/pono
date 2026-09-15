@@ -1767,8 +1767,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         MachineDiagnosticsResults results =
                 lastResults != null ? lastResults : new MachineDiagnosticsResults();
         conclusions.accept(results);
-        results.setRun(group, System.currentTimeMillis(),
-                report.getDirectory().getAbsolutePath());
+        long now = System.currentTimeMillis();
+        results.setRun(group, now, report.getDirectory().getAbsolutePath(),
+                groupStartedMillis > 0 ? now - groupStartedMillis : 0);
         setLastResults(results);
     }
 
@@ -1913,9 +1914,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         return report.getDirectory();
     }
 
+    private long groupStartedMillis;
+
     private void runGroup(ReferenceMachine machine, TestGroup group,
             MachineDiagnosticsReport report) throws Exception {
         log("--- %s ---", group);
+        groupStartedMillis = System.currentTimeMillis();
         switch (group) {
             case Firmware:
                 testFirmware(machine, report);
