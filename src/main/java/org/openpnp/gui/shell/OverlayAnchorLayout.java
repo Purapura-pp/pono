@@ -127,12 +127,16 @@ public class OverlayAnchorLayout implements LayoutManager2 {
     }
 
     /**
-     * Lift a western card above its eastern neighbour when the two would not fit side by side.
+     * Make room between a western card and its eastern neighbour when the two would not fit side
+     * by side.
      * <p>
      * On a narrow window the readout and the machine controls want more width between them than
      * the image has. Neither can simply be clipped - one is a coordinate and the other is a row of
-     * buttons - and the east side is the one that cannot shrink, so the west side moves up. As the
-     * window widens they return to the corners they were asked for.
+     * buttons - and the east side is the one that cannot shrink. So the west side gives way: it is
+     * narrowed to the room beside its neighbour if its minimum size allows, and lifted above the
+     * neighbour if not. Lifting stops short of whatever sits at the top of the image, because a
+     * readout on top of the camera selector was the failure this replaces. As the window widens
+     * they return to the corners they were asked for.
      */
     private void stackIfCrowded(Component component, Anchor anchor) {
         Anchor eastern = anchor == Anchor.SouthWest ? Anchor.SouthEast
@@ -144,12 +148,30 @@ public class OverlayAnchorLayout implements LayoutManager2 {
         if (neighbour == null || !neighbour.isVisible()) {
             return;
         }
-        if (component.getX() + component.getWidth() + MARGIN <= neighbour.getX()) {
+        int roomBeside = neighbour.getX() - MARGIN - component.getX();
+        if (component.getWidth() <= roomBeside) {
             return;
         }
-        int y = anchor == Anchor.SouthWest
-                ? neighbour.getY() - component.getHeight() - MARGIN
-                : neighbour.getY() + neighbour.getHeight() + MARGIN;
+        if (roomBeside >= component.getMinimumSize().width) {
+            component.setBounds(component.getX(), component.getY(), roomBeside,
+                    component.getHeight());
+            return;
+        }
+        int y;
+        if (anchor == Anchor.SouthWest) {
+            y = neighbour.getY() - component.getHeight() - MARGIN;
+            int floor = MARGIN;
+            for (Anchor top : new Anchor[] { Anchor.NorthWest, Anchor.North }) {
+                Component above = componentAt(top);
+                if (above != null && above.isVisible()) {
+                    floor = Math.max(floor, above.getY() + above.getHeight() + MARGIN);
+                }
+            }
+            y = Math.max(y, floor);
+        }
+        else {
+            y = neighbour.getY() + neighbour.getHeight() + MARGIN;
+        }
         component.setBounds(component.getX(), y, component.getWidth(), component.getHeight());
     }
 

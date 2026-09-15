@@ -37,9 +37,19 @@ import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
 public class OverlayAnchorLayoutTest {
     private static final int MARGIN = 10;
 
+    /** A card that cannot be made narrower than it asks for, like a grid of buttons. */
     private JPanel card(int width, int height) {
         JPanel card = new JPanel();
         card.setPreferredSize(new Dimension(width, height));
+        card.setMinimumSize(new Dimension(width, height));
+        return card;
+    }
+
+    /** A card that can give up width down to a minimum, like a readout with wide gaps. */
+    private JPanel shrinkableCard(int width, int minimumWidth, int height) {
+        JPanel card = new JPanel();
+        card.setPreferredSize(new Dimension(width, height));
+        card.setMinimumSize(new Dimension(minimumWidth, height));
         return card;
     }
 
@@ -103,6 +113,42 @@ public class OverlayAnchorLayoutTest {
         assertEquals(MARGIN, readout.getX());
         assertTrue(readout.getY() + readout.getHeight() <= controls.getY(),
                 "the readout must not end up behind the controls");
+    }
+
+    @Test
+    public void aCardThatCanGiveUpWidthIsNarrowedBeforeItIsLifted() {
+        JPanel stage = stage(500, 600);
+        // A readout with wide gaps between its numbers: happy at 200, readable at 120.
+        JPanel readout = shrinkableCard(200, 120, 40);
+        JPanel controls = card(300, 250);
+        stage.add(card(100, 100), Anchor.Fill);
+        stage.add(readout, Anchor.SouthWest);
+        stage.add(controls, Anchor.SouthEast);
+
+        stage.doLayout();
+
+        assertEquals(600 - 40 - MARGIN, readout.getY(), "it stays in its corner");
+        assertEquals(controls.getX() - MARGIN - readout.getX(), readout.getWidth());
+        assertTrue(readout.getWidth() >= 120);
+    }
+
+    @Test
+    public void aLiftedCardStopsShortOfWhatSitsAtTheTop() {
+        // A short image with a tall card in the corner: lifting the readout above the controls
+        // would put it on top of the camera selector, which is where it ended up on a laptop.
+        JPanel stage = stage(500, 320);
+        JPanel selector = card(250, 30);
+        JPanel readout = card(200, 40);
+        JPanel controls = card(300, 250);
+        stage.add(card(100, 100), Anchor.Fill);
+        stage.add(selector, Anchor.NorthWest);
+        stage.add(readout, Anchor.SouthWest);
+        stage.add(controls, Anchor.SouthEast);
+
+        stage.doLayout();
+
+        assertTrue(readout.getY() >= selector.getY() + selector.getHeight() + MARGIN,
+                "the readout must not cover the camera selector");
     }
 
     @Test

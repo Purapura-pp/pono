@@ -143,6 +143,7 @@ public class MainFrame extends JFrame {
     private static final double CAMERA_HEIGHT_SHARE = 0.55;
     private static final String PREF_INSPECTOR_COLLAPSED = "MainFrame.inspectorCollapsed"; //$NON-NLS-1$
     private static final boolean PREF_INSPECTOR_COLLAPSED_DEF = false;
+    private static final String PREF_INSPECTOR_WIDTH = "MainFrame.inspectorWidth"; //$NON-NLS-1$
 
     private static final String PREF_CAMERA_WINDOW_X = "CameraFrame.windowX"; //$NON-NLS-1$
     private static final int PREF_CAMERA_WINDOW_X_DEF = 0;
@@ -263,6 +264,7 @@ public class MainFrame extends JFrame {
     private JPanel contentPane;
     private NavigationRail navigationRail;
     private InspectorPanel inspectorPanel;
+    private JSplitPane splitPaneInspector;
     private CameraStage cameraStage;
     private OverlayCard instructionsCard;
     private DroPanel droPanel;
@@ -291,6 +293,17 @@ public class MainFrame extends JFrame {
      */
     public InspectorPanel getInspector() {
         return inspectorPanel;
+    }
+
+    /** Put the properties column at its stored width, or fold it to its sliver. */
+    private void applyInspectorWidth() {
+        int total = splitPaneInspector.getWidth();
+        if (total <= 0) {
+            return;
+        }
+        int width = inspectorPanel.isCollapsed() ? InspectorPanel.COLLAPSED_WIDTH
+                : prefs.getInt(PREF_INSPECTOR_WIDTH, InspectorPanel.PREFERRED_WIDTH);
+        splitPaneInspector.setDividerLocation(total - width - splitPaneInspector.getDividerSize());
     }
 
     /**
@@ -577,7 +590,17 @@ public class MainFrame extends JFrame {
         splitPaneMachineAndTabs = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
         splitPaneMachineAndTabs.setBorder(null);
         splitPaneMachineAndTabs.setContinuousLayout(true);
-        contentPane.add(splitPaneMachineAndTabs, BorderLayout.CENTER);
+
+        // The properties column is the right side of a split rather than a fixed strip, because
+        // the wizards it hosts were drawn for the full width of the window and no one width suits
+        // them all. What is stored is the column's width, not the divider's position: the
+        // position depends on how wide the window happens to be.
+        splitPaneInspector = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+        splitPaneInspector.setBorder(null);
+        splitPaneInspector.setContinuousLayout(true);
+        splitPaneInspector.setResizeWeight(1.0);
+        splitPaneInspector.setLeftComponent(splitPaneMachineAndTabs);
+        contentPane.add(splitPaneInspector, BorderLayout.CENTER);
 
         panelMachine = new JPanel();
         splitPaneMachineAndTabs.setLeftComponent(panelMachine);
@@ -821,12 +844,29 @@ public class MainFrame extends JFrame {
         // One properties column for the whole window, where every table used to keep its own
         // below itself behind a split divider.
         inspectorPanel = new InspectorPanel();
+        inspectorPanel.setMinimumSize(new Dimension(InspectorPanel.COLLAPSED_WIDTH, 0));
         inspectorPanel.setCollapsed(prefs.getBoolean(PREF_INSPECTOR_COLLAPSED,
                 PREF_INSPECTOR_COLLAPSED_DEF));
-        inspectorPanel.addPropertyChangeListener("collapsed", //$NON-NLS-1$
-                e -> prefs.putBoolean(PREF_INSPECTOR_COLLAPSED, inspectorPanel.isCollapsed()));
+        inspectorPanel.addPropertyChangeListener("collapsed", e -> { //$NON-NLS-1$
+            prefs.putBoolean(PREF_INSPECTOR_COLLAPSED, inspectorPanel.isCollapsed());
+            applyInspectorWidth();
+        });
         inspectorPanel.setActivePage(navigationRail.getSelectedComponent());
-        contentPane.add(inspectorPanel, BorderLayout.EAST);
+        splitPaneInspector.setRightComponent(inspectorPanel);
+        splitPaneInspector.addPropertyChangeListener("dividerLocation", evt -> { //$NON-NLS-1$
+            // Only a width the user dragged to is worth remembering; the collapsed sliver and the
+            // positions set while the window is still finding its size are not.
+            if (!inspectorPanel.isCollapsed() && splitPaneInspector.isShowing()
+                    && splitPaneInspector.getWidth() > 0) {
+                int width = splitPaneInspector.getWidth() - splitPaneInspector.getDividerLocation()
+                        - splitPaneInspector.getDividerSize();
+                if (width > InspectorPanel.COLLAPSED_WIDTH) {
+                    prefs.putInt(PREF_INSPECTOR_WIDTH, width);
+                }
+            }
+        });
+        // The divider can only be placed once the split has a width.
+        SwingUtilities.invokeLater(this::applyInspectorWidth);
 
         // No title on the camera: the camera selector inside it already says which one this is,
         // and the etched box only cost the view a few pixels on every edge.

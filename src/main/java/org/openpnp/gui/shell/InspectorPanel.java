@@ -64,11 +64,15 @@ import org.openpnp.spi.PropertySheetHolder.PropertySheet;
  */
 @SuppressWarnings("serial")
 public class InspectorPanel extends JPanel {
-    /** Wide enough for the widest wizard's label column without crowding the tables. */
-    public static final int PREFERRED_WIDTH = 380;
+    /**
+     * The width to start with. The wizards this hosts were drawn for the full width of the window,
+     * and at 380 pixels the strip feeder's had its right hand columns cut off; the user can drag
+     * it from here.
+     */
+    public static final int PREFERRED_WIDTH = 500;
 
     /** What is left when it is folded away: enough for the button that brings it back. */
-    private static final int COLLAPSED_WIDTH = 34;
+    public static final int COLLAPSED_WIDTH = 34;
 
     private final JTabbedPane sheets = new JTabbedPane(JTabbedPane.TOP);
 
