@@ -326,6 +326,12 @@ public class MainFrame extends JFrame {
         cameraStage.revalidate();
     }
 
+    private DiagnosticsPanel diagnosticsPanel;
+
+    public DiagnosticsPanel getDiagnosticsTab() {
+        return diagnosticsPanel;
+    }
+
     private boolean dockMaximised;
     private int dividerBeforeMaximise;
 
@@ -905,6 +911,8 @@ public class MainFrame extends JFrame {
         addNavigation("Vision", Icons.captureCamera, visionSettingsPanel); //$NON-NLS-1$
         navigationRail.addGap();
         addNavigation("MachineSetup", Icons.axisCartesian, machineSetupPanel); //$NON-NLS-1$
+        diagnosticsPanel = new DiagnosticsPanel(configuration);
+        addNavigation("Diagnostics", org.openpnp.gui.shell.Ui.icon("ruler", 20, null), diagnosticsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         addNavigation("IssuesAndSolutions", Icons.solutions, issuesAndSolutionsPanel); //$NON-NLS-1$
         LogPanel logPanel = new LogPanel();
         addNavigation("Log", Icons.info, logPanel); //$NON-NLS-1$

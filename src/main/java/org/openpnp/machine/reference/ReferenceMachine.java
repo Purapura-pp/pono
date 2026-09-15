@@ -424,15 +424,12 @@ public class ReferenceMachine extends AbstractMachine {
 
     @Override
     public PropertySheet[] getPropertySheets() {
-        return Collect.concat(
-                Collect.concat(new PropertySheet[] { 
-                            new PropertySheetWizardAdapter(getConfigurationWizard()),
-                        },
-                        getMotionPlanner().getPropertySheets()),
-                new PropertySheet[] {
-                    new PropertySheetWizardAdapter(new MachineDiagnosticsWizard(this),
-                            Translations.getString("ReferenceMachine.MachineDiagnosticsWizard.title")), //$NON-NLS-1$
-                });
+        // The diagnostics have a page of their own on the navigation rail: three tables of
+        // measurements did not belong in the properties column.
+        return Collect.concat(new PropertySheet[] { 
+                    new PropertySheetWizardAdapter(getConfigurationWizard()),
+                },
+                getMotionPlanner().getPropertySheets());
     }
 
     public void registerFeederClass(Class<? extends Feeder> cls) {
