@@ -415,6 +415,21 @@ public class MachineDiagnosticsMathTest {
         assertEquals(0.004, fit[2], 1e-9);
     }
 
+    /** Digits and edges in the tick band read as spikes; only the run a pitch apart is the ruler. */
+    @Test
+    public void onlyTheConsistentlySpacedRunOfTicksIsKept() {
+        double[] features = { 40.0, 100.0, 177.0, 254.2, 331.0, 408.1, 484.9, 561.8, 700.0, 703.0 };
+
+        double[] chain = MachineDiagnosticsMath.consistentChain(features, 77.0, 0.15);
+
+        assertEquals(7, chain.length);
+        assertEquals(100.0, chain[0], 1e-9);
+        assertEquals(561.8, chain[6], 1e-9);
+        // A single missing tick does not break the run: a gap of two pitches is allowed.
+        double[] gappy = { 100.0, 177.0, 331.0, 408.0 };
+        assertEquals(4, MachineDiagnosticsMath.consistentChain(gappy, 77.0, 0.15).length);
+    }
+
     private static void assertArrayEqualsWithin(double[] expected, double[] actual) {
         assertEquals(expected.length, actual.length);
         for (int i = 0; i < expected.length; i++) {

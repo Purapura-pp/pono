@@ -370,6 +370,39 @@ public class MachineDiagnosticsMath {
         return result;
     }
 
+    /**
+     * The longest run of positions whose consecutive spacings are a whole number of pitches,
+     * within the tolerance given as a fraction of the pitch. Features that are not part of the
+     * pattern - a digit, an edge - break the run and are left out of it.
+     */
+    public static double[] consistentChain(double[] positions, double pitch, double tolerance) {
+        if (positions.length < 2 || pitch <= 0) {
+            return positions.clone();
+        }
+        int bestStart = 0;
+        int bestLength = 1;
+        int start = 0;
+        for (int i = 1; i <= positions.length; i++) {
+            boolean fits = false;
+            if (i < positions.length) {
+                double gap = positions[i] - positions[i - 1];
+                double pitches = gap / pitch;
+                double nearest = Math.max(1, Math.round(pitches));
+                fits = nearest <= 3 && Math.abs(pitches - nearest) <= tolerance;
+            }
+            if (!fits) {
+                if (i - start > bestLength) {
+                    bestLength = i - start;
+                    bestStart = start;
+                }
+                start = i;
+            }
+        }
+        double[] chain = new double[bestLength];
+        System.arraycopy(positions, bestStart, chain, 0, bestLength);
+        return chain;
+    }
+
     /** Amplitude and phase of a sinusoid of known period fitted to samples: the periodic error. */
     public static double[] sinusoidFit(double[] x, double[] y, double period) {
         double sc = 0, ss = 0, scc = 0, sss = 0, scs = 0, s1 = 0, ssum = 0, csum = 0, n = x.length;

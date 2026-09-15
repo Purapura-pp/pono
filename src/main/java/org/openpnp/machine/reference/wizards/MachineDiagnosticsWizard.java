@@ -129,6 +129,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextField stressSpeedFactors;
     private JTextField focusRange;
     private JTextField rulerStep;
+    private JTextField measureSpeedFactor;
     private JTextField focusStep;
     private JTextField focusRepeats;
     private JTextField stressCycles;
@@ -972,7 +973,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 ColumnSpec.decode("max(70dlu;default)"),
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), };
-        RowSpec[] rows = new RowSpec[34];
+        RowSpec[] rows = new RowSpec[36];
         for (int i = 0; i < rows.length; i++) {
             rows[i] = i % 2 == 0 ? FormSpecs.RELATED_GAP_ROWSPEC : FormSpecs.DEFAULT_ROWSPEC;
         }
@@ -992,6 +993,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         focusStep = addField(panel, "FocusStep", "6, 30", "8, 30");
         focusRepeats = addField(panel, "FocusRepeats", "2, 32", "4, 32");
         rulerStep = addField(panel, "RulerStep", "6, 32", "8, 32");
+        measureSpeedFactor = addField(panel, "MeasureSpeedFactor", "2, 34", "4, 34");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -1017,12 +1019,12 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.text")); //$NON-NLS-1$
         lblFirmwareCommands.setToolTipText(Translations.getString(
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.toolTipText")); //$NON-NLS-1$
-        panel.add(lblFirmwareCommands, "2, 34, right, top");
+        panel.add(lblFirmwareCommands, "2, 36, right, top");
         firmwareCommands = new JTextArea();
         firmwareCommands.setRows(4);
         JScrollPane firmwareScroll = new JScrollPane(firmwareCommands);
         firmwareScroll.setPreferredSize(new Dimension(200, 70));
-        panel.add(firmwareScroll, "4, 34, 5, 1, fill, fill");
+        panel.add(firmwareScroll, "4, 36, 5, 1, fill, fill");
     }
 
     private JTextField addField(JPanel panel, String key, String labelConstraints,
@@ -1134,6 +1136,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "focusStepMm", focusStep, "text", doubleConverter);
         addWrappedBinding(diagnostics, "focusRepeats", focusRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "rulerStepMm", rulerStep, "text", doubleConverter);
+        addWrappedBinding(diagnostics, "measureSpeedFactor", measureSpeedFactor, "text", doubleConverter);
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

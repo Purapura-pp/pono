@@ -194,6 +194,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     @Attribute(required = false)
     private double rulerStepMm = 0.25;
 
+    /**
+     * Speed factor for every move whose speed is not itself what is being measured: getting to a
+     * fiducial, hopping between the datum board's fiducials, stepping along the ruler. A machine
+     * that loses steps at full speed is one of the things these tests are for, and the first
+     * real run lost the board's frame to exactly that.
+     */
+    @Attribute(required = false)
+    private double measureSpeedFactor = 0.5;
+
     /** Half the Z range the focus sweep covers around the bottom camera's focus height. */
     @Attribute(required = false)
     private double focusRangeMm = 0.5;
@@ -1410,6 +1419,16 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
     // Settings.
 
+    public double getMeasureSpeedFactor() {
+        return measureSpeedFactor;
+    }
+
+    public void setMeasureSpeedFactor(double measureSpeedFactor) {
+        double old = this.measureSpeedFactor;
+        this.measureSpeedFactor = Math.max(0.05, Math.min(1.0, measureSpeedFactor));
+        firePropertyChange("measureSpeedFactor", old, this.measureSpeedFactor);
+    }
+
     public double getRulerStepMm() {
         return rulerStepMm;
     }
@@ -1861,6 +1880,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         running = true;
         aborting = false;
+        recoveries = 0;
         runStartedSeconds = NanosecondTime.getRuntimeSeconds();
         synchronized (logText) {
             logText.setLength(0);
@@ -1900,6 +1920,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             report.finding(Severity.Warning, "Stopped by the user before all the selected tests ran.");
         }
         finally {
+            if (recoveries > 0) {
+                report.finding(Severity.Problem, "The machine had to be homed %d time(s) during "
+                        + "this run to find the fiducial again. It loses its position under the "
+                        + "moves these tests make; every result here that spans such a point is "
+                        + "suspect, and a job would be losing placements the same way.", recoveries);
+            }
             running = false;
             aborting = false;
             try {
@@ -2096,8 +2122,17 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         List<Object[]> rows = new ArrayList<>();
         List<Motion> fits = new ArrayList<>();
         ReferenceHead head = requireHead(machine);
-        HeadMountable camera = requireDownLookingCamera(head);
+        ReferenceCamera camera = requireDownLookingCamera(head);
         Nozzle nozzle = head.getNozzles().isEmpty() ? null : head.getNozzles().get(0);
+        // The timing runs are the fastest, longest moves in these tests, and the first real run
+        // lost the fiducial during them. Where it was before and after says what they cost.
+        Location fiducial = head.getCalibrationPrimaryFiducialLocation();
+        Length diameter = head.getCalibrationPrimaryFiducialDiameter();
+        ReferenceControllerAxis approachAxis = findControllerAxis(camera, Axis.Type.X);
+        Detection before = null;
+        if (fiducial != null && diameter != null && diameter.getValue() > 0) {
+            before = acquire(machine, camera, approachAxis, fiducial, diameter, "Kinematics start", report);
+        }
 
         List<BacklashSetting> saved = suspendBacklashCompensation(machine, Axis.Type.X, Axis.Type.Y);
         try {
@@ -2112,6 +2147,21 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         finally {
             restoreBacklashCompensation(saved);
+        }
+        if (before != null) {
+            Detection after = acquire(machine, camera, approachAxis, fiducial, diameter,
+                    "Kinematics end", report);
+            Location drift = after.location.convertToUnits(LengthUnit.Millimeters)
+                    .subtract(before.location.convertToUnits(LengthUnit.Millimeters));
+            double off = Math.hypot(drift.getX(), drift.getY());
+            report.line("  After the X and Y timing runs the fiducial had moved %.4f mm "
+                    + "(%+.4f, %+.4f) in the camera.", off, drift.getX(), drift.getY());
+            if (off > LOST_STEPS_TOLERANCE_MM * 2) {
+                report.finding(Severity.Problem, "The timing runs alone moved the fiducial %.3f mm "
+                        + "(%+.3f in X, %+.3f in Y): the axes lose steps at the speed they are "
+                        + "planned with. The lost steps group says at which speed.", off,
+                        drift.getX(), drift.getY());
+            }
         }
         if (timingIncludesZAndRotation && nozzle != null) {
             ReferenceControllerAxis zAxis = findControllerAxis(nozzle, Axis.Type.Z);
@@ -2206,7 +2256,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             return;
         }
         MotionFit fit = MachineDiagnosticsMath.fitMotion(toArray(fitDistances), toArray(fitTimes));
-        fits.add(new Motion(axis.getId(), fit.acceleration, fit.velocity, fit.overhead, unit));
+        double reach = axis.getMotionLimit(2) > 0
+                ? axis.getMotionLimit(1) * axis.getMotionLimit(1) / axis.getMotionLimit(2) : 0;
+        boolean velocityReachable = fitDistances.get(fitDistances.size() - 1) >= reach;
+        fits.add(new Motion(axis.getId(), fit.acceleration,
+                velocityReachable ? fit.velocity : Double.NaN, fit.overhead, unit));
         double configuredFeedRate = axis.getMotionLimit(1);
         double configuredAcceleration = axis.getMotionLimit(2);
         report.line("  measured: acceleration %.0f %s/s2, velocity %.0f %s/s, overhead %.0f ms "
@@ -2219,7 +2273,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     .recordDataPoint(distance, fit.timeAt(distance));
         }
         reportLimitShortfall(report, axis, "acceleration", configuredAcceleration, fit.acceleration, unit + "/s2");
-        reportLimitShortfall(report, axis, "velocity", configuredFeedRate, fit.velocity, unit + "/s");
+        // A velocity is only reached if some distance is long enough to reach it: d > v^2/a.
+        double longest = fitDistances.get(fitDistances.size() - 1);
+        double needed = configuredAcceleration > 0
+                ? configuredFeedRate * configuredFeedRate / configuredAcceleration : 0;
+        if (longest >= needed) {
+            reportLimitShortfall(report, axis, "velocity", configuredFeedRate, fit.velocity, unit + "/s");
+        }
+        else {
+            report.line("  the longest distance tested, %.1f %s, is too short to reach the "
+                    + "configured velocity (%.1f %s needed), so the fitted velocity is not held "
+                    + "against it.", longest, unit, needed, unit);
+        }
         if (fit.overhead > 0.05) {
             report.finding(Severity.Info, "Axis %s carries %.0f ms of fixed cost per move. Over a "
                     + "job of thousands of moves this is the dominant term for short moves.",
@@ -2290,6 +2355,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         camera.actuateLightBeforeCapture();
         try {
             BufferedImage frame = camera.lightSettleAndCapture();
+            long seen = fingerprint(frame);
             int attempts = 0;
             while (xs.size() < Math.max(1, frames) && attempts < Math.max(1, frames) * 3) {
                 checkAborted();
@@ -2304,20 +2370,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     if (xs.isEmpty() && attempts >= 3) {
                         throw e;
                     }
-                    frame = camera.capture();
+                    frame = freshFrame(camera, seen);
+                    seen = fingerprint(frame);
                     continue;
                 }
                 if (Double.isNaN(firstScore)) {
                     firstScore = score.finalScore;
                 }
-                boolean duplicate = !xs.isEmpty() && circle.x == xs.get(xs.size() - 1)
-                        && circle.y == ys.get(ys.size() - 1);
-                if (!duplicate) {
-                    xs.add(circle.x);
-                    ys.add(circle.y);
-                }
+                xs.add(circle.x);
+                ys.add(circle.y);
                 if (xs.size() < frames) {
-                    frame = camera.capture();
+                    frame = freshFrame(camera, seen);
+                    seen = fingerprint(frame);
                 }
             }
         }
@@ -2344,6 +2408,39 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private Detection detect(ReferenceMachine machine, ReferenceCamera camera, Location expected,
             Length diameter, String diagnostics) throws Exception {
         return detect(machine, camera, expected, diameter, diagnostics, framesPerPoint);
+    }
+
+    /**
+     * A cheap signature of a frame: a grid of its pixels. Frames are deduplicated by this rather
+     * than by where the detector put the fiducial, because a sub-pixel detector quantises - at a
+     * super sampling of 8, most frames of a standing fiducial land on exactly the same eighth of
+     * a pixel, and the first real run kept 5 of 90 frames for that reason.
+     */
+    private static long fingerprint(BufferedImage image) {
+        if (image == null) {
+            return 0;
+        }
+        long hash = 1125899906842597L;
+        int stepX = Math.max(1, image.getWidth() / 16);
+        int stepY = Math.max(1, image.getHeight() / 16);
+        for (int y = stepY / 2; y < image.getHeight(); y += stepY) {
+            for (int x = stepX / 2; x < image.getWidth(); x += stepX) {
+                hash = 31 * hash + image.getRGB(x, y);
+            }
+        }
+        return hash;
+    }
+
+    /** A fresh frame: capture until the image changes, within reason. */
+    private BufferedImage freshFrame(ReferenceCamera camera, long previous) throws Exception {
+        for (int attempt = 0; attempt < 20; attempt++) {
+            BufferedImage image = camera.capture();
+            if (image != null && fingerprint(image) != previous) {
+                return image;
+            }
+            Thread.sleep(10);
+        }
+        throw new Exception("The camera stopped delivering new frames.");
     }
 
     /** Seconds since the run started, for the time column of every CSV. */
@@ -2373,6 +2470,84 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         System.arraycopy(own, 0, all, 0, own.length);
         System.arraycopy(tail, 0, all, own.length, tail.length);
         return all;
+    }
+
+    /** Detect, or null where the fiducial is simply not there; aborts still propagate. */
+    private Detection tryDetect(ReferenceMachine machine, ReferenceCamera camera, Location expected,
+            Length diameter, String diagnostics, double extraSearch) throws Exception {
+        try {
+            return detect(machine, camera, expected, diameter, diagnostics, framesPerPoint, extraSearch);
+        }
+        catch (AbortedException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            Logger.trace(e, "Machine diagnostics: {} not found", diagnostics);
+            return null;
+        }
+    }
+
+    /** How many times the machine had to be homed to find the fiducial again, this run. */
+    private int recoveries;
+
+    /**
+     * Go to the fiducial and find it, whatever the machine has done since it was last seen.
+     * <p>
+     * Approach from the same side as always and look. Not there: look over a wider patch of the
+     * image. Still not there: the machine has lost its position, so home it, approach again and
+     * look wide. That is the recovery the first real run showed was needed - a machine that
+     * loses steps at full speed had put the fiducial out of the camera's view halfway through
+     * the tests, and everything after that failed with "Subject not found". The drift found is
+     * logged and returned, since it is itself a measurement.
+     */
+    private Detection acquire(ReferenceMachine machine, ReferenceCamera camera,
+            ReferenceControllerAxis approachAxis, Location fiducial, Length diameter, String label,
+            MachineDiagnosticsReport report) throws Exception {
+        for (int pass = 0; pass < 2; pass++) {
+            checkAborted();
+            if (approachAxis != null) {
+                approachFrom(camera, approachAxis, fiducial, -10, measureSpeedFactor);
+            }
+            else {
+                MovableUtils.moveToLocationAtSafeZ(camera, fiducial, measureSpeedFactor);
+            }
+            Detection seen = tryDetect(machine, camera, fiducial, diameter, label, 0.0);
+            if (seen == null) {
+                seen = tryDetect(machine, camera, fiducial, diameter, label, 0.35);
+            }
+            if (seen != null) {
+                Location drift = seen.location.convertToUnits(LengthUnit.Millimeters)
+                        .subtract(fiducial.convertToUnits(LengthUnit.Millimeters));
+                double off = Math.hypot(drift.getX(), drift.getY());
+                if (off > 0.2) {
+                    log("%s: fiducial found %.3f mm from where it is configured (%+.3f, %+.3f)",
+                            label, off, drift.getX(), drift.getY());
+                    if (report != null) {
+                        report.line("  %s: the fiducial was %.3f mm (%+.3f, %+.3f) from its "
+                                + "configured position%s.", label, off, drift.getX(), drift.getY(),
+                                pass > 0 ? " after homing" : "");
+                    }
+                }
+                return seen;
+            }
+            if (pass == 0) {
+                recoveries++;
+                log("%s: fiducial lost; homing the machine to find it again", label);
+                if (report != null) {
+                    report.line("  %s: the fiducial was not in view. The machine was homed to "
+                            + "recover it.", label);
+                    report.finding(Severity.Warning, "The fiducial had gone out of the camera's "
+                            + "view before %s: the machine had lost its position by more than "
+                            + "the search range. It was homed and the measurements continued; "
+                            + "positions before and after this point are not in the same frame.",
+                            label);
+                }
+                machine.home();
+            }
+        }
+        throw new Exception("The fiducial was not found even after homing the machine. Check "
+                + "that the primary fiducial location is right and that the fiducial is in view "
+                + "after homing.");
     }
 
     /** The noise floor of a camera from the last run, in millimetres, or null. */
@@ -2412,12 +2587,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         Location fiducial = requireFiducial(head);
         Length diameter = head.getCalibrationPrimaryFiducialDiameter();
         ReferenceControllerAxis xAxis = findControllerAxis(camera, Axis.Type.X);
-        if (xAxis != null) {
-            approachFrom(camera, xAxis, fiducial, -10, 1.0);
-        }
-        else {
-            MovableUtils.moveToLocationAtSafeZ(camera, fiducial);
-        }
+        acquire(machine, camera, xAxis, fiducial, diameter, "Vision noise floor", report);
         camera.waitForCompletion(CompletionType.WaitForStillstand);
         Thread.sleep(machineSettleMs);
 
@@ -2436,6 +2606,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         camera.actuateLightBeforeCapture();
         try {
             BufferedImage frame = camera.lightSettleAndCapture();
+            long seen = fingerprint(frame);
             int attempts = 0;
             while (xs.size() < wanted && attempts < wanted * 3) {
                 checkAborted();
@@ -2445,21 +2616,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 try {
                     Circle circle = vision.getSubjectPixelLocation(camera, camera, feature, 0.0,
                             null, score, false, frame);
-                    boolean duplicate = !xs.isEmpty() && circle.x == xs.get(xs.size() - 1)
-                            && circle.y == ys.get(ys.size() - 1);
-                    if (!duplicate) {
-                        xs.add(circle.x);
-                        ys.add(circle.y);
-                        scores.add(score.finalScore);
-                        rows.add(new Object[] { xs.size() - 1, t - t0, circle.x, circle.y,
-                                score.finalScore });
-                        tLast = t;
-                    }
+                    xs.add(circle.x);
+                    ys.add(circle.y);
+                    scores.add(score.finalScore);
+                    rows.add(new Object[] { xs.size() - 1, t - t0, circle.x, circle.y,
+                            score.finalScore });
+                    tLast = t;
                 }
                 catch (Exception e) {
                     missed++;
                 }
-                frame = camera.capture();
+                frame = freshFrame(camera, seen);
+                seen = fingerprint(frame);
             }
         }
         finally {
@@ -2551,9 +2719,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         double speed = Math.max(0.01, Math.min(1.0, latencySpeedFactor));
 
         // Start beside the fiducial, from the same side each time.
-        approachFrom(camera, xAxis, fiducial, -10, 1.0);
+        acquire(machine, camera, xAxis, fiducial, diameter, "Camera latency", report);
         Location start = fiducial.add(new Location(LengthUnit.Millimeters, -distance, 0, 0, 0));
-        camera.moveTo(start, 1.0);
+        camera.moveTo(start, measureSpeedFactor);
         camera.waitForCompletion(CompletionType.WaitForStillstand);
         Thread.sleep(machineSettleMs);
 
@@ -2565,20 +2733,22 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         camera.actuateLightBeforeCapture();
         Thread grabber = new Thread(() -> {
             try {
-                Double lastX = null;
-                Double lastY = null;
+                long seen = 0;
                 while (capturing.get()) {
                     BufferedImage image = camera.capture();
+                    if (image == null) {
+                        continue;
+                    }
+                    long print = fingerprint(image);
+                    if (print == seen) {
+                        continue;
+                    }
+                    seen = print;
                     double t = NanosecondTime.getRuntimeSeconds();
                     Circle circle = locateCircle(image, diameterPixels);
                     if (circle == null) {
                         continue;
                     }
-                    if (lastX != null && circle.x == lastX && circle.y == lastY) {
-                        continue;
-                    }
-                    lastX = circle.x;
-                    lastY = circle.y;
                     samples.add(new double[] { t, circle.x, circle.y });
                 }
             }
@@ -2728,9 +2898,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 continue;
             }
             double travelPerCycle = 2 * achieved;
-            approachFrom(camera, axis, fiducial, -10, 1.0);
-            Detection before = detect(machine, camera, fiducial, diameter,
-                    String.format("Lost steps %s before", axis.getName()));
+            Detection before = acquire(machine, camera, axis, fiducial, diameter,
+                    String.format("Lost steps %s before", axis.getName()), report);
             for (double speed : speeds) {
                 checkAborted();
                 for (int cycle = 0; cycle < cycles; cycle++) {
@@ -2739,9 +2908,35 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     camera.moveTo(high, speed);
                 }
                 camera.waitForCompletion(CompletionType.WaitForStillstand);
-                approachFrom(camera, axis, fiducial, -10, 1.0);
-                Detection after = detect(machine, camera, fiducial, diameter,
-                        String.format("Lost steps %s %.2fx", axis.getName(), speed));
+                approachFrom(camera, axis, fiducial, -10, measureSpeedFactor);
+                Detection after = tryDetect(machine, camera, fiducial, diameter,
+                        String.format("Lost steps %s %.2fx", axis.getName(), speed), 0.0);
+                if (after == null) {
+                    after = tryDetect(machine, camera, fiducial, diameter,
+                            String.format("Lost steps %s %.2fx wide", axis.getName(), speed), 0.35);
+                }
+                if (after == null) {
+                    // Lost beyond the search range: that is the finding, and higher speeds would
+                    // only lose more. Home so that the groups after this one start referenced.
+                    double travel = travelPerCycle * cycles;
+                    rows.add(new Object[] { axis.getName(), speed, cycles, travel, Double.NaN,
+                            Double.NaN, Double.NaN, Double.NaN, elapsed(), 0, Double.NaN, Double.NaN });
+                    report.line("  %-6s %-8.2f %-12.0f %-12s %-14s", axis.getName(), speed, travel,
+                            "lost", "beyond search");
+                    report.finding(Severity.Problem, "Axis %s lost the fiducial altogether after "
+                            + "%.0f mm of travel at %.2f of its speed: more than %.1f mm of steps "
+                            + "lost. Higher speeds were not tried. The machine was homed to "
+                            + "continue.", axis.getName(), travel, speed,
+                            camera.getWidth() * camera.getUnitsPerPixelAtZ()
+                                    .convertToUnits(LengthUnit.Millimeters).getX() * 0.3);
+                    conclusions.add(new MachineDiagnosticsResults.LostSteps(axis.getId(), speed,
+                            travel, Double.NaN, axis.getMotionLimit(1)));
+                    recoveries++;
+                    machine.home();
+                    before = acquire(machine, camera, axis, fiducial, diameter,
+                            String.format("Lost steps %s after homing", axis.getName()), report);
+                    break;
+                }
                 Location drift = after.location.convertToUnits(LengthUnit.Millimeters)
                         .subtract(before.location.convertToUnits(LengthUnit.Millimeters));
                 double along = type == Axis.Type.X ? drift.getX() : drift.getY();
@@ -2768,6 +2963,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             Double floor = noiseFloorMm(camera);
             double significant = Math.max(LOST_STEPS_TOLERANCE_MM,
                     floor != null ? floor * 4 : 0);
+            if (Double.isNaN(loss.getDriftMm())) {
+                continue;
+            }
             if (Math.abs(loss.getDriftMm()) > significant) {
                 report.finding(Severity.Problem, "Axis %s came back %.4f mm off after %.0f mm of "
                         + "travel at %.2f of its speed: it is losing steps or slipping at that "
@@ -2779,7 +2977,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         if (!conclusions.isEmpty()) {
             boolean anyLoss = false;
             for (MachineDiagnosticsResults.LostSteps loss : conclusions) {
-                anyLoss |= Math.abs(loss.getDriftMm()) > LOST_STEPS_TOLERANCE_MM;
+                anyLoss |= Double.isNaN(loss.getDriftMm())
+                        || Math.abs(loss.getDriftMm()) > LOST_STEPS_TOLERANCE_MM;
             }
             if (!anyLoss) {
                 report.finding(Severity.Info, "No axis lost steps at any speed factor up to the "
@@ -2809,10 +3008,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         Map<String, Stats> backlash = new LinkedHashMap<>();
         Map<String, Double> effectiveResolution = new LinkedHashMap<>();
         List<FieldOfView> scans = new ArrayList<>();
+        ReferenceControllerAxis approachAxis = findControllerAxis(camera, Axis.Type.X);
+        acquire(machine, camera, approachAxis, fiducial, diameter, "X/Y positioning start", report);
         measureRepeatability(machine, report, graph, head, camera, fiducial, diameter);
+        acquire(machine, camera, approachAxis, fiducial, diameter, "before the backlash matrix", report);
         measureRawBacklash(machine, report, graph, head, camera, fiducial, diameter, backlash);
         setPositioningGraph(graph);
+        acquire(machine, camera, approachAxis, fiducial, diameter, "before the step test", report);
         measureStepResponse(machine, report, head, camera, fiducial, diameter, effectiveResolution);
+        acquire(machine, camera, approachAxis, fiducial, diameter, "before the field of view scan", report);
         measureFieldOfViewScale(machine, report, head, camera, fiducial, diameter, scans);
         recordResults(TestGroup.XyPositioning, report, results -> {
             List<Positioning> positioning = new ArrayList<>();
@@ -3107,7 +3311,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 double dx = -halfWidth + 2 * halfWidth * ix / (fieldOfViewGridSteps - 1.0);
                 Location target = fiducial.add(new Location(LengthUnit.Millimeters, dx, dy, 0, 0));
                 // Z never changes here, so the moves stay in plane rather than routing via safe Z.
-                camera.moveTo(target);
+                camera.moveTo(target, measureSpeedFactor);
                 Detection detection = detect(machine, camera, fiducial, diameter,
                         "Field of view scan");
                 Location detected = detection.location.convertToUnits(LengthUnit.Millimeters);
@@ -3202,6 +3406,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             boolean neverSettled = false;
             Color color = palette[index++ % palette.length];
             for (int d = 0; d < directions.length; d++) {
+                acquire(machine, camera, findControllerAxis(camera, Axis.Type.X), fiducial, diameter,
+                        String.format("settling, %.0f mm along %s", distance, directionNames[d]), report);
                 for (int run = 0; run < runsPerDistance; run++) {
                     checkAborted();
                     SettleRun thisRun = sampleSettling(camera, fiducial, distance, directions[d],
@@ -3345,7 +3551,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             double[] direction, String directionName, int diameterPixels, SimpleGraph graph,
             List<Object[]> rows, Color color, int run) throws Exception {
         MovableUtils.moveToLocationAtSafeZ(camera, fiducial.add(new Location(LengthUnit.Millimeters,
-                -distance * direction[0], -distance * direction[1], 0, 0)));
+                -distance * direction[0], -distance * direction[1], 0, 0)), measureSpeedFactor);
         camera.waitForCompletion(CompletionType.WaitForStillstand);
         Thread.sleep(machineSettleMs);
         List<Double> times = new ArrayList<>();
@@ -3356,18 +3562,23 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             camera.moveTo(fiducial, 1.0);
             camera.waitForCompletion(CompletionType.WaitForStillstand);
             double t0 = NanosecondTime.getRuntimeSeconds();
+            long seen = 0;
             while (NanosecondTime.getRuntimeSeconds() - t0 < settleSampleSeconds) {
                 checkAborted();
                 BufferedImage image = camera.capture();
-                double t = NanosecondTime.getRuntimeSeconds() - t0;
-                Circle circle = locateCircle(image, diameterPixels);
-                if (circle == null) {
+                if (image == null) {
                     continue;
                 }
                 // A camera can hand out the same frame twice. Counted as a sample it would look
                 // like the image had stopped moving when in fact nothing new was looked at.
-                if (!xs.isEmpty() && circle.x == xs.get(xs.size() - 1)
-                        && circle.y == ys.get(ys.size() - 1)) {
+                long print = fingerprint(image);
+                if (print == seen) {
+                    continue;
+                }
+                seen = print;
+                double t = NanosecondTime.getRuntimeSeconds() - t0;
+                Circle circle = locateCircle(image, diameterPixels);
+                if (circle == null) {
                     continue;
                 }
                 times.add(t);
@@ -3470,13 +3681,24 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             // Always arrive from the same side, so that backlash does not masquerade as homing
             // scatter.
             if (xAxis != null) {
-                approachFrom(camera, xAxis, fiducial, -10, 1.0);
+                approachFrom(camera, xAxis, fiducial, -10, measureSpeedFactor);
             }
             else {
-                MovableUtils.moveToLocationAtSafeZ(camera, fiducial);
+                MovableUtils.moveToLocationAtSafeZ(camera, fiducial, measureSpeedFactor);
             }
-            Detection detection = detect(machine, camera, fiducial, diameter,
-                    "Homing repeatability");
+            Detection detection = tryDetect(machine, camera, fiducial, diameter,
+                    "Homing repeatability", 0.0);
+            if (detection == null) {
+                detection = tryDetect(machine, camera, fiducial, diameter, "Homing repeatability wide", 0.35);
+            }
+            if (detection == null) {
+                report.line("  %-8d %-12s %-12s", cycle, "lost", "lost");
+                report.finding(Severity.Problem, "After homing cycle %d the fiducial was not in "
+                        + "the camera's view at all: homing put the origin more than the search "
+                        + "range from where it was.", cycle + 1);
+                rows.add(new Object[] { cycle, Double.NaN, Double.NaN, elapsed(), 0, Double.NaN, Double.NaN });
+                continue;
+            }
             Location detected = detection.location.convertToUnits(LengthUnit.Millimeters);
             double errorX = detected.getX() - reference.getX();
             double errorY = detected.getY() - reference.getY();
@@ -3487,6 +3709,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         report.writeCsv("homing.csv",
                 columns(new String[] { "cycle", "error_x_mm", "error_y_mm" }), rows);
+        if (xErrors.size() < 2) {
+            throw new Exception("The fiducial was found after fewer than two homing cycles; "
+                    + "nothing can be said about a spread.");
+        }
         Stats statsX = MachineDiagnosticsMath.stats(xErrors);
         Stats statsY = MachineDiagnosticsMath.stats(yErrors);
         report.line("  X spread %.4f mm (sd %.4f), Y spread %.4f mm (sd %.4f)",
@@ -3551,17 +3777,18 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         ReferenceControllerAxis xAxis = findControllerAxis(camera, Axis.Type.X);
         ReferenceControllerAxis yAxis = findControllerAxis(camera, Axis.Type.Y);
 
-        // The anchor, approached the way everything else on the board will be.
-        if (xAxis != null) {
-            approachFrom(camera, xAxis, fiducial, -10, 1.0);
-        }
-        else {
-            MovableUtils.moveToLocationAtSafeZ(camera, fiducial);
-        }
-        Detection anchorSeen = detect(machine, camera, fiducial, configuredDiameter, anchor.name);
+        // The anchor, approached the way everything else on the board will be. Every other
+        // point is measured as a hop from the anchor and back: the anchor is read again before
+        // each, and whatever it has moved by in the camera since the first reading - the
+        // machine losing its position between hops - is taken off the point. The first real run
+        // had the frame wrecked by exactly that, at full speed.
+        Detection anchorSeen = acquire(machine, camera, xAxis, fiducial, configuredDiameter,
+                anchor.name, report);
         Location anchorMachine = anchorSeen.location.convertToUnits(LengthUnit.Millimeters);
         List<Found> found = new ArrayList<>();
         found.add(new Found(anchor, anchorMachine, anchorSeen));
+        anchorReference = anchorMachine;
+        anchorDriftLimit = 0;
 
         // Which way round the board lies: the nearest fiducials are looked for under each of the
         // eight ways it can, and the first way that finds them all is taken.
@@ -3576,7 +3803,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     double[] o = DatumBoard.orient(dot.x - anchor.x, dot.y - anchor.y, quarter, mirror);
                     Location predicted = anchorMachine.add(new Location(LengthUnit.Millimeters,
                             o[0], o[1], 0, 0));
-                    Found seen = lookFor(machine, camera, xAxis, dot, predicted, 0.3);
+                    Found seen = lookFor(machine, camera, xAxis, fiducial, configuredDiameter, report,
+                            dot, predicted, 0.3);
                     if (seen == null) {
                         break;
                     }
@@ -3613,7 +3841,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             }
             checkAborted();
             double[] p = rough.apply(dot.x, dot.y);
-            Found seen = lookFor(machine, camera, xAxis, dot,
+            Found seen = lookFor(machine, camera, xAxis, fiducial, configuredDiameter, report, dot,
                     new Location(LengthUnit.Millimeters, p[0], p[1], fiducial.getZ(), 0), 0.15);
             if (seen == null) {
                 report.line("  %s was not found where the frame predicts it; left out.", dot.name);
@@ -3642,6 +3870,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 + "rotated %.3f deg, residual %.4f mm rms over %d points", (frame.scaleX - 1) * 100,
                 (frame.scaleY - 1) * 100, frame.shearDegrees, frame.rotationDegrees,
                 frame.rmsResidual, found.size());
+        report.line("  The anchor drifted by up to %.4f mm between hops; each point was corrected "
+                + "by the drift read just before it.", anchorDriftLimit);
+        if (anchorDriftLimit > 0.1) {
+            report.finding(Severity.Warning, "The machine drifted by up to %.3f mm between hops "
+                    + "to the board's fiducials, at %.2f of its speed. Each point was corrected by "
+                    + "the anchor read just before it, but a drift that happens during the hop "
+                    + "itself cannot be taken out, so the frame's residual carries some of it.",
+                    anchorDriftLimit, measureSpeedFactor);
+        }
         MachineDiagnosticsResults.Datum datum = new MachineDiagnosticsResults.Datum(board.getName(),
                 head.getId(), frame.scaleX, frame.scaleY, frame.shearDegrees,
                 frame.rotationDegrees, frame.mirrored, frame.rmsResidual, found.size());
@@ -3690,15 +3927,48 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             double[] p = frame.apply(disc.x, disc.y);
             Location predicted = new Location(LengthUnit.Millimeters, p[0], p[1], fiducial.getZ(), 0);
             try {
-                MovableUtils.moveToLocationAtSafeZ(camera, predicted);
-                Detection seen = detect(machine, camera, predicted,
-                        new Length(disc.diameterMm, LengthUnit.Millimeters), disc.name, framesPerPoint, 0.1);
-                Location at = seen.location.convertToUnits(LengthUnit.Millimeters);
+                Location drift = anchorDrift(machine, camera, xAxis, fiducial, configuredDiameter,
+                        report, disc.name);
+                Location target = predicted.add(drift.derive(null, null, 0.0, 0.0));
+                MovableUtils.moveToLocationAtSafeZ(camera, target, measureSpeedFactor);
+                camera.waitForCompletion(CompletionType.WaitForStillstand);
+                Thread.sleep(machineSettleMs);
+                // A 5 mm disc is wider than the fiducial pipeline's search window; the circle
+                // detector is given the disc's own size and a window to match.
+                Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+                int diameterPixels = (int) Math.round(disc.diameterMm / upp.getX());
+                List<Double> cx = new ArrayList<>();
+                List<Double> cy = new ArrayList<>();
+                camera.actuateLightBeforeCapture();
+                try {
+                    BufferedImage image = camera.lightSettleAndCapture();
+                    long seen = fingerprint(image);
+                    for (int f = 0; f < Math.max(1, framesPerPoint); f++) {
+                        Circle circle = locateCircle(image, diameterPixels);
+                        if (circle != null) {
+                            cx.add(circle.x);
+                            cy.add(circle.y);
+                        }
+                        if (f + 1 < framesPerPoint) {
+                            image = freshFrame(camera, seen);
+                            seen = fingerprint(image);
+                        }
+                    }
+                }
+                finally {
+                    camera.actuateLightAfterCapture();
+                }
+                if (cx.isEmpty()) {
+                    throw new Exception("no circle of " + diameterPixels + " px found");
+                }
+                Location at = VisionUtils.getPixelLocation(camera, camera,
+                        MachineDiagnosticsMath.median(cx), MachineDiagnosticsMath.median(cy))
+                        .convertToUnits(LengthUnit.Millimeters)
+                        .subtract(drift.derive(null, null, 0.0, 0.0));
                 double dx = at.getX() - predicted.getX();
                 double dy = at.getY() - predicted.getY();
-                report.line("  %s (%s): %+.4f, %+.4f mm from where the copper puts it, score %.2f, "
-                        + "frame scatter %.3f px", disc.name, disc.layer, dx, dy, seen.score,
-                        seen.sdPixels);
+                report.line("  %s (%s): %+.4f, %+.4f mm from where the copper puts it, %d of %d "
+                        + "frames", disc.name, disc.layer, dx, dy, cx.size(), framesPerPoint);
                 if (Math.hypot(dx, dy) > 0.1) {
                     report.finding(Severity.Info, "The %s is registered %.3f mm from the copper: "
                             + "that is this board's %s-to-copper registration, and the reason the "
@@ -3740,27 +4010,58 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         return MachineDiagnosticsMath.affineFit(from, to);
     }
 
-    /** Go to where a fiducial is predicted and look for it; null if it is not there. */
+    /** Where the anchor was first seen this run, and the largest drift read against it. */
+    private Location anchorReference;
+    private double anchorDriftLimit;
+
+    /**
+     * Read the anchor again and return how far it has moved in the camera since the first
+     * reading: the machine's drift at this moment, to be taken off whatever is measured next.
+     */
+    private Location anchorDrift(ReferenceMachine machine, ReferenceCamera camera,
+            ReferenceControllerAxis xAxis, Location fiducial, Length diameter,
+            MachineDiagnosticsReport report, String before) throws Exception {
+        Detection seen = acquire(machine, camera, xAxis, fiducial, diameter,
+                "anchor before " + before, report);
+        Location drift = seen.location.convertToUnits(LengthUnit.Millimeters).subtract(anchorReference);
+        double off = Math.hypot(drift.getX(), drift.getY());
+        anchorDriftLimit = Math.max(anchorDriftLimit, off);
+        if (off > 0.05) {
+            log("Anchor drifted %.4f mm (%+.4f, %+.4f) before %s; taken off the measurement",
+                    off, drift.getX(), drift.getY(), before);
+        }
+        return drift;
+    }
+
+    /**
+     * Go to where a fiducial is predicted and look for it; null if it is not there. The anchor
+     * is read first and its drift taken off what is found.
+     */
     private Found lookFor(ReferenceMachine machine, ReferenceCamera camera,
-            ReferenceControllerAxis xAxis, DatumBoard.Dot dot, Location predicted,
+            ReferenceControllerAxis xAxis, Location fiducial, Length anchorDiameter,
+            MachineDiagnosticsReport report, DatumBoard.Dot dot, Location predicted,
             double extraSearch) throws Exception {
+        Location drift = anchorDrift(machine, camera, xAxis, fiducial, anchorDiameter, report, dot.name);
+        Location target = predicted.add(drift.derive(null, null, 0.0, 0.0));
         if (xAxis != null) {
-            approachFrom(camera, xAxis, predicted, -10, 1.0);
+            approachFrom(camera, xAxis, target, -10, measureSpeedFactor);
         }
         else {
-            MovableUtils.moveToLocationAtSafeZ(camera, predicted);
+            MovableUtils.moveToLocationAtSafeZ(camera, target, measureSpeedFactor);
         }
         try {
-            Detection seen = detect(machine, camera, predicted,
+            Detection seen = detect(machine, camera, target,
                     new Length(dot.diameterMm, LengthUnit.Millimeters), dot.name, framesPerPoint,
                     extraSearch);
-            return new Found(dot, seen.location.convertToUnits(LengthUnit.Millimeters), seen);
+            Location corrected = seen.location.convertToUnits(LengthUnit.Millimeters)
+                    .subtract(drift.derive(null, null, 0.0, 0.0));
+            return new Found(dot, corrected, seen);
         }
         catch (AbortedException e) {
             throw e;
         }
         catch (Exception e) {
-            Logger.trace(e, "Machine diagnostics: {} not at {}", dot.name, predicted);
+            Logger.trace(e, "Machine diagnostics: {} not at {}", dot.name, target);
             return null;
         }
     }
@@ -3784,28 +4085,36 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.line("Ruler, %d ticks %.1f mm apart", ruler.ticks, ruler.pitchMm);
 
         // One frame at the ruler's centre.
+        ReferenceHead head = requireHead(machine);
+        Location fiducial = requireFiducial(head).convertToUnits(LengthUnit.Millimeters);
+        Length anchorDiameter = head.getCalibrationPrimaryFiducialDiameter();
+        ReferenceControllerAxis xAxis = findControllerAxis(camera, Axis.Type.X);
+        Location driftBefore = anchorDrift(machine, camera, xAxis, fiducial, anchorDiameter, report,
+                "the ruler");
         double[] c = frame.apply(centre[0], centre[1]);
-        Location at = new Location(LengthUnit.Millimeters, c[0], c[1], z, 0);
-        MovableUtils.moveToLocationAtSafeZ(camera, at);
+        Location at = new Location(LengthUnit.Millimeters, c[0], c[1], z, 0)
+                .add(driftBefore.derive(null, null, 0.0, 0.0));
+        MovableUtils.moveToLocationAtSafeZ(camera, at, measureSpeedFactor);
         camera.waitForCompletion(CompletionType.WaitForStillstand);
         Thread.sleep(machineSettleMs);
         RulerFrame first = readRuler(camera, board, frame, at, z);
-        if (first.ticks.length < 5) {
-            throw new Exception("Only " + first.ticks.length + " ticks were read in the frame.");
-        }
-        double[] index = new double[first.ticks.length];
-        for (int i = 0; i < index.length; i++) {
-            index[i] = i;
-        }
-        // Consecutive ticks a pitch apart; a missed tick would break the index, so the index is
-        // rebuilt from the spacing.
         double expected = pixelsPerMm * ruler.pitchMm;
+        // Only ticks that sit a pitch from their neighbours are ticks; the silkscreen digits,
+        // the mask edge and the anchor's ring stand in the same band and read as spikes. The
+        // longest run of consistent spacing is the ruler.
+        double[] chain = MachineDiagnosticsMath.consistentChain(first.ticks, expected, 0.15);
+        if (chain.length < 8) {
+            throw new Exception("Only " + chain.length + " ticks a pitch apart were read in the "
+                    + "frame (" + first.ticks.length + " features in the band).");
+        }
+        double[] index = new double[chain.length];
         double running = 0;
         for (int i = 1; i < index.length; i++) {
-            running += Math.max(1, Math.round((first.ticks[i] - first.ticks[i - 1]) / expected));
+            running += Math.max(1, Math.round((chain[i] - chain[i - 1]) / expected));
             index[i] = running;
         }
-        LinearFit spacing = MachineDiagnosticsMath.linearFit(index, first.ticks);
+        first = new RulerFrame(chain, first.centrePixel);
+        LinearFit spacing = MachineDiagnosticsMath.linearFit(index, chain);
         double measuredPixelsPerMm = spacing.slope / ruler.pitchMm;
         double cameraScaleError = pixelsPerMm / measuredPixelsPerMm - 1;
         double worst = 0;
@@ -3825,7 +4134,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 + "against the machine's moves and cannot tell the two apart, this can.",
                 cameraScaleError * 100);
 
-        // Stepping along it.
+        // Stepping along it, from the anchor's drift as read before the ruler to the drift read
+        // after it: a drift during the stepping is spread along it.
         double step = Math.max(0.05, rulerStepMm);
         double half = (ruler.ticks - 1) * ruler.pitchMm / 2 - 1.0;
         List<Object[]> rows = new ArrayList<>();
@@ -3836,9 +4146,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             for (double x = -half; x <= half + 1e-9; x += step) {
                 checkAborted();
                 double[] p = frame.apply(centre[0] + x, centre[1]);
-                Location target = new Location(LengthUnit.Millimeters, p[0], p[1], z, 0);
-                camera.moveTo(target);
+                Location target = new Location(LengthUnit.Millimeters, p[0], p[1], z, 0)
+                        .add(driftBefore.derive(null, null, 0.0, 0.0));
+                camera.moveTo(target, measureSpeedFactor);
                 RulerFrame seen = readRuler(camera, board, frame, target, z);
+                seen = new RulerFrame(MachineDiagnosticsMath.consistentChain(seen.ticks,
+                        measuredPixelsPerMm * ruler.pitchMm, 0.15), seen.centrePixel);
                 // Each tick near the centre says where the machine really is: its board
                 // position is a whole pitch, and its offset from the image centre in pixels
                 // is how far the camera is from it.
@@ -3869,8 +4182,16 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         if (positions.size() < 8) {
             throw new Exception("Too few readings along the ruler.");
         }
+        Location driftAfter = anchorDrift(machine, camera, xAxis, fiducial, anchorDiameter, report,
+                "the end of the ruler");
+        double driftAlong = driftAfter.getX() - driftBefore.getX();
+        report.line("  The anchor moved %+.4f mm in X while the ruler was stepped; spread along "
+                + "the readings.", driftAlong);
         double[] xs = toArray(positions);
         double[] es = toArray(errors);
+        for (int i = 0; i < es.length; i++) {
+            es[i] -= driftAlong * i / Math.max(1, es.length - 1);
+        }
         LinearFit trend = MachineDiagnosticsMath.linearFit(xs, es);
         double[] detrended = new double[es.length];
         for (int i = 0; i < es.length; i++) {
@@ -4034,23 +4355,56 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         List<Object[]> rows = new ArrayList<>();
         List<Double> fromAbove = new ArrayList<>();
         List<Double> fromBelow = new ArrayList<>();
+        // Where the peak actually is: the camera's configured height is where it should be,
+        // and the first real run found it half a millimetre higher, at the edge of the sweep.
+        // A coarse sweep finds it first. It may run further up, away from the glass, as far as
+        // it likes; it never goes lower than the configured range allows.
+        double centreZ = focus.getZ();
         camera.actuateLightBeforeCapture();
         try {
+            double lowest = focus.getZ() - range;
+            double highest = focus.getZ() + range * 3;
+            for (int pass = 0; pass < 3; pass++) {
+                checkAborted();
+                nozzle.moveTo(focus.derive(null, null, lowest - 1.0, null));
+                List<Double> zs = new ArrayList<>();
+                List<Double> scores = new ArrayList<>();
+                double coarse = step * 2;
+                for (double z = lowest; z <= highest + 1e-9; z += coarse) {
+                    checkAborted();
+                    nozzle.moveTo(focus.derive(null, null, z, null));
+                    BufferedImage image = camera.settleAndCapture();
+                    double score = scorer.score(image, diameter);
+                    zs.add(z);
+                    scores.add(score);
+                    rows.add(new Object[] { -1, "coarse", z, score, elapsed() });
+                }
+                centreZ = MachineDiagnosticsMath.parabolicPeak(toArray(zs), toArray(scores));
+                report.line("  coarse sweep %.3f to %.3f mm: sharpest at %.3f mm", lowest, highest,
+                        centreZ);
+                if (centreZ < highest - coarse) {
+                    break;
+                }
+                // The peak is at the top of the sweep: look further up.
+                lowest = highest - range;
+                highest = highest + range * 3;
+            }
             for (int repeat = 0; repeat < repeatsEach; repeat++) {
                 for (int side = 0; side < 2; side++) {
                     checkAborted();
                     boolean above = side == 0;
                     // Start beyond the range on the approach side, so the first step already
                     // moves in the direction of the sweep and takes up the slack that way.
-                    double start = focus.getZ() + (above ? range + 1.0 : -(range + 1.0));
+                    double low = Math.max(focus.getZ() - range, centreZ - range);
+                    double high = centreZ + range;
+                    double start = above ? high + 1.0 : low - 1.0;
                     nozzle.moveTo(focus.derive(null, null, start, null));
                     List<Double> zs = new ArrayList<>();
                     List<Double> scores = new ArrayList<>();
-                    int steps = (int) Math.round(2 * range / step);
+                    int steps = (int) Math.round((high - low) / step);
                     for (int i = 0; i <= steps; i++) {
                         checkAborted();
-                        double z = above ? focus.getZ() + range - i * step
-                                : focus.getZ() - range + i * step;
+                        double z = above ? high - i * step : low + i * step;
                         nozzle.moveTo(focus.derive(null, null, z, null));
                         BufferedImage image = camera.settleAndCapture();
                         double score = scorer.score(image, diameter);
@@ -4090,12 +4444,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 below.stdDev, below.getRange());
         report.line("  Z repeatability %.4f mm from one side, slack between the sides %.4f mm",
                 repeatability, backlash);
-        boolean atEdge = Math.abs(each.mean - focus.getZ()) > range * 0.8;
-        if (atEdge) {
-            report.finding(Severity.Warning, "The focus was found %.3f mm from the bottom camera's "
-                    + "configured height, at the edge of the sweep: the camera's Z setting is off "
-                    + "by about that much, or the sweep range is too small to see the peak.",
-                    each.mean - focus.getZ());
+        if (Math.abs(each.mean - focus.getZ()) > Z_BACKLASH_TOLERANCE_MM) {
+            report.finding(Severity.Warning, "The nozzle tip is sharpest %.3f mm %s the height the "
+                    + "bottom camera is set to. Bottom vision images every part %.3f mm out of "
+                    + "focus by that setting; the camera's location Z wants to be %.3f mm.",
+                    Math.abs(each.mean - focus.getZ()), each.mean > focus.getZ() ? "above" : "below",
+                    Math.abs(each.mean - focus.getZ()), each.mean);
         }
         report.finding(repeatability > Z_BACKLASH_TOLERANCE_MM ? Severity.Warning : Severity.Info,
                 "Z on nozzle %s stops within %.4f mm of itself approaching from one side (sd %.4f "
