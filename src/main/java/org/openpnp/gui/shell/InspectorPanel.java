@@ -49,6 +49,8 @@ import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.spi.PropertySheetHolder;
 import org.openpnp.spi.PropertySheetHolder.PropertySheet;
 
+import com.formdev.flatlaf.FlatClientProperties;
+
 /**
  * The one column that shows the properties of whatever is selected, wherever it was selected.
  * <p>
@@ -105,17 +107,14 @@ public class InspectorPanel extends JPanel {
         sheets.putClientProperty("JTabbedPane.tabType", "underlined"); //$NON-NLS-1$ //$NON-NLS-2$
         sheets.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 
-        Font font = UIManager.getFont("Label.font"); //$NON-NLS-1$
-        nameLabel.setFont(font.deriveFont(Font.BOLD, font.getSize2D() * 1.1f));
-        typeLabel.setFont(font.deriveFont(font.getSize2D() * 0.85f));
-        Color secondary = UIManager.getColor("Pono.textSecondary"); //$NON-NLS-1$
-        if (secondary != null) {
-            typeLabel.setForeground(secondary);
-        }
-        Color muted = UIManager.getColor("Pono.textMuted"); //$NON-NLS-1$
-        if (muted != null) {
-            nothingSelected.setForeground(muted);
-        }
+        // The stylesheet's .insp-h: 46 high, the icon in a 28 pixel accent-soft square, the name
+        // in 13.5 semibold over the type in 11.5 muted, and "..." and the fold button at the right.
+        nameLabel.setFont(Ui.font(13.5f).deriveFont(java.util.Map.of(
+                java.awt.font.TextAttribute.WEIGHT, java.awt.font.TextAttribute.WEIGHT_SEMIBOLD)));
+        typeLabel.setFont(Ui.font(11.5f));
+        typeLabel.setForeground(Ui.muted());
+        nothingSelected.setForeground(Ui.muted());
+        nothingSelected.setFont(Ui.font(12.5f));
 
         JPanel titles = new JPanel();
         titles.setOpaque(false);
@@ -123,33 +122,146 @@ public class InspectorPanel extends JPanel {
         titles.add(nameLabel);
         titles.add(typeLabel);
 
-        header.setBorder(new EmptyBorder(8, 10, 8, 6));
-        Color surface = UIManager.getColor("Pono.surface2"); //$NON-NLS-1$
-        if (surface != null) {
-            header.setBackground(surface);
-        }
-        header.add(iconLabel, BorderLayout.WEST);
+        header.setOpaque(false);
+        header.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
+                new EmptyBorder(0, 16, 0, 12)));
+        header.setPreferredSize(new Dimension(0, 47));
+        iconBox.setLayout(new BorderLayout());
+        iconBox.setPreferredSize(new Dimension(28, 28));
+        iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        iconBox.add(iconLabel, BorderLayout.CENTER);
+        JPanel iconHolder = new JPanel(new java.awt.GridBagLayout());
+        iconHolder.setOpaque(false);
+        iconHolder.add(iconBox);
+        header.add(iconHolder, BorderLayout.WEST);
         header.add(titles, BorderLayout.CENTER);
-        header.add(collapseButton("\u203a"), BorderLayout.EAST); //$NON-NLS-1$
+        JPanel headerTools = new JPanel();
+        headerTools.setOpaque(false);
+        headerTools.setLayout(new BoxLayout(headerTools, BoxLayout.X_AXIS));
+        moreButton.setVisible(false);
+        headerTools.add(moreButton);
+        headerTools.add(javax.swing.Box.createHorizontalStrut(4));
+        JButton fold = Ui.iconButton(Ui.iconSm("chevright"), Ui.Size.Xs, Ui.Variant.Ghost, //$NON-NLS-1$
+                Translations.getString("InspectorPanel.Action.Toggle.Description")); //$NON-NLS-1$
+        fold.addActionListener(toggleCollapsedAction);
+        headerTools.add(fold);
+        JPanel headerToolsHolder = new JPanel(new java.awt.GridBagLayout());
+        headerToolsHolder.setOpaque(false);
+        headerToolsHolder.add(headerTools);
+        header.add(headerToolsHolder, BorderLayout.EAST);
         add(header, BorderLayout.NORTH);
 
+        body.setOpaque(false);
         body.add(nothingSelected, BorderLayout.CENTER);
         add(body, BorderLayout.CENTER);
 
+        // The stylesheet's .insp-f: Reset and Apply at the right, over a hairline.
+        footer.setOpaque(false);
+        footer.setLayout(new BoxLayout(footer, BoxLayout.X_AXIS));
+        footer.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
+                new EmptyBorder(10, 16, 10, 16)));
+        footer.add(javax.swing.Box.createHorizontalGlue());
+        resetButton.addActionListener(e -> forEachWizard(org.openpnp.gui.support.AbstractConfigurationWizard::reset));
+        footer.add(resetButton);
+        footer.add(javax.swing.Box.createHorizontalStrut(8));
+        applyButton.addActionListener(e -> forEachWizard(org.openpnp.gui.support.AbstractConfigurationWizard::apply));
+        footer.add(applyButton);
+        footer.setVisible(false);
+        add(footer, BorderLayout.SOUTH);
+
         // The sliver left behind when the panel is folded away, holding the button that unfolds it.
-        strip.add(collapseButton("\u2039"), BorderLayout.NORTH); //$NON-NLS-1$
+        JButton unfold = Ui.iconButton(Ui.iconSm("chevleft"), Ui.Size.Xs, Ui.Variant.Ghost, //$NON-NLS-1$
+                Translations.getString("InspectorPanel.Action.Toggle.Description")); //$NON-NLS-1$
+        unfold.addActionListener(toggleCollapsedAction);
+        strip.setOpaque(false);
+        strip.setBorder(new EmptyBorder(8, 3, 0, 3));
+        strip.add(unfold, BorderLayout.NORTH);
         strip.setVisible(false);
         add(strip, BorderLayout.WEST);
+
+        sheets.putClientProperty(FlatClientProperties.STYLE,
+                "tabHeight: 36; underlineColor: $Pono.accent; tabSelectionHeight: 2; " //$NON-NLS-1$
+                        + "selectedForeground: $Label.foreground; foreground: $Pono.textSecondary; " //$NON-NLS-1$
+                        + "tabInsets: 0,14,0,14; contentSeparatorHeight: 1; tabSeparatorsFullHeight: false"); //$NON-NLS-1$
+        sheets.setFont(Ui.font(12.5f));
+        // One sheet needs no tab strip: the stylesheet's accordion forms are one sheet each.
+        sheets.putClientProperty(FlatClientProperties.TABBED_PANE_HIDE_TAB_AREA_WITH_ONE_TAB, true);
 
         clear();
     }
 
-    private JButton collapseButton(String arrow) {
-        JButton button = new JButton(toggleCollapsedAction);
-        button.setText(arrow);
-        button.setMargin(new Insets(2, 4, 2, 4));
-        button.setFocusable(false);
-        return button;
+    private final RoundedPanel iconBox = new RoundedPanel(6, Ui::accentSoft, () -> null);
+    private final JButton moreButton = Ui.iconButton(Ui.iconSm("more"), Ui.Size.Xs, Ui.Variant.Ghost, //$NON-NLS-1$
+            Translations.getString("InspectorPanel.More")); //$NON-NLS-1$
+    private final JPanel footer = new JPanel();
+    private final JButton resetButton = Ui.button(Translations.getString("AbstractConfigurationWizard.Action.Reset"), //$NON-NLS-1$
+            null, Ui.Size.Sm, Ui.Variant.Default);
+    private final JButton applyButton = Ui.button(Translations.getString("AbstractConfigurationWizard.Action.Apply"), //$NON-NLS-1$
+            null, Ui.Size.Sm, Ui.Variant.Primary);
+    private final java.beans.PropertyChangeListener dirtyListener = e -> followDirty();
+
+    /** The wizards currently on show, whose Reset and Apply the footer stands in for. */
+    private java.util.List<org.openpnp.gui.support.AbstractConfigurationWizard> wizards() {
+        java.util.List<org.openpnp.gui.support.AbstractConfigurationWizard> found = new java.util.ArrayList<>();
+        for (int i = 0; i < sheets.getTabCount(); i++) {
+            collectWizards(sheets.getComponentAt(i), found);
+        }
+        return found;
+    }
+
+    private static void collectWizards(Component component,
+            java.util.List<org.openpnp.gui.support.AbstractConfigurationWizard> into) {
+        if (component instanceof org.openpnp.gui.support.AbstractConfigurationWizard) {
+            into.add((org.openpnp.gui.support.AbstractConfigurationWizard) component);
+        }
+        else if (component instanceof java.awt.Container) {
+            for (Component child : ((java.awt.Container) component).getComponents()) {
+                collectWizards(child, into);
+            }
+        }
+    }
+
+    private void forEachWizard(java.util.function.Consumer<org.openpnp.gui.support.AbstractConfigurationWizard> action) {
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            if (wizard.isDirty()) {
+                action.accept(wizard);
+            }
+        }
+    }
+
+    /** One footer for all the sheets: it lights up while any of them has something to apply. */
+    private void adoptWizards() {
+        boolean any = false;
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            wizard.setActionsShown(false);
+            wizard.getApplyAction().removePropertyChangeListener(dirtyListener);
+            wizard.getApplyAction().addPropertyChangeListener(dirtyListener);
+            any = true;
+        }
+        footer.setVisible(any);
+        followDirty();
+    }
+
+    private void followDirty() {
+        boolean dirty = false;
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            dirty |= wizard.isDirty();
+        }
+        resetButton.setEnabled(dirty);
+        applyButton.setEnabled(dirty);
+    }
+
+    /** The "..." menu in the header: the page's actions on the thing shown, such as delete. */
+    public void setMoreMenu(javax.swing.JPopupMenu menu) {
+        for (java.awt.event.ActionListener l : moreButton.getActionListeners()) {
+            moreButton.removeActionListener(l);
+        }
+        moreButton.setVisible(menu != null);
+        if (menu != null) {
+            moreButton.addActionListener(e -> menu.show(moreButton, 0, moreButton.getHeight()));
+        }
     }
 
     /**
@@ -285,19 +397,24 @@ public class InspectorPanel extends JPanel {
             return result;
         }
         iconLabel.setIcon(inspection.icon);
+        iconBox.setVisible(inspection.icon != null);
         nameLabel.setText(inspection.title == null ? String.valueOf(inspection.subject)
                 : inspection.title);
         typeLabel.setText(inspection.type == null || inspection.type.isEmpty() ? " " //$NON-NLS-1$
                 : inspection.type);
         setBody(sheets);
+        adoptWizards();
         return result;
     }
 
     /** Show nothing, and say so rather than leaving an empty tab strip. */
     public void clear() {
         iconLabel.setIcon(null);
+        iconBox.setVisible(false);
         nameLabel.setText(Translations.getString("InspectorPanel.Title")); //$NON-NLS-1$
         typeLabel.setText(" "); //$NON-NLS-1$
+        footer.setVisible(false);
+        setMoreMenu(null);
         setBody(nothingSelected);
     }
 
@@ -310,6 +427,7 @@ public class InspectorPanel extends JPanel {
         this.collapsed = collapsed;
         header.setVisible(!collapsed);
         body.setVisible(!collapsed);
+        footer.setVisible(!collapsed && !wizards().isEmpty());
         strip.setVisible(collapsed);
         revalidate();
         repaint();

@@ -221,7 +221,7 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
                     .setUnitIncrement(getDisplayPreferences().getVerticalScrollUnitIncrement());
             listener = new ApplyResetBindingListener(applyAction, resetAction);
             createBindings();
-            if (wrappedBindings.isEmpty() && !forceApplyResetButtonsVisible) {
+            if ((wrappedBindings.isEmpty() && !forceApplyResetButtonsVisible) || actionsHidden) {
                 //Since we don't have any wrapped bindings, there is no need to show the panel with
                 //the reset and apply buttons unless the forceApplyResetButtonsVisible flag is set
                 panelActions.setVisible(false);
@@ -267,6 +267,35 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
 
     public void apply() {
         applyAction.actionPerformed(null);
+    }
+
+    public void reset() {
+        resetAction.actionPerformed(null);
+    }
+
+    /** The scroll pane around the content, for a wizard that wants to fit the width it is given. */
+    protected JScrollPane getScrollPane() {
+        return scrollPane;
+    }
+
+    /**
+     * Hide this wizard's own Reset and Apply. The properties column shows one pair for everything
+     * it holds, so a pair per sheet would be two rows of the same two buttons.
+     */
+    public void setActionsShown(boolean shown) {
+        actionsHidden = !shown;
+        panelActions.setVisible(shown && (!wrappedBindings.isEmpty() || forceApplyResetButtonsVisible));
+    }
+
+    private boolean actionsHidden;
+
+    /** The Apply action, for a footer elsewhere to follow: enabled while there are edits to apply. */
+    public Action getApplyAction() {
+        return applyAction;
+    }
+
+    public Action getResetAction() {
+        return resetAction;
     }
     
     @Override

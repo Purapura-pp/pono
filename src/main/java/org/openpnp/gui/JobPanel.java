@@ -414,9 +414,14 @@ public class JobPanel extends JPanel {
                 Translations.getString("JobPlacementsPanel.Border.title"), jobPlacementsPanel); //$NON-NLS-1$
         dock.addTab(org.openpnp.gui.shell.Ui.iconSm("log"), //$NON-NLS-1$
                 Translations.getString("JobPanel.Tab.RunLog"), new LogPanel()); //$NON-NLS-1$
-        jobTableModel.addTableModelListener(e -> boardsTab.setCount(jobTable.getRowCount()));
+        // Counted after the event: a model notifies its newest listener first, so the table's
+        // own view has not caught up when this runs, and the view is what the user sees - the
+        // boards model has a root row the table hides.
+        jobTableModel.addTableModelListener(e -> javax.swing.SwingUtilities.invokeLater(
+                () -> boardsTab.setCount(jobTable.getRowCount())));
         jobPlacementsPanel.getTable().getModel().addTableModelListener(
-                e -> placementsTab.setCount(jobPlacementsPanel.getTable().getRowCount()));
+                e -> javax.swing.SwingUtilities.invokeLater(
+                        () -> placementsTab.setCount(jobPlacementsPanel.getTable().getRowCount())));
         boardsTab.setCount(jobTable.getRowCount());
         placementsTab.setCount(jobPlacementsPanel.getTable().getRowCount());
         currentBoardChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$

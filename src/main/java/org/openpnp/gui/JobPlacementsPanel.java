@@ -68,6 +68,10 @@ import org.openpnp.events.PlacementSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.shell.DockPanel;
 import org.openpnp.gui.shell.DockRenderers;
+import org.openpnp.gui.shell.PropertySheetPresenter.Result;
+import org.openpnp.gui.support.PropertySheetWizardAdapter;
+import org.openpnp.gui.support.Wizard;
+import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.CustomBooleanRenderer;
 import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
@@ -133,9 +137,6 @@ public class JobPlacementsPanel extends JPanel {
     }
     
     private void createUi() {
-        setBorder(new TitledBorder(null,
-                Translations.getString("JobPlacementsPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         
         configuration = Configuration.get();
         
@@ -262,6 +263,7 @@ public class JobPlacementsPanel extends JPanel {
                         mainFrame.getPartsTab().selectPartInTableAndUpdateLinks(selectedPart);
                     }
                 }
+                inspectSelection();
             }
         });
         table.addMouseListener(new MouseAdapter() {
@@ -502,6 +504,50 @@ public class JobPlacementsPanel extends JPanel {
     /**
      * @return the jobPanel
      */
+    /**
+     * The selected placement's properties go to the window's properties column, as a form with
+     * sections rather than the table's one-cell-at-a-time editing. The job page owns the request,
+     * since this panel is a tab inside it.
+     */
+    private void inspectSelection() {
+        MainFrame mainFrame = MainFrame.get();
+        if (mainFrame == null || mainFrame.getInspector() == null) {
+            return;
+        }
+        Placement placement = getSelections().size() == 1 ? getSelection() : null;
+        PlacementsHolderLocation<?> location = boardOrPanelLocation;
+        if (placement == null || location == null) {
+            mainFrame.getInspector().show(jobPanel, null);
+            return;
+        }
+        Result shown = mainFrame.getInspector().show(jobPanel, placement, inspectorContainer,
+                placement.getId(), PlacementInspector.subtitle(location),
+                org.openpnp.gui.shell.Ui.icon("parts", 16, org.openpnp.gui.shell.Ui.accent()), //$NON-NLS-1$
+                () -> java.util.List.of(new PropertySheetWizardAdapter(
+                        new PlacementInspector(configuration, this, location, placement))));
+        if (shown == Result.Cancelled) {
+            // The user kept unapplied edits on the previous placement: put the selection back.
+            javax.swing.SwingUtilities.invokeLater(() -> {
+                Object previous = mainFrame.getInspector().getPresenter().getShown();
+                if (previous instanceof Placement) {
+                    Helpers.selectObjectTableRow(table, previous);
+                }
+            });
+        }
+    }
+
+    private final WizardContainer inspectorContainer = new WizardContainer() {
+        @Override
+        public void wizardCompleted(Wizard wizard) {
+            refresh();
+            updateActivePlacements();
+        }
+
+        @Override
+        public void wizardCancelled(Wizard wizard) {
+        }
+    };
+
     public JobPanel getJobPanel() {
         return jobPanel;
     }
