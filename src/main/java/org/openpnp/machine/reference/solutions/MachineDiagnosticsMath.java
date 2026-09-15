@@ -65,6 +65,112 @@ public class MachineDiagnosticsMath {
         }
     }
 
+    /** What a decaying oscillation was seen doing: how big, how fast, how quickly it died. */
+    public static final class Oscillation {
+        /** Largest excursion, in the units of the samples. */
+        public final double amplitude;
+        /** Frequency from the zero crossings, or null when there were too few to count. */
+        public final Double frequencyHz;
+        /** Time constant of the exponential decay of the peaks, or null when too few peaks. */
+        public final Double decaySeconds;
+        /** How many times the signal crossed zero while still above the threshold. */
+        public final int crossings;
+
+        Oscillation(double amplitude, Double frequencyHz, Double decaySeconds, int crossings) {
+            this.amplitude = amplitude;
+            this.frequencyHz = frequencyHz;
+            this.decaySeconds = decaySeconds;
+            this.crossings = crossings;
+        }
+    }
+
+    /**
+     * Read an oscillation off a signed signal sampled at irregular times.
+     * <p>
+     * The frequency is the zero crossings over the stretch during which the signal was still
+     * larger than {@code threshold}, halved; the decay is a straight line fitted to the log of
+     * the local peaks, whose slope is minus one over the time constant. Nothing here can see a
+     * frequency above half the sample rate: that folds into a lower one, and the caller says so.
+     *
+     * @param times   Sample times, ascending, seconds.
+     * @param signal  Signed displacement at each time, already relative to where it ends up.
+     * @param threshold Below this the signal counts as settled and is not read.
+     */
+    public static Oscillation oscillation(double[] times, double[] signal, double threshold) {
+        if (times.length != signal.length || times.length < 3) {
+            return new Oscillation(0, null, null, 0);
+        }
+        double amplitude = 0;
+        int last = -1;
+        for (int i = 0; i < signal.length; i++) {
+            amplitude = Math.max(amplitude, Math.abs(signal[i]));
+            if (Math.abs(signal[i]) > threshold) {
+                last = i;
+            }
+        }
+        if (last < 2) {
+            return new Oscillation(amplitude, null, null, 0);
+        }
+        int crossings = 0;
+        List<double[]> peaks = new ArrayList<>();
+        for (int i = 1; i <= last; i++) {
+            if (Math.signum(signal[i]) != Math.signum(signal[i - 1]) && signal[i] != 0
+                    && signal[i - 1] != 0) {
+                crossings++;
+            }
+            if (i < last && Math.abs(signal[i]) >= Math.abs(signal[i - 1])
+                    && Math.abs(signal[i]) > Math.abs(signal[i + 1])
+                    && Math.abs(signal[i]) > threshold) {
+                peaks.add(new double[] { times[i], Math.abs(signal[i]) });
+            }
+        }
+        Double frequency = null;
+        double span = times[last] - times[0];
+        if (crossings >= 2 && span > 0) {
+            frequency = crossings / (2 * span);
+        }
+        Double decay = null;
+        if (peaks.size() >= 3) {
+            double[] t = new double[peaks.size()];
+            double[] logPeak = new double[peaks.size()];
+            for (int i = 0; i < peaks.size(); i++) {
+                t[i] = peaks.get(i)[0];
+                logPeak[i] = Math.log(peaks.get(i)[1]);
+            }
+            LinearFit fit = linearFit(t, logPeak);
+            if (fit.slope < 0) {
+                decay = -1 / fit.slope;
+            }
+        }
+        return new Oscillation(amplitude, frequency, decay, crossings);
+    }
+
+    /** The vertex of the parabola through the best point and its two neighbours; the peak. */
+    public static double parabolicPeak(double[] xs, double[] ys) {
+        int best = 0;
+        for (int i = 1; i < ys.length; i++) {
+            if (ys[i] > ys[best]) {
+                best = i;
+            }
+        }
+        if (best == 0 || best == ys.length - 1) {
+            return xs[best];
+        }
+        double x0 = xs[best - 1], x1 = xs[best], x2 = xs[best + 1];
+        double y0 = ys[best - 1], y1 = ys[best], y2 = ys[best + 1];
+        double denominator = (x0 - x1) * (x0 - x2) * (x1 - x2);
+        if (denominator == 0) {
+            return x1;
+        }
+        double a = (x2 * (y1 - y0) + x1 * (y0 - y2) + x0 * (y2 - y1)) / denominator;
+        double b = (x2 * x2 * (y0 - y1) + x1 * x1 * (y2 - y0) + x0 * x0 * (y1 - y2)) / denominator;
+        if (a >= 0) {
+            return x1;
+        }
+        double vertex = -b / (2 * a);
+        return Math.max(x0, Math.min(x2, vertex));
+    }
+
     /** The median: the middle value, or the mean of the two middle values. */
     public static double median(List<Double> values) {
         if (values == null || values.isEmpty()) {

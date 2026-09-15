@@ -259,6 +259,57 @@ public class MachineDiagnosticsMathTest {
         assertTrue(Double.isNaN(MachineDiagnosticsMath.median(java.util.List.of())));
     }
 
+    /** A damped sine sampled at 30 frames a second reads back its frequency and its decay. */
+    @Test
+    public void aDampedOscillationReadsBackItsFrequencyAndDecay() {
+        int n = 60;
+        double[] t = new double[n];
+        double[] s = new double[n];
+        double frequency = 6.0;
+        double tau = 0.25;
+        for (int i = 0; i < n; i++) {
+            t[i] = i / 30.0;
+            s[i] = 8.0 * Math.exp(-t[i] / tau) * Math.sin(2 * Math.PI * frequency * t[i]);
+        }
+
+        MachineDiagnosticsMath.Oscillation seen = MachineDiagnosticsMath.oscillation(t, s, 0.3);
+
+        // Five samples a period do not land on the crest; the amplitude read is a lower bound.
+        assertTrue(seen.amplitude > 5.0 && seen.amplitude <= 8.0, "amplitude " + seen.amplitude);
+        assertNotNull(seen.frequencyHz);
+        assertEquals(frequency, seen.frequencyHz, 1.0);
+        assertNotNull(seen.decaySeconds);
+        assertEquals(tau, seen.decaySeconds, 0.08);
+    }
+
+    @Test
+    public void aSignalThatNeverLeavesTheThresholdHasNoOscillation() {
+        double[] t = { 0, 0.033, 0.066, 0.1, 0.133 };
+        double[] s = { 0.1, -0.1, 0.05, -0.05, 0.02 };
+
+        MachineDiagnosticsMath.Oscillation seen = MachineDiagnosticsMath.oscillation(t, s, 0.3);
+
+        assertNull(seen.frequencyHz);
+        assertNull(seen.decaySeconds);
+        assertEquals(0.1, seen.amplitude, 1e-9);
+    }
+
+    /** The peak of a focus curve lies between the samples; the parabola finds it. */
+    @Test
+    public void theParabolicPeakLiesBetweenTheSamples() {
+        double[] z = { -0.10, -0.05, 0.00, 0.05, 0.10 };
+        double truePeak = 0.02;
+        double[] score = new double[z.length];
+        for (int i = 0; i < z.length; i++) {
+            score[i] = 100 - 1000 * Math.pow(z[i] - truePeak, 2);
+        }
+
+        assertEquals(truePeak, MachineDiagnosticsMath.parabolicPeak(z, score), 1e-6);
+        // A peak on the edge of the sweep is reported as the edge, not extrapolated beyond it.
+        assertEquals(0.10, MachineDiagnosticsMath.parabolicPeak(z,
+                new double[] { 1, 2, 3, 4, 5 }), 1e-9);
+    }
+
     private static void assertArrayEqualsWithin(double[] expected, double[] actual) {
         assertEquals(expected.length, actual.length);
         for (int i = 0; i < expected.length; i++) {

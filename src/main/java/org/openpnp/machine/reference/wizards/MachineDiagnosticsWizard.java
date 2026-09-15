@@ -127,6 +127,9 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextField repeats;
     private JTextField framesPerPoint;
     private JTextField stressSpeedFactors;
+    private JTextField focusRange;
+    private JTextField focusStep;
+    private JTextField focusRepeats;
     private JTextField stressCycles;
     private JTextField stressDistance;
     private JTextField latencySpeedFactor;
@@ -887,6 +890,8 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                         FormSpecs.RELATED_GAP_ROWSPEC,
                         FormSpecs.DEFAULT_ROWSPEC,
                         FormSpecs.RELATED_GAP_ROWSPEC,
+                        FormSpecs.DEFAULT_ROWSPEC,
+                        FormSpecs.RELATED_GAP_ROWSPEC,
                         FormSpecs.DEFAULT_ROWSPEC, }));
 
         // Firmware and the snapshot move nothing, so they are the safe pair to start with and are
@@ -901,13 +906,14 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addTestCheck(panel, TestGroup.CameraSettle, "4, 8", false);
         addTestCheck(panel, TestGroup.Homing, "2, 10", false);
         addTestCheck(panel, TestGroup.RotationBacklash, "4, 10", false);
+        addTestCheck(panel, TestGroup.ZFocus, "2, 12", false);
 
         btnRun = new JButton(runAction);
-        panel.add(btnRun, "2, 12");
+        panel.add(btnRun, "2, 14");
         btnStop = new JButton(stopAction);
-        panel.add(btnStop, "4, 12");
+        panel.add(btnStop, "4, 14");
         btnOpenReport = new JButton(openReportAction);
-        panel.add(btnOpenReport, "6, 12, left, default");
+        panel.add(btnOpenReport, "6, 14, left, default");
     }
 
     private void addTestCheck(JPanel panel, TestGroup group, String constraints, boolean selected) {
@@ -933,7 +939,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 ColumnSpec.decode("max(70dlu;default)"),
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), };
-        RowSpec[] rows = new RowSpec[30];
+        RowSpec[] rows = new RowSpec[34];
         for (int i = 0; i < rows.length; i++) {
             rows[i] = i % 2 == 0 ? FormSpecs.RELATED_GAP_ROWSPEC : FormSpecs.DEFAULT_ROWSPEC;
         }
@@ -949,6 +955,9 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         stressCycles = addField(panel, "StressCycles", "6, 26", "8, 26");
         stressDistance = addField(panel, "StressDistance", "2, 28", "4, 28");
         latencySpeedFactor = addField(panel, "LatencySpeedFactor", "6, 28", "8, 28");
+        focusRange = addField(panel, "FocusRange", "2, 30", "4, 30");
+        focusStep = addField(panel, "FocusStep", "6, 30", "8, 30");
+        focusRepeats = addField(panel, "FocusRepeats", "2, 32", "4, 32");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -974,12 +983,12 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.text")); //$NON-NLS-1$
         lblFirmwareCommands.setToolTipText(Translations.getString(
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.toolTipText")); //$NON-NLS-1$
-        panel.add(lblFirmwareCommands, "2, 30, right, top");
+        panel.add(lblFirmwareCommands, "2, 34, right, top");
         firmwareCommands = new JTextArea();
         firmwareCommands.setRows(4);
         JScrollPane firmwareScroll = new JScrollPane(firmwareCommands);
         firmwareScroll.setPreferredSize(new Dimension(200, 70));
-        panel.add(firmwareScroll, "4, 30, 5, 1, fill, fill");
+        panel.add(firmwareScroll, "4, 34, 5, 1, fill, fill");
     }
 
     private JTextField addField(JPanel panel, String key, String labelConstraints,
@@ -1087,6 +1096,9 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "stressCycles", stressCycles, "text", integerConverter);
         addWrappedBinding(diagnostics, "stressDistanceMm", stressDistance, "text", doubleConverter);
         addWrappedBinding(diagnostics, "latencySpeedFactor", latencySpeedFactor, "text", doubleConverter);
+        addWrappedBinding(diagnostics, "focusRangeMm", focusRange, "text", doubleConverter);
+        addWrappedBinding(diagnostics, "focusStepMm", focusStep, "text", doubleConverter);
+        addWrappedBinding(diagnostics, "focusRepeats", focusRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

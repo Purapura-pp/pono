@@ -458,6 +458,136 @@ public class MachineDiagnosticsResults {
         }
     }
 
+    /**
+     * How the image oscillates after a move: amplitude, the frequency the frame rate could
+     * resolve, and how long it takes to die down. The mechanism's own signature, per direction.
+     */
+    public static class Vibration {
+        @Attribute
+        private String cameraId;
+        @Attribute
+        private String direction;
+        @Attribute
+        private double distanceMm;
+        @Attribute
+        private double amplitudePixels;
+        @Attribute(required = false)
+        private Double frequencyHz;
+        @Attribute(required = false)
+        private Double decaySeconds;
+        @Attribute
+        private double resolvableHz;
+
+        Vibration() {
+        }
+
+        public Vibration(String cameraId, String direction, double distanceMm,
+                double amplitudePixels, Double frequencyHz, Double decaySeconds, double resolvableHz) {
+            this.cameraId = cameraId;
+            this.direction = direction;
+            this.distanceMm = distanceMm;
+            this.amplitudePixels = amplitudePixels;
+            this.frequencyHz = frequencyHz;
+            this.decaySeconds = decaySeconds;
+            this.resolvableHz = resolvableHz;
+        }
+
+        public String getCameraId() {
+            return cameraId;
+        }
+
+        public String getDirection() {
+            return direction;
+        }
+
+        public double getDistanceMm() {
+            return distanceMm;
+        }
+
+        public double getAmplitudePixels() {
+            return amplitudePixels;
+        }
+
+        /** Null when the samples did not show a countable oscillation. */
+        public Double getFrequencyHz() {
+            return frequencyHz;
+        }
+
+        /** Time constant of the decay, or null when there were too few peaks to fit one. */
+        public Double getDecaySeconds() {
+            return decaySeconds;
+        }
+
+        /** Half the frame rate: anything faster than this is folded into a slower frequency. */
+        public double getResolvableHz() {
+            return resolvableHz;
+        }
+    }
+
+    /**
+     * Where the nozzle's Z axis really stops, measured by where the nozzle tip comes into focus
+     * on the bottom camera, approached from above and from below.
+     */
+    public static class ZFocus {
+        @Attribute
+        private String axisId;
+        @Attribute
+        private String cameraId;
+        @Attribute
+        private double focusZMm;
+        @Attribute
+        private double sdMm;
+        @Attribute
+        private double rangeMm;
+        @Attribute
+        private double backlashMm;
+        @Attribute
+        private int repeats;
+
+        ZFocus() {
+        }
+
+        public ZFocus(String axisId, String cameraId, double focusZMm, double sdMm, double rangeMm,
+                double backlashMm, int repeats) {
+            this.axisId = axisId;
+            this.cameraId = cameraId;
+            this.focusZMm = focusZMm;
+            this.sdMm = sdMm;
+            this.rangeMm = rangeMm;
+            this.backlashMm = backlashMm;
+            this.repeats = repeats;
+        }
+
+        public String getAxisId() {
+            return axisId;
+        }
+
+        public String getCameraId() {
+            return cameraId;
+        }
+
+        public double getFocusZMm() {
+            return focusZMm;
+        }
+
+        public double getSdMm() {
+            return sdMm;
+        }
+
+        public double getRangeMm() {
+            return rangeMm;
+        }
+
+        /** Focus found from above minus focus found from below: the slack in Z. */
+        public double getBacklashMm() {
+            return backlashMm;
+        }
+
+        public int getRepeats() {
+            return repeats;
+        }
+    }
+
     /** When a test group last finished, and the report it wrote. */
     public static class Run {
         @Attribute
@@ -524,7 +654,29 @@ public class MachineDiagnosticsResults {
     private ArrayList<CameraLatency> cameraLatency = new ArrayList<>();
 
     @ElementList(required = false)
+    private ArrayList<Vibration> vibration = new ArrayList<>();
+
+    @ElementList(required = false)
+    private ArrayList<ZFocus> zFocus = new ArrayList<>();
+
+    @ElementList(required = false)
     private ArrayList<Run> runs = new ArrayList<>();
+
+    public List<Vibration> getVibration() {
+        return vibration;
+    }
+
+    public void setVibration(List<Vibration> vibration) {
+        this.vibration = new ArrayList<>(vibration);
+    }
+
+    public List<ZFocus> getZFocus() {
+        return zFocus;
+    }
+
+    public void setZFocus(List<ZFocus> zFocus) {
+        this.zFocus = new ArrayList<>(zFocus);
+    }
 
     public List<LostSteps> getLostSteps() {
         return lostSteps;

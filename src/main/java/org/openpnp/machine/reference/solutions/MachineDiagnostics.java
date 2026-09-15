@@ -133,6 +133,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private static final double CAMERA_LATENCY_TOLERANCE_SECONDS = 0.1;
     /** Drift after a run of fast moves that is more than the machine repeats to anyway. */
     private static final double LOST_STEPS_TOLERANCE_MM = 0.02;
+    /** A decay time constant beyond which the image is still ringing when a job would capture. */
+    private static final double SLOW_DECAY_SECONDS = 0.3;
+    /** Z slack worth compensating: the height tolerance of a placement. */
+    private static final double Z_BACKLASH_TOLERANCE_MM = 0.05;
     /** Margin over the measured backlash for a one-sided offset, which has to clear it. */
     private static final double BACKLASH_OFFSET_MARGIN = 1.2;
     /** Margin over the measured settle time for a fixed wait, which has to outlast it. */
@@ -169,8 +173,22 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         CameraSettle,
         Homing,
         RotationBacklash,
+        /** Where Z really stops, read off the bottom camera's focus on the nozzle tip. */
+        ZFocus,
         ConfigSnapshot
     }
+
+    /** Half the Z range the focus sweep covers around the bottom camera's focus height. */
+    @Attribute(required = false)
+    private double focusRangeMm = 0.5;
+
+    /** Z step of the focus sweep. */
+    @Attribute(required = false)
+    private double focusStepMm = 0.05;
+
+    /** Focus sweeps from each side. */
+    @Attribute(required = false)
+    private int focusRepeats = 5;
 
     /** Speed factors the stress test drives at; 1.0 is the configured limit and the top. */
     @Element(required = false)
@@ -554,6 +572,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     measuredWhen(results, TestGroup.CameraLatency));
         }
         findLostStepsIssues(solutions, results);
+        for (MachineDiagnosticsResults.ZFocus focus : results.getZFocus()) {
+            findZBacklashIssue(solutions, focus, measuredWhen(results, TestGroup.ZFocus));
+        }
         for (ControllerLimits limits : results.getControllerLimits()) {
             ReferenceControllerAxis axis = controllerAxis(limits.getAxisId());
             if (axis != null) {
@@ -961,6 +982,61 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
+     * Slack in Z that the compensation does not cover. Z on most machines is set to directional
+     * compensation with an offset of zero, which is no compensation at all; the focus sweep says
+     * what the offset should be.
+     */
+    private void findZBacklashIssue(Solutions solutions, MachineDiagnosticsResults.ZFocus focus,
+            String when) {
+        double measured = Math.abs(focus.getBacklashMm());
+        if (measured <= Z_BACKLASH_TOLERANCE_MM) {
+            return;
+        }
+        ReferenceControllerAxis axis = controllerAxis(focus.getAxisId());
+        if (axis == null) {
+            return;
+        }
+        double offset = Math.abs(axis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters)
+                .getValue());
+        if (axis.getBacklashCompensationMethod() != BacklashCompensationMethod.None
+                && offset >= measured * 0.5) {
+            return;
+        }
+        solutions.add(new LengthSettingIssue(axis,
+                "The Z axis has slack between moving down and moving up that is not compensated.",
+                "Compensate Z in the direction of travel, by the slack measured at the focus.",
+                Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
+                "Backlash offset",
+                "How far the commanded height is shifted in the direction Z is moving.",
+                String.format("The nozzle tip came into focus on the bottom camera %.4f mm apart "
+                        + "depending on whether Z arrived from above or from below, measured on "
+                        + "%s over %d sweeps each way, and axis %s has %s compensation with an "
+                        + "offset of %.4f mm. Every placement height is off by that much, one way "
+                        + "or the other, according to which way Z last moved. Accepting sets "
+                        + "compensation in the direction of travel by the slack measured.",
+                        measured, when, focus.getRepeats(), axis.getName(),
+                        axis.getBacklashCompensationMethod(), offset),
+                axis.getBacklashOffset(), new Length(measured, LengthUnit.Millimeters)
+                        .convertToUnits(axis.getBacklashOffset().getUnits()),
+                new LengthSetting() {
+                    private final BacklashCompensationMethod previousMethod =
+                            axis.getBacklashCompensationMethod();
+
+                    @Override
+                    public void set(Length value, boolean solved) {
+                        if (solved && previousMethod == BacklashCompensationMethod.None) {
+                            axis.setBacklashCompensationMethod(
+                                    BacklashCompensationMethod.DirectionalCompensation);
+                        }
+                        else if (!solved) {
+                            axis.setBacklashCompensationMethod(previousMethod);
+                        }
+                        axis.setBacklashOffset(value);
+                    }
+                }));
+    }
+
+    /**
      * Homing scatter against visual homing. The endstops repeat to whatever precision they
      * repeat to, and that scatter moves the origin of every coordinate in the machine; visual
      * homing pins the origin to a fiducial instead, which is an offer Issues and Solutions
@@ -1229,6 +1305,36 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     // Settings.
+
+    public double getFocusRangeMm() {
+        return focusRangeMm;
+    }
+
+    public void setFocusRangeMm(double focusRangeMm) {
+        double old = this.focusRangeMm;
+        this.focusRangeMm = focusRangeMm;
+        firePropertyChange("focusRangeMm", old, focusRangeMm);
+    }
+
+    public double getFocusStepMm() {
+        return focusStepMm;
+    }
+
+    public void setFocusStepMm(double focusStepMm) {
+        double old = this.focusStepMm;
+        this.focusStepMm = focusStepMm;
+        firePropertyChange("focusStepMm", old, focusStepMm);
+    }
+
+    public int getFocusRepeats() {
+        return focusRepeats;
+    }
+
+    public void setFocusRepeats(int focusRepeats) {
+        int old = this.focusRepeats;
+        this.focusRepeats = Math.max(1, focusRepeats);
+        firePropertyChange("focusRepeats", old, this.focusRepeats);
+    }
 
     public String getStressSpeedFactors() {
         return stressSpeedFactors;
@@ -1723,6 +1829,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 break;
             case RotationBacklash:
                 testRotationBacklash(machine, report);
+                break;
+            case ZFocus:
+                testZFocus(machine, report);
                 break;
             case ConfigSnapshot:
                 writeConfigSnapshot(machine, report);
@@ -2953,24 +3062,36 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         Double worstSettled = null;
         double worstDistance = 0;
         int runsPerDistance = Math.max(1, settleRepeats);
-        report.line("  %d runs per distance; the slowest run is the one the wait has to cover.",
-                runsPerDistance);
+        report.line("  %d runs per distance, arriving along X, along Y and diagonally; the slowest "
+                + "run is the one the wait has to cover.", runsPerDistance);
+        double[][] directions = { { 1, 0 }, { 0, 1 }, { Math.sqrt(0.5), Math.sqrt(0.5) } };
+        String[] directionNames = { "X", "Y", "XY" };
+        List<MachineDiagnosticsResults.Vibration> vibrations = new ArrayList<>();
         for (double distance : distances) {
             Double settled = null;
             boolean neverSettled = false;
             Color color = palette[index++ % palette.length];
-            for (int run = 0; run < runsPerDistance; run++) {
-                checkAborted();
-                Double thisRun = sampleSettling(camera, fiducial, distance, diameterPixels, graph,
-                        rows, color, run);
-                if (thisRun == null) {
-                    neverSettled = true;
+            for (int d = 0; d < directions.length; d++) {
+                for (int run = 0; run < runsPerDistance; run++) {
+                    checkAborted();
+                    SettleRun thisRun = sampleSettling(camera, fiducial, distance, directions[d],
+                            directionNames[d], diameterPixels, graph, rows, color, run);
+                    if (thisRun.settled == null) {
+                        neverSettled = true;
+                    }
+                    else if (settled == null || thisRun.settled > settled) {
+                        settled = thisRun.settled;
+                    }
+                    report.line("  after a %.0f mm move along %s, run %d: %s; %s", distance,
+                            directionNames[d], run + 1,
+                            thisRun.settled == null ? "never settled"
+                                    : String.format("settled at %.0f ms", thisRun.settled * 1000),
+                            describe(thisRun.oscillation, thisRun.fps));
+                    vibrations.add(new MachineDiagnosticsResults.Vibration(camera.getId(),
+                            directionNames[d], distance, thisRun.oscillation.amplitude,
+                            thisRun.oscillation.frequencyHz, thisRun.oscillation.decaySeconds,
+                            thisRun.fps / 2));
                 }
-                else if (settled == null || thisRun > settled) {
-                    settled = thisRun;
-                }
-                report.line("  after a %.0f mm move, run %d: %s", distance, run + 1,
-                        thisRun == null ? "never settled" : String.format("settled at %.0f ms", thisRun * 1000));
             }
             if (settled != null && (worstSettled == null || settled > worstSettled)) {
                 worstSettled = settled;
@@ -3008,20 +3129,93 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             }
         }
         report.writeCsv("camera-settle.csv",
-                new String[] { "distance_mm", "run", "time_s", "deviation_px" }, rows);
+                new String[] { "distance_mm", "direction", "run", "time_s", "deviation_px",
+                        "along_px" }, rows);
         setSettleGraph(graph);
+        reportVibration(report, camera, vibrations);
         List<Settling> settleTimes = new ArrayList<>();
         if (worstSettled != null) {
             settleTimes.add(new Settling(camera.getId(), worstSettled, worstDistance));
         }
-        recordResults(TestGroup.CameraSettle, report, results -> results.setSettling(settleTimes));
+        recordResults(TestGroup.CameraSettle, report, results -> {
+            results.setSettling(settleTimes);
+            results.setVibration(vibrations);
+        });
     }
 
-    private Double sampleSettling(ReferenceCamera camera, Location fiducial, double distance,
-            int diameterPixels, SimpleGraph graph, List<Object[]> rows, Color color, int run)
-                    throws Exception {
-        MovableUtils.moveToLocationAtSafeZ(camera,
-                fiducial.add(new Location(LengthUnit.Millimeters, -distance, 0, 0, 0)));
+    /** One arrival: when it settled, and what it did on the way. */
+    private static final class SettleRun {
+        final Double settled;
+        final MachineDiagnosticsMath.Oscillation oscillation;
+        final double fps;
+
+        SettleRun(Double settled, MachineDiagnosticsMath.Oscillation oscillation, double fps) {
+            this.settled = settled;
+            this.oscillation = oscillation;
+            this.fps = fps;
+        }
+    }
+
+    private static String describe(MachineDiagnosticsMath.Oscillation oscillation, double fps) {
+        StringBuilder text = new StringBuilder();
+        text.append(String.format("amplitude %.1f px", oscillation.amplitude));
+        if (oscillation.frequencyHz != null) {
+            text.append(String.format(", about %.1f Hz", oscillation.frequencyHz));
+        }
+        if (oscillation.decaySeconds != null) {
+            text.append(String.format(", decaying with a %.0f ms time constant",
+                    oscillation.decaySeconds * 1000));
+        }
+        text.append(String.format(" (frames at %.0f/s resolve up to %.0f Hz)", fps, fps / 2));
+        return text.toString();
+    }
+
+    /**
+     * The worst decay per direction, as findings. A frequency is reported as what the frame
+     * rate could resolve: a belt resonance at 40 Hz seen at 30 frames per second shows up as
+     * 10 Hz, and there is no telling the two apart from these samples.
+     */
+    private void reportVibration(MachineDiagnosticsReport report, ReferenceCamera camera,
+            List<MachineDiagnosticsResults.Vibration> vibrations) {
+        Map<String, MachineDiagnosticsResults.Vibration> worst = new LinkedHashMap<>();
+        for (MachineDiagnosticsResults.Vibration v : vibrations) {
+            MachineDiagnosticsResults.Vibration previous = worst.get(v.getDirection());
+            double decay = v.getDecaySeconds() == null ? 0 : v.getDecaySeconds();
+            double previousDecay = previous == null || previous.getDecaySeconds() == null ? -1
+                    : previous.getDecaySeconds();
+            if (previous == null || decay > previousDecay) {
+                worst.put(v.getDirection(), v);
+            }
+        }
+        for (MachineDiagnosticsResults.Vibration v : worst.values()) {
+            String frequency = v.getFrequencyHz() == null ? "no countable oscillation"
+                    : String.format("about %.1f Hz as seen at this frame rate, which cannot tell it "
+                            + "from anything above %.0f Hz", v.getFrequencyHz(), v.getResolvableHz());
+            if (v.getDecaySeconds() != null && v.getDecaySeconds() > SLOW_DECAY_SECONDS) {
+                report.finding(Severity.Warning, "Arriving along %s after a %.0f mm move, the image "
+                        + "on %s rings with %.1f px of amplitude and takes %.0f ms to decay to a "
+                        + "third of it (%s). That is weak damping in the mechanism, and the settle "
+                        + "wait is paying for it on every capture.", v.getDirection(),
+                        v.getDistanceMm(), camera.getName(), v.getAmplitudePixels(),
+                        v.getDecaySeconds() * 1000, frequency);
+            }
+            else {
+                report.finding(Severity.Info, "Arriving along %s after a %.0f mm move, the image on "
+                        + "%s moves by up to %.1f px%s; %s.", v.getDirection(), v.getDistanceMm(),
+                        camera.getName(), v.getAmplitudePixels(),
+                        v.getDecaySeconds() == null ? ""
+                                : String.format(" and decays with a %.0f ms time constant",
+                                        v.getDecaySeconds() * 1000),
+                        frequency);
+            }
+        }
+    }
+
+    private SettleRun sampleSettling(ReferenceCamera camera, Location fiducial, double distance,
+            double[] direction, String directionName, int diameterPixels, SimpleGraph graph,
+            List<Object[]> rows, Color color, int run) throws Exception {
+        MovableUtils.moveToLocationAtSafeZ(camera, fiducial.add(new Location(LengthUnit.Millimeters,
+                -distance * direction[0], -distance * direction[1], 0, 0)));
         camera.waitForCompletion(CompletionType.WaitForStillstand);
         Thread.sleep(machineSettleMs);
         List<Double> times = new ArrayList<>();
@@ -3058,18 +3252,40 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             throw new Exception("The fiducial could not be located in enough frames to measure "
                     + "settling. Check the fiducial diameter and the lighting.");
         }
-        double finalX = xs.get(xs.size() - 1);
-        double finalY = ys.get(ys.size() - 1);
+        // Where the image ends up is the median of the last quarter second, not the last frame.
+        List<Double> tailX = new ArrayList<>();
+        List<Double> tailY = new ArrayList<>();
+        double tEnd = times.get(times.size() - 1);
+        for (int i = 0; i < times.size(); i++) {
+            if (times.get(i) > tEnd - 0.25) {
+                tailX.add(xs.get(i));
+                tailY.add(ys.get(i));
+            }
+        }
+        double finalX = MachineDiagnosticsMath.median(tailX);
+        double finalY = MachineDiagnosticsMath.median(tailY);
         double[] timeArray = new double[times.size()];
         double[] deviations = new double[times.size()];
+        double[] along = new double[times.size()];
         for (int i = 0; i < times.size(); i++) {
             timeArray[i] = times.get(i);
-            deviations[i] = Math.hypot(xs.get(i) - finalX, ys.get(i) - finalY);
-            rows.add(new Object[] { distance, run, timeArray[i], deviations[i] });
-            row(graph, "px", String.format("%.0f mm #%d", distance, run + 1), color, true, true)
-                    .recordDataPoint(timeArray[i], deviations[i]);
+            double dx = xs.get(i) - finalX;
+            double dy = ys.get(i) - finalY;
+            deviations[i] = Math.hypot(dx, dy);
+            // Signed, along the direction of arrival in the image: the image axes are the
+            // machine's up to a rotation and mirror, which do not change a frequency.
+            along[i] = dx * direction[0] + dy * direction[1];
+            rows.add(new Object[] { distance, directionName, run, timeArray[i], deviations[i],
+                    along[i] });
+            row(graph, "px", String.format("%.0f mm %s #%d", distance, directionName, run + 1),
+                    color, true, true).recordDataPoint(timeArray[i], deviations[i]);
         }
-        return MachineDiagnosticsMath.settleTime(timeArray, deviations, settleThresholdPixels);
+        Double settled = MachineDiagnosticsMath.settleTime(timeArray, deviations,
+                settleThresholdPixels);
+        MachineDiagnosticsMath.Oscillation oscillation = MachineDiagnosticsMath.oscillation(
+                timeArray, along, settleThresholdPixels);
+        double fps = times.size() > 1 ? (times.size() - 1) / (tEnd - times.get(0)) : 0;
+        return new SettleRun(settled, oscillation, fps);
     }
 
     private Circle locateCircle(BufferedImage image, int diameterPixels) {
@@ -3156,6 +3372,151 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     + "repeatability of the endstops and it carries into every job. Visual homing "
                     + "against the fiducial would remove it.");
         }
+    }
+
+    // Z, read off the bottom camera's focus on the nozzle tip.
+
+    /** The auto focus provider's edge score, which is what its focus curve is built from. */
+    private static final class FocusScorer extends org.openpnp.machine.reference.camera.AutoFocusProvider {
+        double score(BufferedImage image, int diameter) {
+            return focusScore(image, diameter, null);
+        }
+    }
+
+    /**
+     * Z is the one axis the down-looking camera cannot see. The bottom camera can: the nozzle
+     * tip comes into focus at one height, and where the sweep finds that height, approached
+     * from above and from below, is where Z really stops. The spread of the heights found from
+     * one side is the repeatability; the difference between the sides is the slack.
+     */
+    private void testZFocus(ReferenceMachine machine, MachineDiagnosticsReport report)
+            throws Exception {
+        report.section("Z, from where the nozzle tip comes into focus on the bottom camera");
+        ReferenceHead head = requireHead(machine);
+        if (head.getNozzles().isEmpty()) {
+            throw new Exception("The head has no nozzle.");
+        }
+        Nozzle nozzle = head.getDefaultNozzle();
+        if (nozzle.getNozzleTip() == null) {
+            throw new Exception("Nozzle " + nozzle.getName() + " has no nozzle tip loaded.");
+        }
+        if (nozzle.getPart() != null) {
+            throw new Exception("Nozzle " + nozzle.getName() + " is holding a part; the tip itself "
+                    + "is what comes into focus.");
+        }
+        Camera bottom = VisionUtils.getBottomVisionCamera();
+        if (!(bottom instanceof ReferenceCamera)) {
+            throw new Exception("The machine has no bottom camera.");
+        }
+        ReferenceCamera camera = (ReferenceCamera) bottom;
+        ReferenceControllerAxis zAxis = findControllerAxis(nozzle, Axis.Type.Z);
+        if (zAxis == null) {
+            throw new Exception("Nozzle " + nozzle.getName() + " has no controller Z axis.");
+        }
+        Location focus = camera.getLocation(nozzle).convertToUnits(LengthUnit.Millimeters);
+        double upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters).getX();
+        int diameter = (int) Math.round(4.0 / upp);
+        diameter = Math.min(Math.min(diameter, camera.getHeight() - 50), camera.getWidth() - 50);
+        FocusScorer scorer = new FocusScorer();
+        double range = Math.abs(focusRangeMm);
+        double step = Math.max(0.005, Math.abs(focusStepMm));
+        int repeatsEach = Math.max(1, focusRepeats);
+        report.line("  Nozzle %s, %s at %.3f mm, sweep %.2f mm either side in %.3f mm steps, %d "
+                + "sweeps from each side.", nozzle.getName(), camera.getName(), focus.getZ(), range,
+                step, repeatsEach);
+
+        MovableUtils.moveToLocationAtSafeZ(nozzle, focus.derive(null, null, Double.NaN, null));
+        List<Object[]> rows = new ArrayList<>();
+        List<Double> fromAbove = new ArrayList<>();
+        List<Double> fromBelow = new ArrayList<>();
+        camera.actuateLightBeforeCapture();
+        try {
+            for (int repeat = 0; repeat < repeatsEach; repeat++) {
+                for (int side = 0; side < 2; side++) {
+                    checkAborted();
+                    boolean above = side == 0;
+                    // Start beyond the range on the approach side, so the first step already
+                    // moves in the direction of the sweep and takes up the slack that way.
+                    double start = focus.getZ() + (above ? range + 1.0 : -(range + 1.0));
+                    nozzle.moveTo(focus.derive(null, null, start, null));
+                    List<Double> zs = new ArrayList<>();
+                    List<Double> scores = new ArrayList<>();
+                    int steps = (int) Math.round(2 * range / step);
+                    for (int i = 0; i <= steps; i++) {
+                        checkAborted();
+                        double z = above ? focus.getZ() + range - i * step
+                                : focus.getZ() - range + i * step;
+                        nozzle.moveTo(focus.derive(null, null, z, null));
+                        BufferedImage image = camera.settleAndCapture();
+                        double score = scorer.score(image, diameter);
+                        for (int f = 1; f < Math.max(1, framesPerPoint); f++) {
+                            score += scorer.score(camera.capture(), diameter);
+                        }
+                        score /= Math.max(1, framesPerPoint);
+                        zs.add(z);
+                        scores.add(score);
+                        rows.add(new Object[] { repeat, above ? "above" : "below", z, score,
+                                elapsed() });
+                    }
+                    double peak = MachineDiagnosticsMath.parabolicPeak(toArray(zs), toArray(scores));
+                    (above ? fromAbove : fromBelow).add(peak);
+                    report.line("  sweep %d from %s: focus at %.4f mm", repeat + 1,
+                            above ? "above" : "below", peak);
+                    log("Z focus from %s: %.4f mm", above ? "above" : "below", peak);
+                }
+            }
+        }
+        finally {
+            camera.actuateLightAfterCapture();
+            nozzle.moveToSafeZ();
+        }
+        report.writeCsv("z-focus.csv",
+                new String[] { "sweep", "approach", "z_mm", "focus_score", "t_s" }, rows);
+        Stats above = MachineDiagnosticsMath.stats(fromAbove);
+        Stats below = MachineDiagnosticsMath.stats(fromBelow);
+        List<Double> all = new ArrayList<>(fromAbove);
+        all.addAll(fromBelow);
+        Stats each = MachineDiagnosticsMath.stats(all);
+        double backlash = above.mean - below.mean;
+        double repeatability = Math.max(above.getRange(), below.getRange());
+        double sd = Math.max(above.stdDev, below.stdDev);
+        report.line("  from above: mean %.4f sd %.4f range %.4f; from below: mean %.4f sd %.4f "
+                + "range %.4f", above.mean, above.stdDev, above.getRange(), below.mean,
+                below.stdDev, below.getRange());
+        report.line("  Z repeatability %.4f mm from one side, slack between the sides %.4f mm",
+                repeatability, backlash);
+        boolean atEdge = Math.abs(each.mean - focus.getZ()) > range * 0.8;
+        if (atEdge) {
+            report.finding(Severity.Warning, "The focus was found %.3f mm from the bottom camera's "
+                    + "configured height, at the edge of the sweep: the camera's Z setting is off "
+                    + "by about that much, or the sweep range is too small to see the peak.",
+                    each.mean - focus.getZ());
+        }
+        report.finding(repeatability > Z_BACKLASH_TOLERANCE_MM ? Severity.Warning : Severity.Info,
+                "Z on nozzle %s stops within %.4f mm of itself approaching from one side (sd %.4f "
+                + "mm), and %.4f mm apart between coming down and coming up; the tip comes into "
+                + "focus at %.3f mm against the %.3f mm the camera is set to.", nozzle.getName(),
+                repeatability, sd, backlash, each.mean, focus.getZ());
+        if (Math.abs(backlash) > Z_BACKLASH_TOLERANCE_MM) {
+            Length offset = zAxis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters);
+            report.finding(Severity.Warning, "Axis %s has %.4f mm of slack between the two "
+                    + "directions, with %s compensation and an offset of %.4f mm. A placement's "
+                    + "height is off by that much depending on which way Z last moved.",
+                    zAxis.getName(), Math.abs(backlash), zAxis.getBacklashCompensationMethod(),
+                    offset.getValue());
+        }
+        MachineDiagnosticsResults.ZFocus conclusion = new MachineDiagnosticsResults.ZFocus(
+                zAxis.getId(), camera.getId(), each.mean, sd, repeatability, backlash, repeatsEach);
+        recordResults(TestGroup.ZFocus, report, results -> {
+            List<MachineDiagnosticsResults.ZFocus> kept = new ArrayList<>();
+            for (MachineDiagnosticsResults.ZFocus other : results.getZFocus()) {
+                if (!other.getAxisId().equals(zAxis.getId())) {
+                    kept.add(other);
+                }
+            }
+            kept.add(conclusion);
+            results.setZFocus(kept);
+        });
     }
 
     // Test group 6: rotation backlash.

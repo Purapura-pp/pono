@@ -70,6 +70,8 @@ public class MachineDiagnosticsIssuesTest {
             "The camera waits a fixed time shorter than the delay of its own frames.";
     private static final String LOSES_STEPS =
             "The axis loses steps at the speed it is planned with.";
+    private static final String Z_HAS_SLACK =
+            "The Z axis has slack between moving down and moving up that is not compensated.";
 
     @TempDir
     Path tempDir;
@@ -433,6 +435,38 @@ public class MachineDiagnosticsIssuesTest {
                 new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 1.0, 4000, 0.9, 400)));
 
         assertFalse(wordings(results).contains(LOSES_STEPS));
+    }
+
+    @Test
+    public void zSlackWithNoCompensationIsCompensatedInTheDirectionOfTravel() throws Exception {
+        ReferenceControllerAxis zAxis = addAxis("Z", Axis.Type.Z);
+        zAxis.setBacklashCompensationMethod(BacklashCompensationMethod.None);
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setZFocus(List.of(new MachineDiagnosticsResults.ZFocus(zAxis.getId(),
+                camera.getId(), 31.42, 0.008, 0.02, -0.12, 5)));
+
+        issue(results, Z_HAS_SLACK).setState(Solutions.State.Solved);
+
+        assertEquals(BacklashCompensationMethod.DirectionalCompensation,
+                zAxis.getBacklashCompensationMethod());
+        assertEquals(0.12, millimetres(zAxis.getBacklashOffset()), 1e-9);
+    }
+
+    /** Directional compensation with an offset of zero is what most Z axes ship with. */
+    @Test
+    public void zSlackIsReportedWhenTheOffsetIsFarBelowIt() throws Exception {
+        ReferenceControllerAxis zAxis = addAxis("Z", Axis.Type.Z);
+        zAxis.setBacklashCompensationMethod(BacklashCompensationMethod.DirectionalCompensation);
+        zAxis.setBacklashOffset(new Length(0, LengthUnit.Millimeters));
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setZFocus(List.of(new MachineDiagnosticsResults.ZFocus(zAxis.getId(),
+                camera.getId(), 31.42, 0.008, 0.02, 0.09, 5)));
+
+        assertTrue(wordings(results).contains(Z_HAS_SLACK));
+
+        zAxis.setBacklashOffset(new Length(0.08, LengthUnit.Millimeters));
+        assertFalse(wordings(results).contains(Z_HAS_SLACK),
+                "an offset in the region of the slack is already doing the job");
     }
 
     /** The floor is kept per camera, and a new run replaces only the camera it measured. */
