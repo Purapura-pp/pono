@@ -4248,6 +4248,22 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 "Two copper fiducials in one frame say Units per Pixel is off by %+.3f%%, from %d "
                 + "pairs. The ruler is a second reading of the same thing by a different route; "
                 + "where the two agree, that is the camera.", median * 100, scales.size());
+        // Units per Pixel was calibrated by moving the machine, so it is in the machine's
+        // millimetre. On a machine whose millimetre is short, a Units per Pixel that is "too
+        // large" by the same fraction is exactly right for it: a fiducial a true millimetre off
+        // centre reads as the number of machine millimetres that moves the camera a true
+        // millimetre. Only what is left over is the camera's calibration.
+        double machineScale = (frame.scaleX + frame.scaleY) / 2;
+        double configuredOverTrue = 1 / (1 + median);
+        double excess = configuredOverTrue / machineScale - 1;
+        report.line("  Of that, %+.3f%% is the machine's own millimetre, which a Units per Pixel "
+                + "calibrated by moving the machine is meant to carry; %+.3f%% is the camera's "
+                + "calibration proper.", (machineScale - 1) * 100, excess * 100);
+        report.finding(Math.abs(excess) > SCALE_ERROR_TOLERANCE ? Severity.Warning : Severity.Info,
+                "Units per Pixel is in the machine's millimetre, as it should be, and %+.3f%% beyond "
+                + "it. A vision correction of a millimetre therefore moves the machine %.4f mm of "
+                + "true travel; the rest of the difference is the machine's scale and is right "
+                + "for every move it makes.", excess * 100, 1 + excess);
     }
 
     /** A circle of about the given diameter near a given pixel position. */
@@ -4372,7 +4388,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         MovableUtils.moveToLocationAtSafeZ(camera, at, measureSpeedFactor);
         camera.waitForCompletion(CompletionType.WaitForStillstand);
         Thread.sleep(machineSettleMs);
-        RulerFrame first = readRuler(camera, board, frame, at, z);
+        RulerFrame first = readRuler(camera, board, frame, driftBefore, z);
         double expected = pixelsPerMm * ruler.pitchMm;
         // Only ticks that sit a pitch from their neighbours are ticks; the silkscreen digits,
         // the mask edge and the anchor's ring stand in the same band and read as spikes. The
@@ -4424,7 +4440,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Location target = new Location(LengthUnit.Millimeters, p[0], p[1], z, 0)
                         .add(driftBefore.derive(null, null, 0.0, 0.0));
                 camera.moveTo(target, measureSpeedFactor);
-                RulerFrame seen = readRuler(camera, board, frame, target, z);
+                RulerFrame seen = readRuler(camera, board, frame, driftBefore, z);
                 seen = new RulerFrame(MachineDiagnosticsMath.consistentChain(seen.ticks,
                         measuredPixelsPerMm * ruler.pitchMm, 0.15), seen.centrePixel);
                 // Each tick near the centre says where the machine really is: its board
@@ -4503,19 +4519,23 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * that stand out are the ticks.
      */
     private RulerFrame readRuler(ReferenceCamera camera, DatumBoard board,
-            MachineDiagnosticsMath.Affine frame, Location cameraAt, double z) throws Exception {
+            MachineDiagnosticsMath.Affine frame, Location drift, double z) throws Exception {
         DatumBoard.Ruler ruler = board.getRuler();
         BufferedImage image = camera.settleAndCapture();
         Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
-        // Where board points fall in the image, through the frame and the camera's own
-        // transform, tells which way the ruler runs and where its tick band is.
+        // Where board points fall in the image, through the frame, the drift the camera was
+        // placed with, and the camera's own transform, tells which way the ruler runs and
+        // where its tick band is. The fourth real run had the camera placed 0.15 mm of drift
+        // away from where the band was computed, and read the board's edge instead of ticks.
         double[] c = ruler.centre();
-        org.openpnp.model.Point p0 = pixelOf(camera, frame, c[0], c[1], z);
-        org.openpnp.model.Point p1 = pixelOf(camera, frame, c[0] + 1, c[1], z);
+        org.openpnp.model.Point p0 = pixelOf(camera, frame, drift, c[0], c[1], z);
+        org.openpnp.model.Point p1 = pixelOf(camera, frame, drift, c[0] + 1, c[1], z);
         double angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
-        // The tick band: from the ticks' base to the top of the shortest ticks.
-        org.openpnp.model.Point base = pixelOf(camera, frame, c[0], c[1] - ruler.tickLengthMm / 2, z);
-        org.openpnp.model.Point top = pixelOf(camera, frame, c[0], c[1] - ruler.tickLengthMm / 2 + 1.0, z);
+        // The tick band: the shortest ticks stand a millimetre from the base, and the base is
+        // the edge of the board, so the band keeps clear of both ends.
+        double baseY = c[1] - ruler.tickLengthMm / 2;
+        org.openpnp.model.Point base = pixelOf(camera, frame, drift, c[0], baseY + 0.15, z);
+        org.openpnp.model.Point top = pixelOf(camera, frame, drift, c[0], baseY + 0.85, z);
         Mat mat = OpenCvUtils.toMat(image);
         Mat gray = new Mat();
         Mat turned = new Mat();
@@ -4559,10 +4579,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     private static org.openpnp.model.Point pixelOf(ReferenceCamera camera, MachineDiagnosticsMath.Affine frame,
-            double boardX, double boardY, double z) {
+            Location drift, double boardX, double boardY, double z) {
         double[] p = frame.apply(boardX, boardY);
-        return VisionUtils.getLocationPixels(camera, new Location(LengthUnit.Millimeters, p[0],
-                p[1], z, 0));
+        return VisionUtils.getLocationPixels(camera, new Location(LengthUnit.Millimeters,
+                p[0] + drift.getX(), p[1] + drift.getY(), z, 0));
     }
 
     private static double[] turn(Mat rotation, double x, double y) {
