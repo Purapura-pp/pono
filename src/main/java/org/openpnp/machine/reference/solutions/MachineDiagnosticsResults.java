@@ -728,6 +728,18 @@ public class MachineDiagnosticsResults {
         public void setRulerScaleErrorX(Double rulerScaleErrorX) {
             this.rulerScaleErrorX = rulerScaleErrorX;
         }
+
+        @Attribute(required = false)
+        private Double pairScaleError;
+
+        /** Units per Pixel error from two fiducials in one frame, the machine standing still. */
+        public Double getPairScaleError() {
+            return pairScaleError;
+        }
+
+        public void setPairScaleError(Double pairScaleError) {
+            this.pairScaleError = pairScaleError;
+        }
     }
 
     /** When a test group last finished, and the report it wrote. */

@@ -3442,14 +3442,32 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             List<FieldOfView> scale) {
         LinearFit fit = MachineDiagnosticsMath.linearFit(offsets, errors);
         double residualSum = 0;
+        double sumSquaredOffsets = 0;
+        double meanOffset = 0;
+        for (double offset : offsets) {
+            meanOffset += offset / offsets.length;
+        }
         for (int i = 0; i < offsets.length; i++) {
             double residual = errors[i] - fit.valueAt(offsets[i]);
             residualSum += residual * residual;
+            sumSquaredOffsets += (offsets[i] - meanOffset) * (offsets[i] - meanOffset);
         }
         double rms = Math.sqrt(residualSum / offsets.length);
+        // The slope's standard error, and what the machine's own scatter does to it: this scan
+        // moves the machine, so a machine whose short moves land tens of microns apart puts
+        // that scatter into the scale it reads. The fiducial pairs and the ruler read the
+        // camera with the machine standing still.
+        double slopeError = offsets.length > 2 && sumSquaredOffsets > 0
+                ? Math.sqrt(residualSum / (offsets.length - 2) / sumSquaredOffsets) : 0;
         scale.add(new FieldOfView(camera.getId(), axis, fit.slope, rms));
-        report.line("  %s: scale error %+.2f%%, residual after removing it %.4f mm rms",
-                axis, fit.slope * 100, rms);
+        report.line("  %s: scale error %+.2f%% (standard error %.2f%%), residual after removing "
+                + "it %.4f mm rms", axis, fit.slope * 100, slopeError * 100, rms);
+        if (rms > 0.005) {
+            report.line("  %s: the residual is the machine's own scatter over these short moves, "
+                    + "which this scan cannot tell from the camera; the fiducial pairs and the "
+                    + "ruler in the datum board group read the camera's scale with the machine "
+                    + "standing still.", axis);
+        }
         if (Math.abs(fit.slope) < 1) {
             double implied = unitsPerPixel / (1 - fit.slope);
             report.line("  %s: Units per Pixel is set to %.6f mm, the scan implies %.6f mm",
@@ -4108,6 +4126,21 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             }
         }
 
+        // The camera's scale from two fiducials in one frame: the same detector as everything
+        // else, a copper baseline, and the machine standing still. A second reading of what the
+        // ruler reads, by a different route, for when the two routes disagree.
+        try {
+            measurePairScale(machine, report, camera, xAxis, fiducial, configuredDiameter, board,
+                    frame, found, datum);
+        }
+        catch (AbortedException e) {
+            throw e;
+        }
+        catch (Exception e) {
+            Logger.warn(e, "Machine diagnostics: fiducial pair");
+            report.line("  Fiducial pair: %s", e.getMessage());
+        }
+
         // The ruler.
         try {
             measureRuler(machine, report, camera, board, frame, fiducial.getZ(), datum);
@@ -4121,6 +4154,125 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             report.finding(Severity.Warning, "The ruler could not be read: %s", e.getMessage());
         }
         recordResults(TestGroup.DatumBoard, report, results -> results.setDatum(datum));
+    }
+
+    /**
+     * Two fiducials in one frame. The camera stands between the anchor and each of the four
+     * fiducials around it, both dots in view about 5.6 mm either side of the centre, and the
+     * pixel distance between them against the 11.18 mm the copper says gives pixels per
+     * millimetre with nothing moving. It is what the ruler measures, read through the circle
+     * detector rather than through tick centroids; the field of view scan, which moves the
+     * machine, cannot separate the camera's scale from the machine's on a machine whose short
+     * moves scatter by tens of microns.
+     */
+    private void measurePairScale(ReferenceMachine machine, MachineDiagnosticsReport report,
+            ReferenceCamera camera, ReferenceControllerAxis xAxis, Location fiducial,
+            Length anchorDiameter, DatumBoard board, MachineDiagnosticsMath.Affine frame,
+            List<Found> found, MachineDiagnosticsResults.Datum datum) throws Exception {
+        Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+        double halfWidthMm = camera.getWidth() * upp.getX() / 2;
+        double halfHeightMm = camera.getHeight() * upp.getY() / 2;
+        DatumBoard.Dot anchor = board.getAnchor();
+        int dotPixels = (int) Math.round(anchor.diameterMm / upp.getX());
+        List<Double> scales = new ArrayList<>();
+        report.blank();
+        report.line("Two fiducials in one frame, the machine standing still");
+        for (DatumBoard.Dot other : board.getOrientationFiducials()) {
+            checkAborted();
+            double baseline = Math.hypot(other.x - anchor.x, other.y - anchor.y);
+            // Where the two would fall in the image with the camera between them.
+            double[] mid = { (anchor.x + other.x) / 2, (anchor.y + other.y) / 2 };
+            double[] a = frame.apply(anchor.x, anchor.y);
+            double[] b = frame.apply(other.x, other.y);
+            double[] m = frame.apply(mid[0], mid[1]);
+            if (Math.abs(a[0] - m[0]) > halfWidthMm * 0.8 || Math.abs(a[1] - m[1]) > halfHeightMm * 0.8) {
+                report.line("  %s and %s do not both fit in the frame; skipped.", anchor.name, other.name);
+                continue;
+            }
+            Location drift = anchorDrift(machine, camera, xAxis, fiducial, anchorDiameter, report,
+                    anchor.name + " and " + other.name);
+            Location at = new Location(LengthUnit.Millimeters, m[0], m[1], fiducial.getZ(), 0)
+                    .add(drift.derive(null, null, 0.0, 0.0));
+            MovableUtils.moveToLocationAtSafeZ(camera, at, measureSpeedFactor);
+            camera.waitForCompletion(CompletionType.WaitForStillstand);
+            Thread.sleep(machineSettleMs);
+            org.openpnp.model.Point pa = VisionUtils.getLocationPixels(camera,
+                    new Location(LengthUnit.Millimeters, a[0], a[1], fiducial.getZ(), 0)
+                            .add(drift.derive(null, null, 0.0, 0.0)));
+            org.openpnp.model.Point pb = VisionUtils.getLocationPixels(camera,
+                    new Location(LengthUnit.Millimeters, b[0], b[1], fiducial.getZ(), 0)
+                            .add(drift.derive(null, null, 0.0, 0.0)));
+            List<Double> distances = new ArrayList<>();
+            camera.actuateLightBeforeCapture();
+            try {
+                BufferedImage image = camera.lightSettleAndCapture();
+                long seen = fingerprint(image);
+                for (int f = 0; f < Math.max(1, framesPerPoint); f++) {
+                    Circle ca = locateCircleAt(image, pa.x, pa.y, dotPixels);
+                    Circle cb = locateCircleAt(image, pb.x, pb.y, dotPixels);
+                    if (ca != null && cb != null) {
+                        distances.add(Math.hypot(cb.x - ca.x, cb.y - ca.y));
+                    }
+                    if (f + 1 < framesPerPoint) {
+                        image = freshFrame(camera, seen);
+                        seen = fingerprint(image);
+                    }
+                }
+            }
+            finally {
+                camera.actuateLightAfterCapture();
+            }
+            if (distances.isEmpty()) {
+                report.line("  %s and %s: one of them was not found in the frame.", anchor.name, other.name);
+                continue;
+            }
+            double pixels = MachineDiagnosticsMath.median(distances);
+            double pixelsPerMm = pixels / baseline;
+            double nominal = 1 / Math.hypot(upp.getX() * (other.x - anchor.x) / baseline,
+                    upp.getY() * (other.y - anchor.y) / baseline);
+            double scaleError = nominal / pixelsPerMm - 1;
+            scales.add(scaleError);
+            report.line("  %s to %s: %.1f px for %.3f mm, %.3f px per mm against %.3f from Units "
+                    + "per Pixel; camera scale error %+.3f%%", anchor.name, other.name, pixels,
+                    baseline, pixelsPerMm, nominal, scaleError * 100);
+        }
+        if (scales.isEmpty()) {
+            return;
+        }
+        double median = MachineDiagnosticsMath.median(scales);
+        Stats stats = MachineDiagnosticsMath.stats(scales);
+        datum.setPairScaleError(median);
+        report.line("  Units per Pixel against the fiducial pairs: %+.3f%% (%d pairs, %+.3f%% to %+.3f%%)",
+                median * 100, scales.size(), stats.min * 100, stats.max * 100);
+        report.finding(Math.abs(median) > SCALE_ERROR_TOLERANCE ? Severity.Warning : Severity.Info,
+                "Two copper fiducials in one frame say Units per Pixel is off by %+.3f%%, from %d "
+                + "pairs. The ruler is a second reading of the same thing by a different route; "
+                + "where the two agree, that is the camera.", median * 100, scales.size());
+    }
+
+    /** A circle of about the given diameter near a given pixel position. */
+    private Circle locateCircleAt(BufferedImage image, double expectedX, double expectedY,
+            int diameterPixels) {
+        Mat mat = OpenCvUtils.toMat(image);
+        try {
+            int minDiameter = Math.max(3, (int) (diameterPixels / 1.5));
+            int maxDiameter = Math.max(minDiameter + 4, (int) (diameterPixels * 1.5));
+            int search = Math.min(Math.min(image.getWidth(), image.getHeight()),
+                    Math.max(64, maxDiameter * 3));
+            List<Circle> circles = DetectCircularSymmetry.findCircularSymmetry(mat,
+                    (int) Math.round(expectedX), (int) Math.round(expectedY), minDiameter,
+                    maxDiameter, search, search, search, 1, 1.2, 0.0, 4, 8,
+                    DetectCircularSymmetry.SymmetryScore.OverallVarianceVsRingVarianceSum,
+                    false, false, new ScoreRange());
+            return circles.isEmpty() ? null : circles.get(0);
+        }
+        catch (Exception e) {
+            Logger.trace(e, "Machine diagnostics: no circle near {}, {}", expectedX, expectedY);
+            return null;
+        }
+        finally {
+            mat.release();
+        }
     }
 
     private MachineDiagnosticsMath.Affine fit(List<Found> found) {
