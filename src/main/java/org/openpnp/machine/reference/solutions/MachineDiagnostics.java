@@ -1068,11 +1068,17 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     Solutions.Severity.Warning, WIKI_MACHINE_AXES,
                     String.format("Against the %s on %s, a millimetre commanded on axis %s came out "
                             + "%+.3f%% long, over %d fiducials placed by one photoplot to about "
-                            + "0.02 mm. Over a 100 mm board that is %.3f mm at the far edge, which a "
-                            + "fiducial check on a smaller board scales away without saying so. The "
-                            + "correction belongs in the controller's steps per millimetre, which "
-                            + "is not written from here.%s", datum.getBoard(), when, axis.getName(),
-                            error * 100, datum.getPoints(), Math.abs(error) * 100, steps)));
+                            + "0.02 mm. Over a 100 mm board that is %.3f mm at the far edge. Every "
+                            + "position taught on this machine was taught with the same short "
+                            + "millimetre and agrees with every other, and a board with two or more "
+                            + "fiducials has the scale taken out by its fiducial check; the error "
+                            + "reaches placements on boards without fiducials, and the Units per "
+                            + "Pixel that was calibrated by moving the machine. Correcting the "
+                            + "controller's steps per millimetre changes every taught coordinate - "
+                            + "fiducials, feeders, camera and nozzle offsets - so it is a decision "
+                            + "to re-teach the machine, and it is not written from here.%s",
+                            datum.getBoard(), when, axis.getName(), error * 100, datum.getPoints(),
+                            Math.abs(error) * 100, steps)));
         }
         if (Math.abs(datum.getShearDegrees()) > DATUM_SQUARENESS_TOLERANCE_DEGREES) {
             double factor = -Math.tan(Math.toRadians(datum.getShearDegrees()));
