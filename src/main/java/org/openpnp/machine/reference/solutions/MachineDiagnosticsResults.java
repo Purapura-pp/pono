@@ -742,6 +742,63 @@ public class MachineDiagnosticsResults {
         }
     }
 
+    /**
+     * Backlash and sticking at one place along an axis, read against whatever round feature the
+     * table offered there. Several of these along the travel say whether the slack changes with
+     * position - belt compliance - or stays put - play and friction.
+     */
+    public static class Hysteresis {
+        @Attribute
+        private String axisId;
+        @Attribute
+        private double positionMm;
+        @Attribute
+        private double backlashMm;
+        @Attribute
+        private double backlashSdMm;
+        @Attribute
+        private double largestJumpMm;
+        @Attribute
+        private int stalledSteps;
+
+        Hysteresis() {
+        }
+
+        public Hysteresis(String axisId, double positionMm, double backlashMm, double backlashSdMm,
+                double largestJumpMm, int stalledSteps) {
+            this.axisId = axisId;
+            this.positionMm = positionMm;
+            this.backlashMm = backlashMm;
+            this.backlashSdMm = backlashSdMm;
+            this.largestJumpMm = largestJumpMm;
+            this.stalledSteps = stalledSteps;
+        }
+
+        public String getAxisId() {
+            return axisId;
+        }
+
+        public double getPositionMm() {
+            return positionMm;
+        }
+
+        public double getBacklashMm() {
+            return backlashMm;
+        }
+
+        public double getBacklashSdMm() {
+            return backlashSdMm;
+        }
+
+        public double getLargestJumpMm() {
+            return largestJumpMm;
+        }
+
+        public int getStalledSteps() {
+            return stalledSteps;
+        }
+    }
+
     /** When a test group last finished, and the report it wrote. */
     public static class Run {
         @Attribute
@@ -829,7 +886,18 @@ public class MachineDiagnosticsResults {
     private Datum datum;
 
     @ElementList(required = false)
+    private ArrayList<Hysteresis> hysteresis = new ArrayList<>();
+
+    @ElementList(required = false)
     private ArrayList<Run> runs = new ArrayList<>();
+
+    public List<Hysteresis> getHysteresis() {
+        return hysteresis;
+    }
+
+    public void setHysteresis(List<Hysteresis> hysteresis) {
+        this.hysteresis = new ArrayList<>(hysteresis);
+    }
 
     public Datum getDatum() {
         return datum;

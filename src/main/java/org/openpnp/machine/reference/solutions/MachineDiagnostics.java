@@ -49,6 +49,7 @@ import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.BottomVisionSettings;
 import org.openpnp.model.Configuration;
+import org.openpnp.model.Job;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
@@ -187,6 +188,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         ZFocus,
         /** The machine's frame against a board of known geometry. */
         DatumBoard,
+        /** Backlash and sticking along the travel, against whatever round feature is there. */
+        HysteresisMap,
         ConfigSnapshot
     }
 
@@ -1075,8 +1078,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "reaches placements on boards without fiducials, and the Units per "
                             + "Pixel that was calibrated by moving the machine. Correcting the "
                             + "controller's steps per millimetre changes every taught coordinate - "
-                            + "fiducials, feeders, camera and nozzle offsets - so it is a decision "
-                            + "to re-teach the machine, and it is not written from here.%s",
+                            + "fiducials, feeders, camera and nozzle offsets. The Compensate button on "
+                            + "the diagnostics page does exactly that: a copy of machine.xml, two "
+                            + "transform axes, every taught coordinate carried across, and a "
+                            + "verification run on the board that keeps or undoes it.%s",
                             datum.getBoard(), when, axis.getName(), error * 100, datum.getPoints(),
                             Math.abs(error) * 100, steps)));
         }
@@ -1092,8 +1097,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "moves X by %.3f mm, and it turns every board by that angle relative "
                             + "to its own fiducials. A linear transformed axis of type X, with the "
                             + "X axis as its input at a factor of 1 and the Y axis at a factor of "
-                            + "%+.6f, takes it out; it is not added from here because it changes "
-                            + "which axis the head mountables are assigned to.", datum.getBoard(),
+                            + "%+.6f, takes it out. The Compensate button on the diagnostics page "
+                            + "adds it, together with the scale, when asked to.", datum.getBoard(),
                             when, datum.getShearDegrees(), datum.getPoints(),
                             Math.abs(Math.tan(Math.toRadians(datum.getShearDegrees()))) * 100,
                             factor)));
@@ -1967,6 +1972,152 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
     private long groupStartedMillis;
 
+    // ---- compensation ------------------------------------------------------------------------
+
+    /** How close to a true millimetre the frame has to come back for the compensation to stand. */
+    private static final double COMPENSATION_CONVERGENCE = 0.0005;
+    private static final double COMPENSATION_SQUARENESS_CONVERGENCE_DEGREES = 0.05;
+
+    /** What applying the compensation did, for the page to show. */
+    public static final class CompensationOutcome {
+        public final boolean kept;
+        public final MachineCompensation compensation;
+        public final MachineDiagnosticsResults.Datum before;
+        public final MachineDiagnosticsResults.Datum after;
+        public final File backup;
+        public final List<String> changes;
+        public final List<String> skipped;
+        public final String message;
+
+        CompensationOutcome(boolean kept, MachineCompensation compensation,
+                MachineDiagnosticsResults.Datum before, MachineDiagnosticsResults.Datum after,
+                File backup, List<String> changes, List<String> skipped, String message) {
+            this.kept = kept;
+            this.compensation = compensation;
+            this.before = before;
+            this.after = after;
+            this.backup = backup;
+            this.changes = changes;
+            this.skipped = skipped;
+            this.message = message;
+        }
+    }
+
+    /**
+     * Put what the datum board measured into the machine as a compensation, and prove it.
+     * <p>
+     * machine.xml is copied aside first. The transform axes are added and every taught coordinate
+     * carried across; then the datum board group runs again on the compensated machine. If its
+     * frame comes back within {@value #COMPENSATION_CONVERGENCE} of a true millimetre the
+     * configuration is saved; if not, everything is put back and nothing is saved, and the
+     * report says what came back instead. Must run on the machine task thread, as the
+     * verification moves the machine.
+     *
+     * @param job               The open job, whose board positions are carried across; null for none.
+     * @param includeSquareness Whether to lean the Y axis back by the shear measured.
+     */
+    public CompensationOutcome applyCompensation(ReferenceMachine machine, Job job,
+            boolean includeSquareness) throws Exception {
+        if (lastResults == null || lastResults.getDatum() == null) {
+            throw new Exception("Run the datum board group first; there is nothing measured to compensate.");
+        }
+        if (running) {
+            throw new Exception("Diagnostics are already running.");
+        }
+        MachineDiagnosticsResults.Datum before = lastResults.getDatum();
+        ReferenceHead head = requireHead(machine);
+        ReferenceCamera camera = requireDownLookingCamera(head);
+        Location anchor = requireFiducial(head);
+        ReferenceControllerAxis rawX = findControllerAxis(camera, Axis.Type.X);
+        ReferenceControllerAxis rawY = findControllerAxis(camera, Axis.Type.Y);
+        if (rawX == null || rawY == null) {
+            throw new Exception("The camera has no controller X and Y axes to compensate.");
+        }
+        MachineCompensation compensation = MachineCompensation.of(before, anchor, includeSquareness);
+
+        File configurationDirectory = getConfiguration().getConfigurationDirectory();
+        File machineXml = new File(configurationDirectory, "machine.xml");
+        File backup = new File(configurationDirectory, "machine.xml.before-compensation-"
+                + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new java.util.Date()));
+        if (machineXml.exists()) {
+            java.nio.file.Files.copy(machineXml.toPath(), backup.toPath());
+        }
+        log("Compensation: %s", compensation);
+        log("machine.xml copied to %s", backup.getName());
+
+        MachineCompensation.Applied applied = compensation.apply(machine, rawX, rawY, job);
+        log("%d coordinates carried across, %d left alone", applied.changes.size(),
+                applied.skipped.size());
+        List<String> changes = MachineCompensation.describe(applied);
+
+        // Prove it on the board.
+        MachineDiagnosticsResults.Datum after;
+        try {
+            run(machine, EnumSet.of(TestGroup.DatumBoard));
+            after = lastResults == null ? null : lastResults.getDatum();
+        }
+        catch (Exception e) {
+            applied.undo(machine);
+            throw new Exception("The verification run failed (" + e.getMessage()
+                    + "); the compensation was taken out again and nothing was saved.", e);
+        }
+        boolean converged = after != null && after != before
+                && Math.abs(after.getScaleX() - 1) < COMPENSATION_CONVERGENCE
+                && Math.abs(after.getScaleY() - 1) < COMPENSATION_CONVERGENCE
+                && (!includeSquareness
+                        || Math.abs(after.getShearDegrees()) < COMPENSATION_SQUARENESS_CONVERGENCE_DEGREES);
+        String message;
+        if (converged) {
+            getConfiguration().save();
+            message = String.format("Compensated. Against the board the machine millimetre was "
+                    + "%+.3f%% / %+.3f%% (X / Y) and is now %+.3f%% / %+.3f%%. %d coordinates "
+                    + "were carried across; machine.xml before the change is %s.",
+                    (before.getScaleX() - 1) * 100, (before.getScaleY() - 1) * 100,
+                    (after.getScaleX() - 1) * 100, (after.getScaleY() - 1) * 100,
+                    applied.changes.size(), backup.getName());
+            log(message);
+        }
+        else {
+            applied.undo(machine);
+            // The board was read on the compensated machine; with the compensation gone, that
+            // reading describes nothing. The one it was made from stands again.
+            if (lastResults != null) {
+                lastResults.setDatum(before);
+                setLastResults(lastResults);
+            }
+            message = after == null
+                    ? "The board could not be measured after the change; the compensation was taken out again."
+                    : String.format("After the change the board still read %+.3f%% / %+.3f%% "
+                            + "(X / Y) and %+.3f degrees; the compensation was taken out again "
+                            + "and nothing was saved. The measurement is not stable enough to "
+                            + "compensate from, or the machine lost its position during the run.",
+                            (after.getScaleX() - 1) * 100, (after.getScaleY() - 1) * 100,
+                            after.getShearDegrees());
+            log(message);
+        }
+        // What was done, beside the verification report.
+        if (lastReportDirectory != null) {
+            try {
+                List<String> lines = new ArrayList<>();
+                lines.add(converged ? "COMPENSATION KEPT" : "COMPENSATION UNDONE");
+                lines.add(compensation.toString());
+                lines.add(message);
+                lines.add("");
+                lines.add("Coordinates carried across:");
+                lines.addAll(changes);
+                lines.add("");
+                lines.add("Location properties left alone (check them by hand):");
+                lines.addAll(applied.skipped);
+                java.nio.file.Files.write(new File(lastReportDirectory, "compensation.txt").toPath(), lines);
+            }
+            catch (Exception e) {
+                Logger.warn(e, "Machine diagnostics: writing compensation.txt");
+            }
+        }
+        return new CompensationOutcome(converged, compensation, before, after, backup, changes,
+                applied.skipped, message);
+    }
+
     private void runGroup(ReferenceMachine machine, TestGroup group,
             MachineDiagnosticsReport report) throws Exception {
         log("--- %s ---", group);
@@ -2004,6 +2155,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 break;
             case DatumBoard:
                 testDatumBoard(machine, report);
+                break;
+            case HysteresisMap:
+                testHysteresisMap(machine, report);
                 break;
             case ConfigSnapshot:
                 writeConfigSnapshot(machine, report);
@@ -4593,6 +4747,243 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         double[] s1 = rotation.get(1, 1);
         double[] s2 = rotation.get(1, 2);
         return new double[] { r0[0] * x + r1[0] * y + r2[0], s0[0] * x + s1[0] * y + s2[0] };
+    }
+
+    // Hysteresis along the travel: what the slack does with position.
+
+    /** Fractions of the travel at which the hysteresis is read. */
+    @Element(required = false)
+    private String hysteresisPositions = "0.15, 0.32, 0.5, 0.68, 0.85";
+
+    /** Smallest and largest round feature that will serve as a target, in millimetres. */
+    @Attribute(required = false)
+    private double hysteresisFeatureMinMm = 1.5;
+    @Attribute(required = false)
+    private double hysteresisFeatureMaxMm = 8.0;
+
+    public String getHysteresisPositions() {
+        return hysteresisPositions;
+    }
+
+    public void setHysteresisPositions(String hysteresisPositions) {
+        String old = this.hysteresisPositions;
+        this.hysteresisPositions = hysteresisPositions;
+        firePropertyChange("hysteresisPositions", old, hysteresisPositions);
+    }
+
+    /**
+     * The backlash the X/Y group measures is read at one point, the fiducial. Whether that slack
+     * is play in the mechanism or the give of a belt cannot be told from one point; it can from
+     * several, because a belt's stiffness changes with where the carriage is on it - least in
+     * the middle of the travel, most at the ends - and play does not. This group reads the raw
+     * backlash, and a short staircase for sticking, at several places along each axis, against
+     * whatever round feature the table offers there: a hole in the staging plate, a screw head.
+     * Backlash is a difference between two approaches to the same place, so the feature's
+     * geometry does not have to be known, only found twice.
+     */
+    private void testHysteresisMap(ReferenceMachine machine, MachineDiagnosticsReport report)
+            throws Exception {
+        report.section("Hysteresis along the travel, against whatever round feature the table offers");
+        ReferenceHead head = requireHead(machine);
+        ReferenceCamera camera = requireDownLookingCamera(head);
+        Location fiducial = requireFiducial(head).convertToUnits(LengthUnit.Millimeters);
+        Length fiducialDiameter = head.getCalibrationPrimaryFiducialDiameter();
+        double[] fractions = MachineDiagnosticsMath.parseSeries(hysteresisPositions);
+        Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+        int minPixels = (int) Math.max(6, hysteresisFeatureMinMm / upp.getX());
+        int maxPixels = (int) Math.min(Math.min(camera.getWidth(), camera.getHeight()) * 0.6,
+                hysteresisFeatureMaxMm / upp.getX());
+        List<Object[]> rows = new ArrayList<>();
+        List<MachineDiagnosticsResults.Hysteresis> conclusions = new ArrayList<>();
+        ReferenceControllerAxis approachAxis = findControllerAxis(camera, Axis.Type.X);
+        acquire(machine, camera, approachAxis, fiducial, fiducialDiameter, "Hysteresis map start", report);
+        List<BacklashSetting> saved = suspendBacklashCompensation(machine, Axis.Type.X, Axis.Type.Y);
+        try {
+            for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
+                ReferenceControllerAxis axis = findControllerAxis(camera, type);
+                if (axis == null || !axis.isSoftLimitLowEnabled() || !axis.isSoftLimitHighEnabled()) {
+                    report.line("  %s: no soft limits to span, skipped.", type);
+                    continue;
+                }
+                double low = axis.getSoftLimitLow().convertToUnits(LengthUnit.Millimeters).getValue();
+                double high = axis.getSoftLimitHigh().convertToUnits(LengthUnit.Millimeters).getValue();
+                Location unit = unitLocation(type);
+                report.blank();
+                report.line("Axis %s, travel %.0f to %.0f mm", axis.getName(), low, high);
+                report.line("  %-10s %-12s %-10s %-12s %-8s", "position", "backlash mm", "sd mm",
+                        "largest step", "stalled");
+                for (double fraction : fractions) {
+                    checkAborted();
+                    // The camera's own axis coordinate is what is placed; the head offsets between
+                    // the camera and the axis are a constant and cancel in a difference.
+                    double position = low + fraction * (high - low);
+                    Location here = type == Axis.Type.X
+                            ? fiducial.derive(position, null, null, null)
+                            : fiducial.derive(null, position, null, null);
+                    MovableUtils.moveToLocationAtSafeZ(camera, here, measureSpeedFactor);
+                    camera.waitForCompletion(CompletionType.WaitForStillstand);
+                    Thread.sleep(machineSettleMs);
+                    Circle feature = findAnyCircle(camera, minPixels, maxPixels);
+                    if (feature == null) {
+                        report.line("  %-10.1f nothing round in view; skipped", position);
+                        continue;
+                    }
+                    Location target = VisionUtils.getPixelLocation(camera, camera, feature.x, feature.y)
+                            .convertToUnits(LengthUnit.Millimeters).derive(null, null, here.getZ(), null);
+                    Length diameter = new Length(feature.diameter * upp.getX(), LengthUnit.Millimeters);
+                    List<Double> pairs = new ArrayList<>();
+                    for (int repeat = 0; repeat < Math.max(1, backlashRepeats); repeat++) {
+                        checkAborted();
+                        approachFrom(camera, axis, target, -5, measureSpeedFactor);
+                        Detection fromMinus = tryDetect(machine, camera, target, diameter,
+                                String.format("Hysteresis %s %.0f -", axis.getName(), position), 0.1);
+                        approachFrom(camera, axis, target, 5, measureSpeedFactor);
+                        Detection fromPlus = tryDetect(machine, camera, target, diameter,
+                                String.format("Hysteresis %s %.0f +", axis.getName(), position), 0.1);
+                        if (fromMinus == null || fromPlus == null) {
+                            continue;
+                        }
+                        pairs.add(shortfallMm(fromMinus.location, target, unit)
+                                - shortfallMm(fromPlus.location, target, unit));
+                    }
+                    if (pairs.isEmpty()) {
+                        report.line("  %-10.1f the feature was not found twice; skipped", position);
+                        continue;
+                    }
+                    Stats backlash = MachineDiagnosticsMath.stats(pairs);
+                    // A short staircase from the minus side: does it move when told to move a little.
+                    approachFrom(camera, axis, target, -2, measureSpeedFactor);
+                    Double previous = null;
+                    int stalled = 0;
+                    double largest = 0;
+                    int steps = 0;
+                    for (double offset = -0.05; offset <= 0.05 + 1e-9; offset += stepTestStepMm) {
+                        checkAborted();
+                        camera.moveTo(target.add(unit.multiply(offset, offset, 0, 0)), measureSpeedFactor);
+                        Detection seen = tryDetect(machine, camera, target, diameter, "Hysteresis staircase", 0.1);
+                        if (seen == null) {
+                            break;
+                        }
+                        double actual = offset - shortfallMm(seen.location, target, unit);
+                        if (previous != null) {
+                            double moved = actual - previous;
+                            if (Math.abs(moved) < stepTestStepMm * 0.25) {
+                                stalled++;
+                            }
+                            largest = Math.max(largest, Math.abs(moved));
+                        }
+                        previous = actual;
+                        steps++;
+                    }
+                    rows.add(new Object[] { axis.getName(), position, fraction, backlash.mean,
+                            backlash.stdDev, pairs.size(), largest, stalled, steps, elapsed() });
+                    report.line("  %-10.1f %-12.4f %-10.4f %-12.4f %d of %d", position, backlash.mean,
+                            backlash.stdDev, largest, stalled, Math.max(0, steps - 1));
+                    log("%s at %.0f: backlash %.4f, largest step %.4f, %d stalled", axis.getName(),
+                            position, backlash.mean, largest, stalled);
+                    conclusions.add(new MachineDiagnosticsResults.Hysteresis(axis.getId(), position,
+                            backlash.mean, backlash.stdDev, largest, stalled));
+                }
+                describeHysteresis(report, axis, conclusions);
+            }
+        }
+        finally {
+            restoreBacklashCompensation(saved);
+        }
+        report.writeCsv("hysteresis-map.csv", new String[] { "axis", "position_mm", "fraction",
+                "backlash_mm", "backlash_sd_mm", "pairs", "largest_step_mm", "stalled_steps",
+                "steps", "t_s" }, rows);
+        recordResults(TestGroup.HysteresisMap, report, results -> results.setHysteresis(conclusions));
+    }
+
+    /**
+     * What the backlash does along the axis, and what that says. A belt fixed at both ends, or
+     * looped round the axis, is stiffest where one span is short and softest in the middle;
+     * slack that follows that shape is the belt giving, and the lever is its tension. Slack
+     * that is the same everywhere is play or friction, which tension does not reach.
+     */
+    private void describeHysteresis(MachineDiagnosticsReport report, ReferenceControllerAxis axis,
+            List<MachineDiagnosticsResults.Hysteresis> all) {
+        List<MachineDiagnosticsResults.Hysteresis> mine = new ArrayList<>();
+        for (MachineDiagnosticsResults.Hysteresis h : all) {
+            if (h.getAxisId().equals(axis.getId())) {
+                mine.add(h);
+            }
+        }
+        if (mine.size() < 3) {
+            report.line("  Too few positions read on %s to say how the slack varies.", axis.getName());
+            return;
+        }
+        List<Double> values = new ArrayList<>();
+        double middle = 0;
+        double ends = 0;
+        int endCount = 0;
+        for (int i = 0; i < mine.size(); i++) {
+            double b = Math.abs(mine.get(i).getBacklashMm());
+            values.add(b);
+            if (i == 0 || i == mine.size() - 1) {
+                ends += b;
+                endCount++;
+            }
+            else if (i == mine.size() / 2) {
+                middle = b;
+            }
+        }
+        ends /= Math.max(1, endCount);
+        Stats stats = MachineDiagnosticsMath.stats(values);
+        double variation = stats.mean > 0 ? stats.getRange() / stats.mean : 0;
+        double sticking = 0;
+        for (MachineDiagnosticsResults.Hysteresis h : mine) {
+            sticking = Math.max(sticking, h.getLargestJumpMm());
+        }
+        report.line("  %s: backlash %.4f to %.4f mm along the travel, middle %.4f, ends %.4f; "
+                + "largest single step %.4f mm", axis.getName(), stats.min, stats.max, middle, ends,
+                sticking);
+        if (variation > 0.5 && middle > ends * 1.3) {
+            report.finding(Severity.Warning, "Axis %s has %.4f mm of slack in the middle of its "
+                    + "travel and %.4f mm at the ends. Slack that is largest where the belt spans "
+                    + "are longest is the belt giving under the friction it has to overcome: the "
+                    + "lever is belt tension, and it is low.", axis.getName(), middle, ends);
+        }
+        else if (variation < 0.3) {
+            report.finding(Severity.Info, "Axis %s has %.4f mm of slack wherever it is measured "
+                    + "(%.4f to %.4f). Slack that does not change along the belt is play in the "
+                    + "mechanism or friction in the guides, not the belt giving; tension is not "
+                    + "the lever for it.", axis.getName(), stats.mean, stats.min, stats.max);
+        }
+        else {
+            report.finding(Severity.Info, "Axis %s has slack from %.4f to %.4f mm along the travel, "
+                    + "neither flat nor peaked in the middle; part of it is the belt giving and "
+                    + "part is play or friction.", axis.getName(), stats.min, stats.max);
+        }
+        if (sticking > stepTestStepMm * 3) {
+            report.finding(Severity.Warning, "Asked to move %.3f mm at a time, axis %s moved in "
+                    + "steps of up to %.4f mm: it sticks and breaks free. That is friction in the "
+                    + "guides or a belt so tight that it loads the bearings, not slack.",
+                    stepTestStepMm, axis.getName(), sticking);
+        }
+    }
+
+    /** The best round feature in the frame, anywhere in it, between two diameters. */
+    private Circle findAnyCircle(ReferenceCamera camera, int minPixels, int maxPixels) throws Exception {
+        BufferedImage image = camera.lightSettleAndCapture();
+        Mat mat = OpenCvUtils.toMat(image);
+        try {
+            int search = Math.min(image.getWidth(), image.getHeight()) - maxPixels;
+            List<Circle> circles = DetectCircularSymmetry.findCircularSymmetry(mat,
+                    image.getWidth() / 2, image.getHeight() / 2, minPixels, maxPixels,
+                    search, search, search, 1, 1.5, 0.0, 8, 1,
+                    DetectCircularSymmetry.SymmetryScore.OverallVarianceVsRingVarianceSum,
+                    false, false, new ScoreRange());
+            return circles.isEmpty() ? null : circles.get(0);
+        }
+        catch (Exception e) {
+            Logger.trace(e, "Machine diagnostics: no round feature in view");
+            return null;
+        }
+        finally {
+            mat.release();
+        }
     }
 
     // Z, read off the bottom camera's focus on the nozzle tip.

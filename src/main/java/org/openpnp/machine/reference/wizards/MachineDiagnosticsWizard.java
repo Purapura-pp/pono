@@ -123,6 +123,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JButton btnRun;
     private JButton btnStop;
     private JButton btnOpenReport;
+    private JButton btnCompensate;
     private JTextArea logArea;
     private JTextField repeats;
     private JTextField framesPerPoint;
@@ -277,7 +278,62 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         btnRun.setEnabled(!running);
         btnStop.setEnabled(running);
         btnOpenReport.setEnabled(diagnostics.getLastReportDirectory() != null);
+        btnCompensate.setEnabled(!running && diagnostics.getLastResults() != null
+                && diagnostics.getLastResults().getDatum() != null);
     }
+
+    /**
+     * Put the datum board's measurement into the machine as a compensation, after saying what
+     * that does: a copy of machine.xml, two transform axes, every taught coordinate carried
+     * across, and a verification run on the board that keeps or undoes the lot.
+     */
+    private Action compensateAction = new AbstractAction(Translations.getString(
+            "MachineDiagnosticsWizard.Action.Compensate"), Icons.axisCartesian) { //$NON-NLS-1$
+        {
+            putValue(Action.SHORT_DESCRIPTION, Translations.getString(
+                    "MachineDiagnosticsWizard.Action.Compensate.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            MachineDiagnosticsResults results = diagnostics.getLastResults();
+            if (results == null || results.getDatum() == null) {
+                return;
+            }
+            MachineDiagnosticsResults.Datum datum = results.getDatum();
+            javax.swing.JCheckBox squareness = new javax.swing.JCheckBox(String.format(
+                    Translations.getString("MachineDiagnosticsWizard.Compensate.Squareness"), //$NON-NLS-1$
+                    datum.getShearDegrees()));
+            squareness.setSelected(Math.abs(datum.getShearDegrees()) > 0.1);
+            Object[] message = {
+                    String.format(Translations.getString("MachineDiagnosticsWizard.Compensate.Text"), //$NON-NLS-1$
+                            (datum.getScaleX() - 1) * 100, (datum.getScaleY() - 1) * 100),
+                    squareness };
+            int answer = javax.swing.JOptionPane.showConfirmDialog(MachineDiagnosticsWizard.this,
+                    message, Translations.getString("MachineDiagnosticsWizard.Compensate.Title"), //$NON-NLS-1$
+                    javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE);
+            if (answer != javax.swing.JOptionPane.OK_OPTION) {
+                return;
+            }
+            boolean includeSquareness = squareness.isSelected();
+            org.openpnp.model.Job job = MainFrame.get() != null && MainFrame.get().getJobTab() != null
+                    ? MainFrame.get().getJobTab().getJob() : null;
+            UiUtils.submitUiMachineTask(
+                    () -> diagnostics.applyCompensation(machine, job, includeSquareness),
+                    (outcome) -> {
+                        reportIssues();
+                        describeMachine();
+                        javax.swing.JOptionPane.showMessageDialog(MachineDiagnosticsWizard.this,
+                                outcome.message,
+                                Translations.getString(outcome.kept
+                                        ? "MachineDiagnosticsWizard.Compensate.Kept" //$NON-NLS-1$
+                                        : "MachineDiagnosticsWizard.Compensate.Undone"), //$NON-NLS-1$
+                                outcome.kept ? javax.swing.JOptionPane.INFORMATION_MESSAGE
+                                        : javax.swing.JOptionPane.WARNING_MESSAGE);
+                    },
+                    (t) -> UiUtils.showError(t));
+        }
+    };
 
     private Action runAction = new AbstractAction(Translations.getString(
             "MachineDiagnosticsWizard.Action.Run"), Icons.start) { //$NON-NLS-1$
@@ -925,6 +981,8 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                         FormSpecs.RELATED_GAP_ROWSPEC,
                         FormSpecs.DEFAULT_ROWSPEC,
                         FormSpecs.RELATED_GAP_ROWSPEC,
+                        FormSpecs.DEFAULT_ROWSPEC,
+                        FormSpecs.RELATED_GAP_ROWSPEC,
                         FormSpecs.DEFAULT_ROWSPEC, }));
 
         // Firmware and the snapshot move nothing, so they are the safe pair to start with and are
@@ -941,13 +999,19 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addTestCheck(panel, TestGroup.RotationBacklash, "4, 10", false);
         addTestCheck(panel, TestGroup.ZFocus, "2, 12", false);
         addTestCheck(panel, TestGroup.DatumBoard, "4, 12", false);
+        addTestCheck(panel, TestGroup.HysteresisMap, "2, 14", false);
 
         btnRun = new JButton(runAction);
-        panel.add(btnRun, "2, 14");
+        panel.add(btnRun, "2, 16");
         btnStop = new JButton(stopAction);
-        panel.add(btnStop, "4, 14");
+        panel.add(btnStop, "4, 16");
         btnOpenReport = new JButton(openReportAction);
-        panel.add(btnOpenReport, "6, 14, left, default");
+        btnCompensate = new JButton(compensateAction);
+        JPanel actions = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 0));
+        actions.setOpaque(false);
+        actions.add(btnOpenReport);
+        actions.add(btnCompensate);
+        panel.add(actions, "6, 16, left, default");
     }
 
     private void addTestCheck(JPanel panel, TestGroup group, String constraints, boolean selected) {
