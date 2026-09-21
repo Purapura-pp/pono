@@ -235,6 +235,26 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private double latencySpeedFactor = 0.05;
 
     /**
+     * Home the machine before each speed factor of the lost steps test. The drift at one speed
+     * is read as the difference between the fiducial before and after that speed's cycles, so
+     * the loss at an earlier speed does not enter it either way; homing puts the legs back at
+     * the same physical place for every speed, and keeps the accumulated loss of a run from
+     * carrying the fiducial out of the camera's view.
+     */
+    @Attribute(required = false)
+    private boolean homeBeforeEachStressSpeed = true;
+
+    public boolean isHomeBeforeEachStressSpeed() {
+        return homeBeforeEachStressSpeed;
+    }
+
+    public void setHomeBeforeEachStressSpeed(boolean homeBeforeEachStressSpeed) {
+        boolean old = this.homeBeforeEachStressSpeed;
+        this.homeBeforeEachStressSpeed = homeBeforeEachStressSpeed;
+        firePropertyChange("homeBeforeEachStressSpeed", old, homeBeforeEachStressSpeed);
+    }
+
+    /**
      * Ten rather than five: the spread of five samples says what it is to about a third, which
      * is not enough to tell a 0.02 mm scatter from a 0.03 mm one, and that is the kind of
      * difference the backlash findings turn on.
@@ -1977,6 +1997,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     /** How close to a true millimetre the frame has to come back for the compensation to stand. */
     private static final double COMPENSATION_CONVERGENCE = 0.0005;
     private static final double COMPENSATION_SQUARENESS_CONVERGENCE_DEGREES = 0.05;
+    /** A frame residual above this is drift, not geometry, and nothing to compensate from. */
+    private static final double COMPENSATION_MAX_RESIDUAL_MM = 0.05;
 
     /** What applying the compensation did, for the page to show. */
     public static final class CompensationOutcome {
@@ -2025,6 +2047,14 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             throw new Exception("Diagnostics are already running.");
         }
         MachineDiagnosticsResults.Datum before = lastResults.getDatum();
+        if (before.getRmsResidualMm() > COMPENSATION_MAX_RESIDUAL_MM) {
+            throw new Exception(String.format("The last board measurement does not fit a frame to "
+                    + "better than %.3f mm rms: the machine drifted between the fiducials, and a "
+                    + "scale fitted through that is not one to compensate from. Run the datum "
+                    + "board group again, at a lower positioning speed if need be, until the "
+                    + "residual is under %.3f mm.", before.getRmsResidualMm(),
+                    COMPENSATION_MAX_RESIDUAL_MM));
+        }
         ReferenceHead head = requireHead(machine);
         ReferenceCamera camera = requireDownLookingCamera(head);
         Location anchor = requireFiducial(head);
@@ -2108,6 +2138,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 lines.add("");
                 lines.add("Location properties left alone (check them by hand):");
                 lines.addAll(applied.skipped);
+                lines.add("");
+                lines.add("Location properties that were never taught (all zero) and stay so:");
+                lines.addAll(applied.unset);
                 java.nio.file.Files.write(new File(lastReportDirectory, "compensation.txt").toPath(), lines);
             }
             catch (Exception e) {
@@ -3097,7 +3130,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         List<Object[]> rows = new ArrayList<>();
         List<MachineDiagnosticsResults.LostSteps> conclusions = new ArrayList<>();
         report.line("  %d cycles of %.0f mm each way per speed factor; the machine is brought back "
-                + "to the fiducial from the same side before and after.", cycles, stressDistanceMm);
+                + "to the fiducial from the same side before and after%s.", cycles, stressDistanceMm,
+                homeBeforeEachStressSpeed ? ", and homed before each speed" : "");
         report.line("  %-6s %-8s %-12s %-12s %-14s", "axis", "speed", "travel mm", "drift mm",
                 "per 1000 mm");
         for (Axis.Type type : new Axis.Type[] { Axis.Type.X, Axis.Type.Y }) {
@@ -3118,10 +3152,19 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 continue;
             }
             double travelPerCycle = 2 * achieved;
-            Detection before = acquire(machine, camera, axis, fiducial, diameter,
-                    String.format("Lost steps %s before", axis.getName()), report);
+            Detection before = null;
+            if (!homeBeforeEachStressSpeed) {
+                before = acquire(machine, camera, axis, fiducial, diameter,
+                        String.format("Lost steps %s before", axis.getName()), report);
+            }
             for (double speed : speeds) {
                 checkAborted();
+                if (homeBeforeEachStressSpeed) {
+                    log("Homing before the %.2fx cycles on %s", speed, axis.getName());
+                    machine.home();
+                    before = acquire(machine, camera, axis, fiducial, diameter,
+                            String.format("Lost steps %s %.2fx before", axis.getName(), speed), report);
+                }
                 for (int cycle = 0; cycle < cycles; cycle++) {
                     checkAborted();
                     camera.moveTo(low, speed);
@@ -4018,6 +4061,26 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         Severity severity = worst > 0.05 ? Severity.Warning : Severity.Info;
         report.finding(severity, "Homing reproduces the origin to within %.3f mm over %d cycles.%s",
                 worst, homingCycles, againstNoiseFloor(camera, worst));
+        // Two different things: how far apart the homings land (the scatter above), and where
+        // they land against the place the fiducial was taught at. The second is what the user
+        // sees as the crosshair standing beside the fiducial after every homing: the endstops'
+        // origin today against the origin everything was taught in, which moves from day to day.
+        double offset = Math.hypot(statsX.mean, statsY.mean);
+        report.line("  After homing the fiducial sits %+.4f, %+.4f mm from where it was taught, on "
+                + "average.", statsX.mean, statsY.mean);
+        if (offset > HOMING_SCATTER_TOLERANCE_MM
+                && head.getVisualHomingMethod() == ReferenceHead.VisualHomingMethod.None) {
+            report.finding(Severity.Warning, "Every homing puts the fiducial %.3f mm (%+.3f, %+.3f) "
+                    + "from where it was taught. That is the endstops' origin today against the "
+                    + "origin the fiducial, the feeders and the offsets were taught in, and it "
+                    + "shifts from day to day; every taught position is off by it until the "
+                    + "machine is homed against the fiducial itself. Visual homing does that. Set "
+                    + "the homing fiducial location to the primary fiducial's own coordinates "
+                    + "(%.3f, %.3f), so that homing puts the origin back into the frame everything "
+                    + "was taught in rather than into a new one.", offset, statsX.mean, statsY.mean,
+                    fiducial.convertToUnits(LengthUnit.Millimeters).getX(),
+                    fiducial.convertToUnits(LengthUnit.Millimeters).getY());
+        }
         if (worst > 0.05 && head.getVisualHomingMethod() == ReferenceHead.VisualHomingMethod.None) {
             report.finding(Severity.Warning, "Visual homing is off, so this scatter is the "
                     + "repeatability of the endstops and it carries into every job. Visual homing "
@@ -4145,6 +4208,43 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             found.add(seen);
         }
         MachineDiagnosticsMath.Affine frame = fit(found);
+        // A fiducial the machine drifted through on the way to it does not lie on the frame; it
+        // lies wherever the drift left it. The fifth real run had one such point, 0.27 mm off
+        // with the other six within 0.03, and the scale fitted through it was 0.2 % wrong -
+        // which the compensation then applied. One point whose residual stands out from the
+        // rest by that much is left out and the frame fitted again, and the report says so.
+        Found leftOut = null;
+        if (found.size() >= 6) {
+            int worst = -1;
+            double worstResidual = 0;
+            double sumOthers = 0;
+            for (int i = 0; i < found.size(); i++) {
+                double r = Math.hypot(frame.residualsX[i], frame.residualsY[i]);
+                if (r > worstResidual) {
+                    worstResidual = r;
+                    worst = i;
+                }
+            }
+            for (int i = 0; i < found.size(); i++) {
+                if (i != worst) {
+                    sumOthers += frame.residualsX[i] * frame.residualsX[i]
+                            + frame.residualsY[i] * frame.residualsY[i];
+                }
+            }
+            double rmsOthers = Math.sqrt(sumOthers / (found.size() - 1));
+            if (worst >= 0 && worstResidual > DATUM_RESIDUAL_TOLERANCE_MM
+                    && worstResidual > 3 * rmsOthers && found.get(worst).dot != anchor) {
+                leftOut = found.remove(worst);
+                frame = fit(found);
+                report.line("  %s is %.4f mm off the frame the other %d fiducials agree on to %.4f "
+                        + "mm rms; the machine drifted through that hop. It is left out of the fit.",
+                        leftOut.dot.name, worstResidual, found.size(), rmsOthers);
+                report.finding(Severity.Warning, "%s was found %.3f mm from where the frame through "
+                        + "the other %d fiducials puts it, and left out: the machine lost position "
+                        + "during that hop. The frame below is fitted without it.", leftOut.dot.name,
+                        worstResidual, found.size());
+            }
+        }
         List<Object[]> rows = new ArrayList<>();
         report.blank();
         report.line("  %-6s %-10s %-10s %-10s %-10s %-10s %-10s", "point", "board x", "board y",
@@ -4157,6 +4257,11 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             report.line("  %-6s %-10.3f %-10.3f %-10.4f %-10.4f %-+10.4f %-+10.4f", f.dot.name,
                     f.dot.x, f.dot.y, f.location.getX(), f.location.getY(), frame.residualsX[i],
                     frame.residualsY[i]);
+        }
+        if (leftOut != null) {
+            rows.add(row(new Object[] { leftOut.dot.name + " (left out)", leftOut.dot.x,
+                    leftOut.dot.y, leftOut.location.getX(), leftOut.location.getY(), Double.NaN,
+                    Double.NaN }, elapsed(), leftOut.detection));
         }
         report.writeCsv("datum-fiducials.csv", columns(new String[] { "point", "board_x_mm",
                 "board_y_mm", "machine_x_mm", "machine_y_mm", "residual_x_mm", "residual_y_mm" }),
@@ -4820,16 +4925,41 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     Location here = type == Axis.Type.X
                             ? fiducial.derive(position, null, null, null)
                             : fiducial.derive(null, position, null, null);
-                    MovableUtils.moveToLocationAtSafeZ(camera, here, measureSpeedFactor);
-                    camera.waitForCompletion(CompletionType.WaitForStillstand);
-                    Thread.sleep(machineSettleMs);
-                    Circle feature = findAnyCircle(camera, minPixels, maxPixels);
+                    // The table's holes are not on the line through the fiducial, so the search
+                    // spirals out from the nominal spot, frame by frame, up to two frames away
+                    // in each direction. The fifth real run found something round at one of five
+                    // places on X, looking only where it was sent.
+                    Circle feature = null;
+                    Location here2 = here;
+                    double frameW = camera.getWidth() * upp.getX() * 0.8;
+                    double frameH = camera.getHeight() * upp.getY() * 0.8;
+                    int[][] spiral = { { 0, 0 }, { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 },
+                            { -1, 1 }, { 1, -1 }, { -1, -1 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 },
+                            { 2, 1 }, { 2, -1 }, { -2, 1 }, { -2, -1 }, { 1, 2 }, { -1, 2 }, { 1, -2 },
+                            { -1, -2 } };
+                    for (int[] step : spiral) {
+                        checkAborted();
+                        here2 = here.add(new Location(LengthUnit.Millimeters, step[0] * frameW,
+                                step[1] * frameH, 0, 0));
+                        MovableUtils.moveToLocationAtSafeZ(camera, here2, measureSpeedFactor);
+                        camera.waitForCompletion(CompletionType.WaitForStillstand);
+                        Thread.sleep(machineSettleMs);
+                        feature = findAnyCircle(camera, minPixels, maxPixels);
+                        if (feature != null) {
+                            break;
+                        }
+                    }
                     if (feature == null) {
-                        report.line("  %-10.1f nothing round in view; skipped", position);
+                        report.line("  %-10.1f nothing round within two frames of the spot; skipped",
+                                position);
                         continue;
                     }
                     Location target = VisionUtils.getPixelLocation(camera, camera, feature.x, feature.y)
                             .convertToUnits(LengthUnit.Millimeters).derive(null, null, here.getZ(), null);
+                    // Where the feature really is along the axis is the position this row is for.
+                    position = type == Axis.Type.X ? target.getX() : target.getY();
+                    report.line("  %-10.1f using a %.1f mm round feature at (%.2f, %.2f)", position,
+                            feature.diameter * upp.getX(), target.getX(), target.getY());
                     Length diameter = new Length(feature.diameter * upp.getX(), LengthUnit.Millimeters);
                     List<Double> pairs = new ArrayList<>();
                     for (int repeat = 0; repeat < Math.max(1, backlashRepeats); repeat++) {

@@ -144,6 +144,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextField speedFactors;
     private JTextField rotationTimingAngles;
     private JCheckBox timingIncludesZAndRotation;
+    private JCheckBox homeBeforeEachStressSpeed;
     private JTextField stepTestDistance;
     private JTextField stepTestStep;
     private JTextField fieldOfViewGridSteps;
@@ -1058,6 +1059,11 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         focusRepeats = addField(panel, "FocusRepeats", "2, 32", "4, 32");
         rulerStep = addField(panel, "RulerStep", "6, 32", "8, 32");
         measureSpeedFactor = addField(panel, "MeasureSpeedFactor", "2, 34", "4, 34");
+        homeBeforeEachStressSpeed = new JCheckBox(Translations.getString(
+                "MachineDiagnosticsWizard.ParametersPanel.HomeBeforeEachStressSpeed.text")); //$NON-NLS-1$
+        homeBeforeEachStressSpeed.setToolTipText(Translations.getString(
+                "MachineDiagnosticsWizard.ParametersPanel.HomeBeforeEachStressSpeed.toolTipText")); //$NON-NLS-1$
+        panel.add(homeBeforeEachStressSpeed, "6, 34, 3, 1");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -1201,6 +1207,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "focusRepeats", focusRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "rulerStepMm", rulerStep, "text", doubleConverter);
         addWrappedBinding(diagnostics, "measureSpeedFactor", measureSpeedFactor, "text", doubleConverter);
+        addWrappedBinding(diagnostics, "homeBeforeEachStressSpeed", homeBeforeEachStressSpeed, "selected");
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

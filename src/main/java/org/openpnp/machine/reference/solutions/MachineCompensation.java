@@ -158,9 +158,10 @@ public final class MachineCompensation {
     public static Kind kindOf(String propertyName) {
         String name = propertyName;
         String lower = name.toLowerCase();
+        // The homing fiducial location is a camera location like any other: visual homing moves
+        // the camera to it and converts it to raw through the axes, so it is carried across.
         if (lower.contains("unitsperpixel") || lower.contains("templateimage")
-                || lower.contains("homingfiducial") || lower.contains("safez")
-                || lower.contains("pixel")) {
+                || lower.contains("safez") || lower.contains("pixel")) {
             return Kind.Skip;
         }
         if (lower.contains("offset") || lower.equals("partpick") || lower.equals("visionoffset")) {
@@ -210,6 +211,8 @@ public final class MachineCompensation {
         public final List<Change> changes = new ArrayList<>();
         /** Location properties that were seen but left alone, for the user to look at. */
         public final List<String> skipped = new ArrayList<>();
+        /** Location properties that were all zero - never taught - and stay so. */
+        public final List<String> unset = new ArrayList<>();
         public final List<ReferenceLinearTransformAxis> createdAxes = new ArrayList<>();
         final Map<ReferenceLinearTransformAxis, double[]> previousFactors = new IdentityHashMap<>();
         final Map<AbstractHeadMountable, AbstractAxis[]> previousAxes = new IdentityHashMap<>();
@@ -462,8 +465,18 @@ public final class MachineCompensation {
         }
     }
 
+    /** All four coordinates zero: never taught. A position that was never taught stays untaught. */
+    static boolean isUnset(Location location) {
+        return location.getX() == 0 && location.getY() == 0 && location.getZ() == 0
+                && location.getRotation() == 0;
+    }
+
     private void carryOne(Applied applied, Object target, String property, Kind kind,
             Location before, Method setter) throws Exception {
+        if (isUnset(before)) {
+            applied.unset.add(describe(target) + "." + property);
+            return;
+        }
         Location after = kind == Kind.Absolute ? toTrue(before) : toTrueVector(before);
         if (after.equals(before)) {
             return;

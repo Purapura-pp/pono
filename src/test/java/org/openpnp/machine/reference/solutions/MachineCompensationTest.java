@@ -96,8 +96,29 @@ public class MachineCompensationTest {
         assertEquals(MachineCompensation.Kind.Vector, MachineCompensation.kindOf("offsets"));
         assertEquals(MachineCompensation.Kind.Vector, MachineCompensation.kindOf("visionOffset"));
         assertEquals(MachineCompensation.Kind.Skip, MachineCompensation.kindOf("unitsPerPixel"));
-        assertEquals(MachineCompensation.Kind.Skip, MachineCompensation.kindOf("homingFiducialLocation"));
+        // Visual homing moves the camera to it and converts it through the axes: a camera location.
+        assertEquals(MachineCompensation.Kind.Absolute, MachineCompensation.kindOf("homingFiducialLocation"));
         assertEquals(MachineCompensation.Kind.Skip, MachineCompensation.kindOf("templateImageTopLeft"));
+    }
+
+    /** A nozzle tip changer that was never set up has four zero locations; they must stay zero. */
+    @Test
+    public void aLocationThatWasNeverTaughtIsLeftUntaught() throws Exception {
+        ReferenceControllerAxis rawX = controllerAxis(camera.getAxisX());
+        ReferenceControllerAxis rawY = controllerAxis(camera.getAxisY());
+        head.setCalibrationPrimaryFiducialLocation(ANCHOR);
+        Location zero = new Location(LengthUnit.Millimeters, 0, 0, 0, 0);
+        head.setCalibrationSecondaryFiducialLocation(zero);
+
+        MachineCompensation.Applied applied = new MachineCompensation(1.01327, 1.0, 0, ANCHOR)
+                .apply(machine, rawX, rawY, null);
+
+        assertEquals(0, head.getCalibrationSecondaryFiducialLocation().getX(), 1e-12);
+        assertEquals(0, head.getCalibrationSecondaryFiducialLocation().getY(), 1e-12);
+        assertTrue(applied.unset.stream().anyMatch(s -> s.endsWith("calibrationSecondaryFiducialLocation")),
+                "listed as untaught: " + applied.unset);
+        assertTrue(MachineCompensation.isUnset(zero));
+        assertFalse(MachineCompensation.isUnset(ANCHOR));
     }
 
     // ---- against a machine ----
