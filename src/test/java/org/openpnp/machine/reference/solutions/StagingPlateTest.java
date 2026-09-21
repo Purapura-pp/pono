@@ -46,12 +46,74 @@ public class StagingPlateTest {
     @Test
     public void theBottomCameraHoleAndTheEndOfThePlateHaveNoHoles() {
         Location camera = new Location(LengthUnit.Millimeters, 221.17, 151.25, 0, 0);
-        assertNull(StagingPlate.nearestHole(FID1, 221, 151, camera, true),
-                "under the 45 mm camera hole there is nothing to find");
-        assertNotNull(StagingPlate.nearestHole(FID1, 221, 151, null, true));
+        // Under the 45 mm camera hole there is nothing to find; a reading of Y there keeps its Y
+        // and goes to the hole two columns over, 30 mm from the camera's node.
+        Location beside = StagingPlate.nearestHole(FID1, 221, 151, camera, true);
+        assertNotNull(beside);
+        assertEquals(30.0, Math.abs(beside.getX() - FID1.getX()), 1e-9);
+        assertEquals(FID1.getY() - 45, beside.getY(), 1e-9);
+        // The camera's own node and its diagonal neighbours have no hole, with or without the
+        // camera's position given: the model knows where the camera is.
+        assertNull(StagingPlate.hole(FID1, 0, -3, camera));
+        assertNull(StagingPlate.hole(FID1, 0, -3, null));
+        assertNull(StagingPlate.hole(FID1, 1, -2, null));
+        assertNull(StagingPlate.hole(FID1, -1, -4, null));
+        assertNotNull(StagingPlate.hole(FID1, 2, -3, null), "30 mm from the camera is clear");
+        assertNotNull(StagingPlate.hole(FID1, 0, -1, null), "the fiducial's neighbour is clear");
         assertNull(StagingPlate.nearestHole(FID1, FID1.getX(), FID1.getY() + 400, null, true),
                 "400 mm up is off the plate");
         assertNotNull(StagingPlate.nearestHole(FID1, 20, FID1.getY(), null, false),
                 "the plate is wider than the X travel");
+        // The plate's own bolt holes take the place of four lattice holes in each end column.
+        assertNull(StagingPlate.hole(FID1, 19, 0, null));
+        assertNull(StagingPlate.hole(FID1, -19, -6, null));
+        assertNull(StagingPlate.hole(FID1, 19, 2, null));
+        assertNull(StagingPlate.hole(FID1, -19, 8, null));
+        assertNotNull(StagingPlate.hole(FID1, 19, 4, null));
+        assertNotNull(StagingPlate.hole(FID1, 17, 0, null));
+    }
+
+    /** The plate's 280 holes, from the fiducial: 293 odd nodes less 5 under the camera, less 8 bolts. */
+    @Test
+    public void thePlateHasTwoHundredAndEightyHolesFromTheFiducial() {
+        java.util.List<Location> holes = StagingPlate.allHoles(FID1, null);
+
+        assertEquals(280, holes.size());
+        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (Location h : holes) {
+            minX = Math.min(minX, h.getX());
+            maxX = Math.max(maxX, h.getX());
+            minY = Math.min(minY, h.getY());
+            maxY = Math.max(maxY, h.getY());
+            long i = Math.round((h.getX() - FID1.getX()) / 15);
+            long j = Math.round((h.getY() - FID1.getY()) / 15);
+            assertEquals(1, Math.abs((i + j) % 2), "every hole is on an odd node: " + h);
+        }
+        // 570 by 210 mm: 19 columns either side of the fiducial, 6 rows below and 8 above.
+        assertEquals(FID1.getX() - 285, minX, 1e-9);
+        assertEquals(FID1.getX() + 285, maxX, 1e-9);
+        assertEquals(FID1.getY() - 90, minY, 1e-9);
+        assertEquals(FID1.getY() + 120, maxY, 1e-9);
+        double[] yRange = StagingPlate.fieldYRange(FID1, null);
+        assertEquals(106.534, yRange[0], 1e-9);
+        assertEquals(316.534, yRange[1], 1e-9);
+    }
+
+    /** A plate lying the other way round has its camera above the fiducial and its field below. */
+    @Test
+    public void aPlateTheOtherWayRoundIsReadOffTheCamerasSide() {
+        Location cameraAbove = new Location(LengthUnit.Millimeters, FID1.getX(), FID1.getY() + 45, 0, 0);
+
+        assertEquals(-1, StagingPlate.ySign(FID1, cameraAbove));
+        assertEquals(1, StagingPlate.ySign(FID1, null));
+        java.util.List<Location> holes = StagingPlate.allHoles(FID1, cameraAbove);
+        assertEquals(280, holes.size());
+        double[] yRange = StagingPlate.fieldYRange(FID1, cameraAbove);
+        assertEquals(FID1.getY() - 120, yRange[0], 1e-9);
+        assertEquals(FID1.getY() + 90, yRange[1], 1e-9);
+        assertNull(StagingPlate.hole(FID1, 1, 2, cameraAbove), "beside the camera, now above");
+        assertNotNull(StagingPlate.hole(FID1, 1, -2, cameraAbove));
+        assertNull(StagingPlate.hole(FID1, 19, -2, cameraAbove), "the bolt rows mirror too");
+        assertNotNull(StagingPlate.hole(FID1, 19, 2, cameraAbove));
     }
 }

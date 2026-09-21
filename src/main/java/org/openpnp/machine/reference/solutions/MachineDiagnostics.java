@@ -5102,18 +5102,32 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         if (!(hysteresisLatticePitchMm > 0)) {
             return wanted;
         }
-        Location cameraHole = null;
+        Location cameraHole = bottomCameraHole();
+        double[] yRange = StagingPlate.fieldYRange(fiducial, cameraHole);
+        if (wantedY < yRange[0] - StagingPlate.PITCH_MM || wantedY > yRange[1] + StagingPlate.PITCH_MM) {
+            // Off the plate: nothing to find, and no point spending frames on it.
+            return null;
+        }
+        Location hole = StagingPlate.nearestHole(fiducial, wantedX, wantedY, cameraHole, stepInX);
+        return hole != null ? hole : wanted;
+    }
+
+    /**
+     * The bottom camera's position, which is the plate's camera hole: the lattice has no holes
+     * around it, and which side of the fiducial it is on says which way the plate lies. Null
+     * when there is no fixed bottom camera.
+     */
+    private Location bottomCameraHole() {
         try {
             Camera bottom = VisionUtils.getBottomVisionCamera();
             if (bottom != null && bottom.getHead() == null) {
-                cameraHole = bottom.getLocation();
+                return bottom.getLocation();
             }
         }
         catch (Exception e) {
             // No bottom camera; no hole to keep clear of.
         }
-        Location hole = StagingPlate.nearestHole(fiducial, wantedX, wantedY, cameraHole, stepInX);
-        return hole != null ? hole : wanted;
+        return null;
     }
 
     /**
@@ -5179,16 +5193,30 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private void testHysteresisMap(ReferenceMachine machine, MachineDiagnosticsReport report)
             throws Exception {
         report.section("Hysteresis along the travel, against whatever round feature the table offers");
-        if (hysteresisLatticePitchMm > 0) {
-            report.line("  The table's holes are taken to lie on a %.0f mm checkerboard anchored on "
-                    + "the primary fiducial, with the nearest holes %.0f mm from it along X and Y; "
-                    + "each reading goes to the lattice hole nearest the wanted position.",
-                    hysteresisLatticePitchMm, hysteresisLatticePitchMm);
-        }
         ReferenceHead head = requireHead(machine);
         ReferenceCamera camera = requireDownLookingCamera(head);
         Location fiducial = requireFiducial(head).convertToUnits(LengthUnit.Millimeters);
         Length fiducialDiameter = head.getCalibrationPrimaryFiducialDiameter();
+        if (hysteresisLatticePitchMm > 0) {
+            Location cameraHole = bottomCameraHole();
+            double[] yRange = StagingPlate.fieldYRange(fiducial, cameraHole);
+            report.line("  The table's holes are taken to lie on a %.0f mm checkerboard anchored on "
+                    + "the primary fiducial, with the nearest holes %.0f mm from it along X and Y; "
+                    + "each reading goes to the lattice hole nearest the wanted position. The "
+                    + "field runs the whole X travel and from Y %.0f to Y %.0f; positions outside "
+                    + "that have no hole to read against.", hysteresisLatticePitchMm,
+                    hysteresisLatticePitchMm, yRange[0], yRange[1]);
+            List<Object[]> holeRows = new ArrayList<>();
+            for (Location hole : StagingPlate.allHoles(fiducial, cameraHole)) {
+                Location h = hole.convertToUnits(LengthUnit.Millimeters);
+                holeRows.add(new Object[] { h.getX(), h.getY(), h.getX() - fiducial.getX(),
+                        h.getY() - fiducial.getY() });
+            }
+            report.writeCsv("staging-plate-holes.csv", new String[] { "machine_x_mm", "machine_y_mm",
+                    "from_fiducial_x_mm", "from_fiducial_y_mm" }, holeRows);
+            report.line("  The plate's %d holes, in machine coordinates, are in staging-plate-holes.csv.",
+                    holeRows.size());
+        }
         double[] fractions = MachineDiagnosticsMath.parseSeries(hysteresisPositions);
         List<Object[]> rows = new ArrayList<>();
         List<MachineDiagnosticsResults.Hysteresis> conclusions = new ArrayList<>();
@@ -5225,17 +5253,34 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     }
                 }
                 else {
+                    // The readings are spread over the travel - or, when the plate's holes are
+                    // what they are read against and the plate does not reach the end of the
+                    // travel, over the part of the travel the plate's holes cover: five readings
+                    // over 210 mm of Y say more about the belt than two.
+                    double spanLow = low;
+                    double spanHigh = high;
+                    if (hysteresisLatticePitchMm > 0 && type == Axis.Type.Y) {
+                        double[] yRange = StagingPlate.fieldYRange(fiducial, bottomCameraHole());
+                        spanLow = Math.max(low, yRange[0]);
+                        spanHigh = Math.min(high, yRange[1]);
+                        report.line("  The plate's holes cover Y %.0f to %.0f of the travel; the "
+                                + "readings are spread over that.", spanLow, spanHigh);
+                    }
                     for (double fraction : fractions) {
                         checkAborted();
                         // The camera's own axis coordinate is what is placed; the head offsets
                         // between the camera and the axis are a constant and cancel in a difference.
-                        double position = low + fraction * (high - low);
+                        double position = spanLow + fraction * (spanHigh - spanLow);
                         // A reading of X keeps its X and may step a row; a reading of Y keeps its Y.
                         Location here = type == Axis.Type.X
                                 ? hysteresisSpot(machine, fiducial, position, fiducial.getY(), false)
                                 : hysteresisSpot(machine, fiducial, fiducial.getX(), position, true);
+                        if (here == null) {
+                            report.line("  %-10.1f off the plate's hole field; skipped", position);
+                            continue;
+                        }
                         HysteresisSample sample = sampleHysteresis(machine, report, camera, axis, type,
-                                here, fraction, rows);
+                                here, (position - low) / (high - low), rows);
                         if (sample != null) {
                             conclusions.add(sample.conclusion);
                         }
@@ -5277,6 +5322,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 }
                 for (Location here : spots) {
                     checkAborted();
+                    if (here == null) {
+                        continue;
+                    }
                     double fraction = (here.getX() - lowX) / (highX - lowX);
                     HysteresisSample sample = sampleHysteresis(machine, report, camera, yAxis,
                             Axis.Type.Y, here, fraction, rows);
