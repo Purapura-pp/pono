@@ -624,8 +624,34 @@ public class MachineDiagnosticsResults {
         private Double periodicPeriodMm;
         @Attribute(required = false)
         private Double rulerScaleErrorX;
+        /** When it was measured. */
+        @Attribute(required = false)
+        private long millis;
+        /**
+         * Which compensation the machine carried when this was measured. A reading made through
+         * one compensation says nothing about the machine under another, so only readings of the
+         * same generation are averaged.
+         */
+        @Attribute(required = false)
+        private int generation;
 
         Datum() {
+        }
+
+        public long getMillis() {
+            return millis;
+        }
+
+        public void setMillis(long millis) {
+            this.millis = millis;
+        }
+
+        public int getGeneration() {
+            return generation;
+        }
+
+        public void setGeneration(int generation) {
+            this.generation = generation;
         }
 
         public Datum(String board, String headId, double scaleX, double scaleY,
@@ -760,8 +786,19 @@ public class MachineDiagnosticsResults {
         private double largestJumpMm;
         @Attribute
         private int stalledSteps;
+        /** Read across the gantry - the Y slack at an X position - rather than along the axis. */
+        @Attribute(required = false)
+        private boolean acrossGantry;
 
         Hysteresis() {
+        }
+
+        public boolean isAcrossGantry() {
+            return acrossGantry;
+        }
+
+        public void setAcrossGantry(boolean acrossGantry) {
+            this.acrossGantry = acrossGantry;
         }
 
         public Hysteresis(String axisId, double positionMm, double backlashMm, double backlashSdMm,
@@ -884,6 +921,50 @@ public class MachineDiagnosticsResults {
 
     @Element(required = false)
     private Datum datum;
+
+    /** The last few board measurements, newest last; the basis of a compensation is their median. */
+    @ElementList(required = false)
+    private ArrayList<Datum> datumHistory = new ArrayList<>();
+
+    /** How many compensations have been kept. Readings are tagged with it. */
+    @Attribute(required = false)
+    private int compensationGeneration;
+
+    private static final int DATUM_HISTORY_LENGTH = 8;
+
+    public List<Datum> getDatumHistory() {
+        return datumHistory;
+    }
+
+    /** The recent readings made under the current compensation, with a residual under the limit. */
+    public List<Datum> getUsableDatumHistory(double maxResidualMm) {
+        List<Datum> usable = new ArrayList<>();
+        for (Datum d : datumHistory) {
+            if (d.getGeneration() == compensationGeneration && d.getRmsResidualMm() <= maxResidualMm) {
+                usable.add(d);
+            }
+        }
+        return usable;
+    }
+
+    public void addDatumToHistory(Datum datum) {
+        datumHistory.add(datum);
+        while (datumHistory.size() > DATUM_HISTORY_LENGTH) {
+            datumHistory.remove(0);
+        }
+    }
+
+    public void removeDatumHistory(int generation) {
+        datumHistory.removeIf(d -> d.getGeneration() == generation);
+    }
+
+    public int getCompensationGeneration() {
+        return compensationGeneration;
+    }
+
+    public void setCompensationGeneration(int compensationGeneration) {
+        this.compensationGeneration = compensationGeneration;
+    }
 
     @ElementList(required = false)
     private ArrayList<Hysteresis> hysteresis = new ArrayList<>();

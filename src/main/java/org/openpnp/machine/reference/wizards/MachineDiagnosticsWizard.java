@@ -301,14 +301,23 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
             if (results == null || results.getDatum() == null) {
                 return;
             }
-            MachineDiagnosticsResults.Datum datum = results.getDatum();
+            MachineDiagnostics.CompensationBasis basis = diagnostics.getCompensationBasis();
+            if (basis == null) {
+                UiUtils.showError(new Exception(Translations.getString(
+                        "MachineDiagnosticsWizard.Compensate.NoBasis"))); //$NON-NLS-1$
+                return;
+            }
             javax.swing.JCheckBox squareness = new javax.swing.JCheckBox(String.format(
                     Translations.getString("MachineDiagnosticsWizard.Compensate.Squareness"), //$NON-NLS-1$
-                    datum.getShearDegrees()));
-            squareness.setSelected(Math.abs(datum.getShearDegrees()) > 0.1);
+                    basis.shearDegrees, Double.isNaN(basis.sdShearDegrees) ? 0 : basis.sdShearDegrees));
+            squareness.setSelected(basis.squarenessIsSettled());
+            String scatter = basis.readings < 2 ? Translations.getString(
+                    "MachineDiagnosticsWizard.Compensate.OneReading") //$NON-NLS-1$
+                    : String.format(Translations.getString("MachineDiagnosticsWizard.Compensate.Scatter"), //$NON-NLS-1$
+                            basis.readings, basis.sdScaleX * 100, basis.sdScaleY * 100);
             Object[] message = {
                     String.format(Translations.getString("MachineDiagnosticsWizard.Compensate.Text"), //$NON-NLS-1$
-                            (datum.getScaleX() - 1) * 100, (datum.getScaleY() - 1) * 100),
+                            (basis.scaleX - 1) * 100, (basis.scaleY - 1) * 100, scatter),
                     squareness };
             int answer = javax.swing.JOptionPane.showConfirmDialog(MachineDiagnosticsWizard.this,
                     message, Translations.getString("MachineDiagnosticsWizard.Compensate.Title"), //$NON-NLS-1$
