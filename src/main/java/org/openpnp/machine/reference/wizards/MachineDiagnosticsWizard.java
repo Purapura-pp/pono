@@ -131,6 +131,8 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextField focusRange;
     private JTextField rulerStep;
     private JTextField measureSpeedFactor;
+    private JTextField hysteresisTargets;
+    private JTextField hysteresisLatticePitch;
     private JTextField focusStep;
     private JTextField focusRepeats;
     private JTextField stressCycles;
@@ -1047,7 +1049,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 ColumnSpec.decode("max(70dlu;default)"),
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), };
-        RowSpec[] rows = new RowSpec[36];
+        RowSpec[] rows = new RowSpec[38];
         for (int i = 0; i < rows.length; i++) {
             rows[i] = i % 2 == 0 ? FormSpecs.RELATED_GAP_ROWSPEC : FormSpecs.DEFAULT_ROWSPEC;
         }
@@ -1073,6 +1075,8 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         homeBeforeEachStressSpeed.setToolTipText(Translations.getString(
                 "MachineDiagnosticsWizard.ParametersPanel.HomeBeforeEachStressSpeed.toolTipText")); //$NON-NLS-1$
         panel.add(homeBeforeEachStressSpeed, "6, 34, 3, 1");
+        hysteresisTargets = addField(panel, "HysteresisTargets", "2, 36", "4, 36");
+        hysteresisLatticePitch = addField(panel, "HysteresisLatticePitch", "6, 36", "8, 36");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -1098,12 +1102,12 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.text")); //$NON-NLS-1$
         lblFirmwareCommands.setToolTipText(Translations.getString(
                 "MachineDiagnosticsWizard.ParametersPanel.FirmwareCommands.toolTipText")); //$NON-NLS-1$
-        panel.add(lblFirmwareCommands, "2, 36, right, top");
+        panel.add(lblFirmwareCommands, "2, 38, right, top");
         firmwareCommands = new JTextArea();
         firmwareCommands.setRows(4);
         JScrollPane firmwareScroll = new JScrollPane(firmwareCommands);
         firmwareScroll.setPreferredSize(new Dimension(200, 70));
-        panel.add(firmwareScroll, "4, 36, 5, 1, fill, fill");
+        panel.add(firmwareScroll, "4, 38, 5, 1, fill, fill");
     }
 
     private JTextField addField(JPanel panel, String key, String labelConstraints,
@@ -1217,6 +1221,8 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "rulerStepMm", rulerStep, "text", doubleConverter);
         addWrappedBinding(diagnostics, "measureSpeedFactor", measureSpeedFactor, "text", doubleConverter);
         addWrappedBinding(diagnostics, "homeBeforeEachStressSpeed", homeBeforeEachStressSpeed, "selected");
+        addWrappedBinding(diagnostics, "hysteresisTargets", hysteresisTargets, "text");
+        addWrappedBinding(diagnostics, "hysteresisLatticePitchMm", hysteresisLatticePitch, "text", doubleConverter);
         addWrappedBinding(diagnostics, "rotationTestAngles", rotationTestAngles, "text");
         addWrappedBinding(diagnostics, "rotationApproachAngle", rotationApproachAngle, "text",
                 doubleConverter);

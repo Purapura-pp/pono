@@ -5073,6 +5073,89 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     @Attribute(required = false)
     private double hysteresisFeatureMaxMm = 8.0;
 
+    /**
+     * Pitch of the table's hole lattice, millimetres; 0 to look for features without one. The
+     * LumenPnP staging plate is a 15 mm checkerboard of 3.2 mm holes anchored on the datum
+     * board's fiducial, so with the pitch known the hysteresis map goes straight to a hole
+     * rather than hunting for one.
+     */
+    @Attribute(required = false)
+    private double hysteresisLatticePitchMm = StagingPlate.PITCH_MM;
+
+    public double getHysteresisLatticePitchMm() {
+        return hysteresisLatticePitchMm;
+    }
+
+    public void setHysteresisLatticePitchMm(double hysteresisLatticePitchMm) {
+        double old = this.hysteresisLatticePitchMm;
+        this.hysteresisLatticePitchMm = hysteresisLatticePitchMm;
+        firePropertyChange("hysteresisLatticePitchMm", old, hysteresisLatticePitchMm);
+    }
+
+    /**
+     * Where to look for a round feature for a hysteresis reading wanted at a position: the
+     * nearest lattice hole when the table has a lattice, else the position itself.
+     */
+    private Location hysteresisSpot(ReferenceMachine machine, Location fiducial, double wantedX,
+            double wantedY, boolean stepInX) {
+        Location wanted = fiducial.derive(wantedX, wantedY, null, null);
+        if (!(hysteresisLatticePitchMm > 0)) {
+            return wanted;
+        }
+        Location cameraHole = null;
+        try {
+            Camera bottom = VisionUtils.getBottomVisionCamera();
+            if (bottom != null && bottom.getHead() == null) {
+                cameraHole = bottom.getLocation();
+            }
+        }
+        catch (Exception e) {
+            // No bottom camera; no hole to keep clear of.
+        }
+        Location hole = StagingPlate.nearestHole(fiducial, wantedX, wantedY, cameraHole, stepInX);
+        return hole != null ? hole : wanted;
+    }
+
+    /**
+     * Places on the table with a round feature at them, as "x, y; x, y; ..." in machine
+     * millimetres. When given, the hysteresis is read at these rather than at fractions of the
+     * travel: the user knows where the holes are, and a table that does not reach the end of
+     * the travel has no hole there to find.
+     */
+    @Element(required = false)
+    private String hysteresisTargets = "";
+
+    public String getHysteresisTargets() {
+        return hysteresisTargets;
+    }
+
+    public void setHysteresisTargets(String hysteresisTargets) {
+        String old = this.hysteresisTargets;
+        this.hysteresisTargets = hysteresisTargets == null ? "" : hysteresisTargets;
+        firePropertyChange("hysteresisTargets", old, this.hysteresisTargets);
+    }
+
+    /** The named targets, or empty. Anything that does not read as "x, y" is skipped. */
+    static List<double[]> parseTargets(String text) {
+        List<double[]> targets = new ArrayList<>();
+        if (text == null) {
+            return targets;
+        }
+        for (String pair : text.split(";")) {
+            String[] parts = pair.trim().split("[,\\s]+");
+            if (parts.length < 2) {
+                continue;
+            }
+            try {
+                targets.add(new double[] { Double.parseDouble(parts[0]), Double.parseDouble(parts[1]) });
+            }
+            catch (NumberFormatException e) {
+                // Not a pair; skipped.
+            }
+        }
+        return targets;
+    }
+
     public String getHysteresisPositions() {
         return hysteresisPositions;
     }
@@ -5096,6 +5179,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private void testHysteresisMap(ReferenceMachine machine, MachineDiagnosticsReport report)
             throws Exception {
         report.section("Hysteresis along the travel, against whatever round feature the table offers");
+        if (hysteresisLatticePitchMm > 0) {
+            report.line("  The table's holes are taken to lie on a %.0f mm checkerboard anchored on "
+                    + "the primary fiducial, with the nearest holes %.0f mm from it along X and Y; "
+                    + "each reading goes to the lattice hole nearest the wanted position.",
+                    hysteresisLatticePitchMm, hysteresisLatticePitchMm);
+        }
         ReferenceHead head = requireHead(machine);
         ReferenceCamera camera = requireDownLookingCamera(head);
         Location fiducial = requireFiducial(head).convertToUnits(LengthUnit.Millimeters);
@@ -5119,18 +5208,37 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 report.line("Axis %s, travel %.0f to %.0f mm", axis.getName(), low, high);
                 report.line("  %-10s %-12s %-10s %-12s %-8s", "position", "backlash mm", "sd mm",
                         "largest step", "stalled");
-                for (double fraction : fractions) {
-                    checkAborted();
-                    // The camera's own axis coordinate is what is placed; the head offsets between
-                    // the camera and the axis are a constant and cancel in a difference.
-                    double position = low + fraction * (high - low);
-                    Location here = type == Axis.Type.X
-                            ? fiducial.derive(position, null, null, null)
-                            : fiducial.derive(null, position, null, null);
-                    HysteresisSample sample = sampleHysteresis(machine, report, camera, axis, type,
-                            here, fraction, rows);
-                    if (sample != null) {
-                        conclusions.add(sample.conclusion);
+                List<double[]> targets = parseTargets(hysteresisTargets);
+                if (!targets.isEmpty()) {
+                    // Where the user says the holes are, in the order along this axis.
+                    targets.sort((a, b) -> Double.compare(type == Axis.Type.X ? a[0] : a[1],
+                            type == Axis.Type.X ? b[0] : b[1]));
+                    for (double[] target : targets) {
+                        checkAborted();
+                        double position = type == Axis.Type.X ? target[0] : target[1];
+                        Location here = fiducial.derive(target[0], target[1], null, null);
+                        HysteresisSample sample = sampleHysteresis(machine, report, camera, axis, type,
+                                here, (position - low) / (high - low), rows);
+                        if (sample != null) {
+                            conclusions.add(sample.conclusion);
+                        }
+                    }
+                }
+                else {
+                    for (double fraction : fractions) {
+                        checkAborted();
+                        // The camera's own axis coordinate is what is placed; the head offsets
+                        // between the camera and the axis are a constant and cancel in a difference.
+                        double position = low + fraction * (high - low);
+                        // A reading of X keeps its X and may step a row; a reading of Y keeps its Y.
+                        Location here = type == Axis.Type.X
+                                ? hysteresisSpot(machine, fiducial, position, fiducial.getY(), false)
+                                : hysteresisSpot(machine, fiducial, fiducial.getX(), position, true);
+                        HysteresisSample sample = sampleHysteresis(machine, report, camera, axis, type,
+                                here, fraction, rows);
+                        if (sample != null) {
+                            conclusions.add(sample.conclusion);
+                        }
                     }
                 }
                 describeHysteresis(report, axis, conclusions);
@@ -5153,10 +5261,23 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 report.line("  %-10s %-12s %-10s %-12s %-8s", "x position", "backlash mm", "sd mm",
                         "largest step", "stalled");
                 List<MachineDiagnosticsResults.Hysteresis> across = new ArrayList<>();
-                for (double fraction : new double[] { 0.15, 0.5, 0.85 }) {
+                List<Location> spots = new ArrayList<>();
+                List<double[]> named = parseTargets(hysteresisTargets);
+                if (!named.isEmpty()) {
+                    named.sort((a, b) -> Double.compare(a[0], b[0]));
+                    for (double[] target : named) {
+                        spots.add(fiducial.derive(target[0], target[1], null, null));
+                    }
+                }
+                else {
+                    for (double fraction : new double[] { 0.15, 0.5, 0.85 }) {
+                        spots.add(hysteresisSpot(machine, fiducial, lowX + fraction * (highX - lowX),
+                                fiducial.getY(), true));
+                    }
+                }
+                for (Location here : spots) {
                     checkAborted();
-                    double x = lowX + fraction * (highX - lowX);
-                    Location here = fiducial.derive(x, null, null, null);
+                    double fraction = (here.getX() - lowX) / (highX - lowX);
                     HysteresisSample sample = sampleHysteresis(machine, report, camera, yAxis,
                             Axis.Type.Y, here, fraction, rows);
                     if (sample != null) {
@@ -5215,6 +5336,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         int[][] spiral = { { 0, 0 }, { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 1, 1 }, { -1, 1 },
                 { 1, -1 }, { -1, -1 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 1 }, { 2, -1 },
                 { -2, 1 }, { -2, -1 }, { 1, 2 }, { -1, 2 }, { 1, -2 }, { -1, -2 } };
+        int spots = 0;
         for (int[] step : spiral) {
             checkAborted();
             Location spot = here.add(new Location(LengthUnit.Millimeters, step[0] * frameW,
@@ -5222,13 +5344,19 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             MovableUtils.moveToLocationAtSafeZ(camera, spot, measureSpeedFactor);
             camera.waitForCompletion(CompletionType.WaitForStillstand);
             Thread.sleep(machineSettleMs);
-            feature = findAnyCircle(camera, minPixels, maxPixels);
+            // The first spot's frame is kept as evidence if nothing is found anywhere.
+            feature = findAnyCircle(camera, minPixels, maxPixels, report,
+                    spots == 0 ? String.format("hysteresis-%s-%.0f", axis.getName(), nominal) : null);
+            spots++;
             if (feature != null) {
                 break;
             }
         }
         if (feature == null) {
-            report.line("  %-10.1f nothing round within two frames of the spot; skipped", nominal);
+            report.line("  %-10.1f nothing round of %.1f to %.1f mm within two frames of the spot "
+                    + "(%d frames looked at); skipped. The first frame is hysteresis-%s-%.0f.png "
+                    + "beside this report.", nominal, hysteresisFeatureMinMm, hysteresisFeatureMaxMm,
+                    spots, axis.getName(), nominal);
             return null;
         }
         Location target = VisionUtils.getPixelLocation(camera, camera, feature.x, feature.y)
@@ -5409,25 +5537,178 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
     }
 
-    /** The best round feature in the frame, anywhere in it, between two diameters. */
-    private Circle findAnyCircle(ReferenceCamera camera, int minPixels, int maxPixels) throws Exception {
+    /**
+     * The best round feature anywhere in the frame, between two diameters.
+     * <p>
+     * Two passes. The frame is thresholded both ways round and its contours taken; a contour
+     * whose area says a diameter in range, whose perimeter says it is round, and which sits
+     * clear of the frame's edge is a candidate, and the one nearest the frame's centre is taken.
+     * The circular symmetry detector then refines that one in a window its own size. The first
+     * version asked the symmetry detector to find the feature itself, and it looked in the
+     * middle 2 mm of a 19 mm frame at a diameter range that took seconds a frame: it did not
+     * find the table's holes and the user asked how it was looking for them. Fairly.
+     *
+     * @param evidence A file name beside the report to write the frame to when nothing is found,
+     *                 with the contours that were considered marked; null for none.
+     */
+    private Circle findAnyCircle(ReferenceCamera camera, int minPixels, int maxPixels,
+            MachineDiagnosticsReport report, String evidence) throws Exception {
         BufferedImage image = camera.lightSettleAndCapture();
+        List<org.opencv.core.MatOfPoint> considered = new ArrayList<>();
+        try {
+            double[] best = bestRoundFeature(image, minPixels, maxPixels, considered);
+            if (best == null) {
+                if (evidence != null && report != null) {
+                    saveFeatureEvidence(report, evidence, image, considered);
+                }
+                log("No round feature of %d to %d px in the frame (%d contours of that size, none "
+                        + "round and clear of the edge)", minPixels, maxPixels, considered.size());
+                return null;
+            }
+            Circle refined = refineCircleAt(image, best[0], best[1], (int) Math.round(best[2]));
+            return refined != null ? refined : new Circle(best[0], best[1], best[2]);
+        }
+        finally {
+            for (org.opencv.core.MatOfPoint contour : considered) {
+                contour.release();
+            }
+        }
+    }
+
+    /**
+     * The roundest thing nearest the middle of an image, between two diameters: its centre,
+     * diameter and circularity, or null. The image is thresholded both ways round and its
+     * contours taken; a contour whose area says a diameter in range, whose perimeter says it is
+     * round (4 pi A / P squared over 0.7), whose bounding box is near square, and which sits
+     * clear of the edge is a candidate.
+     *
+     * @param considered Every contour of a diameter in range is added, for the caller to draw.
+     */
+    static double[] bestRoundFeature(BufferedImage image, int minPixels, int maxPixels,
+            List<org.opencv.core.MatOfPoint> considered) {
+        Mat mat = OpenCvUtils.toMat(image);
+        Mat gray = new Mat();
+        Mat blurred = new Mat();
+        Mat binary = new Mat();
+        try {
+            if (mat.channels() > 1) {
+                org.opencv.imgproc.Imgproc.cvtColor(mat, gray, org.opencv.imgproc.Imgproc.COLOR_BGR2GRAY);
+            }
+            else {
+                gray = mat.clone();
+            }
+            org.opencv.imgproc.Imgproc.GaussianBlur(gray, blurred, new org.opencv.core.Size(5, 5), 0);
+            double centreX = image.getWidth() / 2.0;
+            double centreY = image.getHeight() / 2.0;
+            double[] best = null;
+            double bestDistance = Double.MAX_VALUE;
+            for (int polarity = 0; polarity < 2; polarity++) {
+                org.opencv.imgproc.Imgproc.threshold(blurred, binary, 0, 255,
+                        (polarity == 0 ? org.opencv.imgproc.Imgproc.THRESH_BINARY
+                                : org.opencv.imgproc.Imgproc.THRESH_BINARY_INV)
+                                | org.opencv.imgproc.Imgproc.THRESH_OTSU);
+                List<org.opencv.core.MatOfPoint> contours = new ArrayList<>();
+                Mat hierarchy = new Mat();
+                org.opencv.imgproc.Imgproc.findContours(binary, contours, hierarchy,
+                        org.opencv.imgproc.Imgproc.RETR_LIST,
+                        org.opencv.imgproc.Imgproc.CHAIN_APPROX_SIMPLE);
+                hierarchy.release();
+                for (org.opencv.core.MatOfPoint contour : contours) {
+                    double area = org.opencv.imgproc.Imgproc.contourArea(contour);
+                    double diameter = 2 * Math.sqrt(area / Math.PI);
+                    if (diameter < minPixels || diameter > maxPixels) {
+                        contour.release();
+                        continue;
+                    }
+                    considered.add(contour);
+                    org.opencv.core.MatOfPoint2f points = new org.opencv.core.MatOfPoint2f(contour.toArray());
+                    double perimeter = org.opencv.imgproc.Imgproc.arcLength(points, true);
+                    // How much of its own enclosing circle the shape fills: a disc fills it, a
+                    // square of the same area fills 64 % of it. Circularity alone lets a square
+                    // through, at 0.785.
+                    org.opencv.core.Point enclosingCentre = new org.opencv.core.Point();
+                    float[] enclosingRadius = new float[1];
+                    org.opencv.imgproc.Imgproc.minEnclosingCircle(points, enclosingCentre, enclosingRadius);
+                    points.release();
+                    double circularity = perimeter > 0 ? 4 * Math.PI * area / (perimeter * perimeter) : 0;
+                    double fill = enclosingRadius[0] > 0
+                            ? area / (Math.PI * enclosingRadius[0] * enclosingRadius[0]) : 0;
+                    org.opencv.core.Rect box = org.opencv.imgproc.Imgproc.boundingRect(contour);
+                    double aspect = (double) Math.min(box.width, box.height) / Math.max(box.width, box.height);
+                    // Whole and a little clear of the edge is enough: the camera is centred on
+                    // the feature before anything is measured against it.
+                    double margin = Math.max(5, diameter * 0.1);
+                    boolean clear = box.x > margin && box.y > margin
+                            && box.x + box.width < image.getWidth() - margin
+                            && box.y + box.height < image.getHeight() - margin;
+                    if (circularity < 0.8 || fill < 0.85 || aspect < 0.85 || !clear) {
+                        continue;
+                    }
+                    org.opencv.imgproc.Moments moments = org.opencv.imgproc.Imgproc.moments(contour);
+                    double cx = moments.m10 / moments.m00;
+                    double cy = moments.m01 / moments.m00;
+                    double distance = Math.hypot(cx - centreX, cy - centreY);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        best = new double[] { cx, cy, diameter, circularity };
+                    }
+                }
+            }
+            return best;
+        }
+        finally {
+            mat.release();
+            gray.release();
+            blurred.release();
+            binary.release();
+        }
+    }
+
+    /** The symmetry detector on one candidate, in a window its own size: fast, and sub-pixel. */
+    private Circle refineCircleAt(BufferedImage image, double x, double y, int diameterPixels) {
         Mat mat = OpenCvUtils.toMat(image);
         try {
-            int search = Math.min(image.getWidth(), image.getHeight()) - maxPixels;
+            int minDiameter = Math.max(3, (int) (diameterPixels * 0.8));
+            int maxDiameter = Math.max(minDiameter + 4, (int) (diameterPixels * 1.25));
+            int search = Math.max(24, diameterPixels / 2);
             List<Circle> circles = DetectCircularSymmetry.findCircularSymmetry(mat,
-                    image.getWidth() / 2, image.getHeight() / 2, minPixels, maxPixels,
-                    search, search, search, 1, 1.5, 0.0, 8, 1,
+                    (int) Math.round(x), (int) Math.round(y), minDiameter, maxDiameter, search, search,
+                    search, 1, 1.2, 0.0, 2, 4,
                     DetectCircularSymmetry.SymmetryScore.OverallVarianceVsRingVarianceSum,
                     false, false, new ScoreRange());
             return circles.isEmpty() ? null : circles.get(0);
         }
         catch (Exception e) {
-            Logger.trace(e, "Machine diagnostics: no round feature in view");
+            Logger.trace(e, "Machine diagnostics: the candidate at {}, {} did not refine", x, y);
             return null;
         }
         finally {
             mat.release();
+        }
+    }
+
+    /** The frame in which nothing round was found, with what was considered drawn on it. */
+    private void saveFeatureEvidence(MachineDiagnosticsReport report, String name, BufferedImage image,
+            List<org.opencv.core.MatOfPoint> considered) {
+        try {
+            BufferedImage marked = new BufferedImage(image.getWidth(), image.getHeight(),
+                    BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g = marked.createGraphics();
+            try {
+                g.drawImage(image, 0, 0, null);
+                g.setColor(java.awt.Color.YELLOW);
+                for (org.opencv.core.MatOfPoint contour : considered) {
+                    org.opencv.core.Rect box = org.opencv.imgproc.Imgproc.boundingRect(contour);
+                    g.drawRect(box.x, box.y, box.width, box.height);
+                }
+            }
+            finally {
+                g.dispose();
+            }
+            javax.imageio.ImageIO.write(marked, "png", new File(report.getDirectory(), name + ".png"));
+        }
+        catch (Exception e) {
+            Logger.trace(e, "Machine diagnostics: writing {}", name);
         }
     }
 
