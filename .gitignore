@@ -20,3 +20,4 @@ hs_err*
 /src/test/resources/configuration-get-baseline.txt-updated
 .DS_Store
 __pycache__/
+src/main/resources/org/openpnp/*.properties-normalised

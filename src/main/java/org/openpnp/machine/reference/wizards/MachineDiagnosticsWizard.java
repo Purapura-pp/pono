@@ -139,6 +139,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
     private JTextField stressDistance;
     private JTextField latencySpeedFactor;
     private JTextField noiseFrames;
+    private JTextField driftSeconds;
     private JTextField backlashRepeats;
     private JTextField settleRepeats;
     private JTextField timingDistances;
@@ -336,7 +337,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                         reportIssues();
                         describeMachine();
                         javax.swing.JOptionPane.showMessageDialog(MachineDiagnosticsWizard.this,
-                                outcome.message,
+                                describeOutcome(outcome),
                                 Translations.getString(outcome.kept
                                         ? "MachineDiagnosticsWizard.Compensate.Kept" //$NON-NLS-1$
                                         : "MachineDiagnosticsWizard.Compensate.Undone"), //$NON-NLS-1$
@@ -346,6 +347,57 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                     (t) -> UiUtils.showError(t));
         }
     };
+
+    /**
+     * The verdict in the user's language, from the numbers: the English the diagnostics logged
+     * is assembled from too many variable parts for a whole-string translation to reach.
+     */
+    private String describeOutcome(MachineDiagnostics.CompensationOutcome outcome) {
+        if (outcome.after == null) {
+            return Translations.getString("MachineDiagnosticsWizard.Compensate.NotMeasured"); //$NON-NLS-1$
+        }
+        double beforeX = (outcome.before.getScaleX() - 1) * 100;
+        double beforeY = (outcome.before.getScaleY() - 1) * 100;
+        double afterX = (outcome.after.getScaleX() - 1) * 100;
+        double afterY = (outcome.after.getScaleY() - 1) * 100;
+        String text;
+        if (outcome.kept) {
+            text = String.format(Translations.getString("MachineDiagnosticsWizard.Compensate.KeptText"), //$NON-NLS-1$
+                    beforeX, beforeY, outcome.basisReadings, afterX, afterY,
+                    outcome.verificationReadings, outcome.lineX * 100, outcome.lineY * 100,
+                    outcome.changes.size(), outcome.backup.getName());
+        }
+        else {
+            List<String> failed = new ArrayList<>();
+            MachineDiagnostics.CompensationVerdict v = outcome.verdict;
+            if (v != null) {
+                if (!v.xWithin) {
+                    failed.add(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.XOutside")); //$NON-NLS-1$
+                }
+                if (!v.xBetter) {
+                    failed.add(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.XNoCloser")); //$NON-NLS-1$
+                }
+                if (!v.yWithin) {
+                    failed.add(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.YOutside")); //$NON-NLS-1$
+                }
+                if (!v.yBetter) {
+                    failed.add(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.YNoCloser")); //$NON-NLS-1$
+                }
+                if (!v.shearWithin) {
+                    failed.add(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.ShearOutside")); //$NON-NLS-1$
+                }
+                if (!v.shearBetter) {
+                    failed.add(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.ShearNoCloser")); //$NON-NLS-1$
+                }
+            }
+            text = String.format(Translations.getString("MachineDiagnosticsWizard.Compensate.UndoneText"), //$NON-NLS-1$
+                    afterX, afterY, outcome.after.getShearDegrees(), outcome.verificationReadings,
+                    beforeX, beforeY, outcome.before.getShearDegrees(), outcome.basisReadings,
+                    outcome.lineX * 100, outcome.lineY * 100, outcome.lineShearDegrees,
+                    String.join(Translations.getString("MachineDiagnosticsWizard.Compensate.Fail.Separator"), failed)); //$NON-NLS-1$
+        }
+        return "<html><body style='width: 420px'>" + text + "</body></html>"; //$NON-NLS-1$ //$NON-NLS-2$
+    }
 
     private Action runAction = new AbstractAction(Translations.getString(
             "MachineDiagnosticsWizard.Action.Run"), Icons.start) { //$NON-NLS-1$
@@ -1049,7 +1101,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                 ColumnSpec.decode("max(70dlu;default)"),
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("default:grow"), };
-        RowSpec[] rows = new RowSpec[38];
+        RowSpec[] rows = new RowSpec[40];
         for (int i = 0; i < rows.length; i++) {
             rows[i] = i % 2 == 0 ? FormSpecs.RELATED_GAP_ROWSPEC : FormSpecs.DEFAULT_ROWSPEC;
         }
@@ -1077,6 +1129,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         panel.add(homeBeforeEachStressSpeed, "6, 34, 3, 1");
         hysteresisTargets = addField(panel, "HysteresisTargets", "2, 36", "4, 36");
         hysteresisLatticePitch = addField(panel, "HysteresisLatticePitch", "6, 36", "8, 36");
+        driftSeconds = addField(panel, "DriftSeconds", "2, 38", "4, 38");
         timingDistances = addField(panel, "TimingDistances", "2, 4", "4, 4");
         rotationTimingAngles = addField(panel, "RotationTimingAngles", "6, 4", "8, 4");
         timingIncludesZAndRotation = new JCheckBox(Translations.getString(
@@ -1209,6 +1262,7 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
         addWrappedBinding(diagnostics, "homingCycles", homingCycles, "text", integerConverter);
         addWrappedBinding(diagnostics, "framesPerPoint", framesPerPoint, "text", integerConverter);
         addWrappedBinding(diagnostics, "noiseFrames", noiseFrames, "text", integerConverter);
+        addWrappedBinding(diagnostics, "driftSeconds", driftSeconds, "text", integerConverter);
         addWrappedBinding(diagnostics, "backlashRepeats", backlashRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "settleRepeats", settleRepeats, "text", integerConverter);
         addWrappedBinding(diagnostics, "stressSpeedFactors", stressSpeedFactors, "text");

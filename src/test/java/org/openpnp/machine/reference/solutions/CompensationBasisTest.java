@@ -60,12 +60,42 @@ public class CompensationBasisTest {
         assertEquals(1.01340, basis.scaleX, 1e-9);
         assertEquals(1.01020, basis.scaleY, 1e-9);
         assertEquals(0.077, basis.shearDegrees, 1e-9);
-        // Twice the scatter, but never tighter than 0.05 %.
+        // Three readings do not say what the scatter is: the line is 0.1 % whatever they show,
+        // and no tighter, because the seventh session's three agreed to 0.019 % and the machine
+        // then read 0.09 % away from a compensation that was right.
         double sdX = basis.sdScaleX;
-        assertEquals(Math.max(0.0005, Math.min(0.003, 2 * sdX)), basis.tolerance(sdX), 1e-12);
-        assertTrue(basis.tolerance(sdX) >= 0.0005);
-        // Three readings of squareness 0.07 to 0.2 degrees apart do not agree on it.
+        assertTrue(sdX < 0.0004, "these three agree closely in X: sd " + sdX);
+        assertEquals(0.001, basis.tolerance(sdX), 1e-12);
+        // Y scatters by 0.06 %, more than the floor: 2.5 times that.
+        assertTrue(basis.sdScaleY > 0.0004, "Y: sd " + basis.sdScaleY);
+        assertEquals(2.5 * basis.sdScaleY, basis.tolerance(basis.sdScaleY), 1e-12);
+        // Three readings of squareness 0.07 to 0.2 degrees apart do not agree on it, and the
+        // squareness line is 2.5 times that scatter, wider than its 0.1 degree floor.
         assertFalse(basis.squarenessIsSettled());
+        assertTrue(basis.sdShearDegrees > 0.04);
+        assertEquals(2.5 * basis.sdShearDegrees, basis.shearTolerance(), 1e-12);
+    }
+
+    /** With six readings the scatter is known, and the line is 2.5 times it, no tighter than 0.05 %. */
+    @Test
+    public void sixReadingsKnowTheirScatterAndSetTheLineFromIt() {
+        double[] xs = { 0.99821, 0.99841, 0.99796, 0.99783, 0.99863, 0.99927, 0.99842, 0.99791 };
+        for (double x : xs) {
+            reading(x, 0.9985, 0.02, 0.015, 0);
+        }
+
+        CompensationBasis basis = diagnostics.getCompensationBasis();
+
+        assertEquals(8, basis.readings);
+        // The eight quiet X readings of the sixth session scatter by 0.046 %.
+        assertEquals(0.00046, basis.sdScaleX, 0.00003);
+        assertEquals(2.5 * basis.sdScaleX, basis.tolerance(basis.sdScaleX), 1e-12);
+        // Y did not scatter at all here; the line does not go under 0.05 %.
+        assertEquals(0.0005, basis.tolerance(basis.sdScaleY), 1e-12);
+        // And never over 0.3 %.
+        assertEquals(0.003, basis.tolerance(0.01), 1e-12);
+        // Shear: 2.5 times its scatter, between 0.1 and 0.3 degrees.
+        assertEquals(0.1, basis.shearTolerance(), 1e-12);
     }
 
     @Test
@@ -77,6 +107,7 @@ public class CompensationBasisTest {
         assertEquals(1, basis.readings);
         assertTrue(Double.isNaN(basis.sdScaleX));
         assertEquals(0.001, basis.tolerance(basis.sdScaleX), 1e-12);
+        assertEquals(0.1, basis.shearTolerance(), 1e-12);
         assertFalse(basis.squarenessIsSettled(), "one reading cannot agree with itself");
     }
 

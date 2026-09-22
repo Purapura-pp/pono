@@ -321,6 +321,15 @@ public class MachineDiagnosticsResults {
         private int frames;
         @Attribute(required = false)
         private double framesPerSecond;
+        /** The slow drift with nothing moving: over how long, how fast along each axis, how far in all. */
+        @Attribute(required = false)
+        private double driftSeconds;
+        @Attribute(required = false)
+        private double driftXMmPerMinute;
+        @Attribute(required = false)
+        private double driftYMmPerMinute;
+        @Attribute(required = false)
+        private double driftExcursionMm;
 
         VisionNoise() {
         }
@@ -357,6 +366,29 @@ public class MachineDiagnosticsResults {
 
         public double getFramesPerSecond() {
             return framesPerSecond;
+        }
+
+        public void setDrift(double seconds, double xMmPerMinute, double yMmPerMinute, double excursionMm) {
+            this.driftSeconds = seconds;
+            this.driftXMmPerMinute = xMmPerMinute;
+            this.driftYMmPerMinute = yMmPerMinute;
+            this.driftExcursionMm = excursionMm;
+        }
+
+        public double getDriftSeconds() {
+            return driftSeconds;
+        }
+
+        public double getDriftXMmPerMinute() {
+            return driftXMmPerMinute;
+        }
+
+        public double getDriftYMmPerMinute() {
+            return driftYMmPerMinute;
+        }
+
+        public double getDriftExcursionMm() {
+            return driftExcursionMm;
         }
     }
 

@@ -32,6 +32,7 @@ import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
 import org.openpnp.machine.reference.axis.ReferenceLinearTransformAxis;
 import org.openpnp.machine.reference.feeder.ReferenceSlotAutoFeeder;
 import org.openpnp.model.Job;
+import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
@@ -41,6 +42,7 @@ import org.openpnp.spi.Camera;
 import org.openpnp.spi.Feeder;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.HeadMountable;
+import org.openpnp.spi.Locatable.LocationOption;
 import org.openpnp.spi.NozzleTip;
 import org.openpnp.spi.base.AbstractAxis;
 import org.openpnp.spi.base.AbstractHeadMountable;
@@ -365,6 +367,48 @@ public final class MachineCompensation {
             carryUnitsPerPixel(applied, camera);
         }
         return applied;
+    }
+
+    /**
+     * The raw travel of the controller X and Y axes for 100 true millimetres of the camera along
+     * X and along Y from the anchor, as the camera's axes stand now. Before and after a
+     * compensation is applied, the ratio of the two is what the compensation says it is - or the
+     * transform has not taken effect on the axes the camera moves in, and the coordinates
+     * carried across on that assumption are wrong.
+     */
+    public static double[] rawTravelPer100(AbstractHeadMountable camera, Location anchor,
+            ReferenceControllerAxis rawX, ReferenceControllerAxis rawY) throws Exception {
+        Location a = anchor.convertToUnits(LengthUnit.Millimeters);
+        Location alongX = a.add(new Location(LengthUnit.Millimeters, 100, 0, 0, 0));
+        Location alongY = a.add(new Location(LengthUnit.Millimeters, 0, 100, 0, 0));
+        AxesLocation atAnchor = camera.toRaw(camera.toHeadLocation(a, LocationOption.Quiet),
+                LocationOption.Quiet);
+        AxesLocation atX = camera.toRaw(camera.toHeadLocation(alongX, LocationOption.Quiet),
+                LocationOption.Quiet);
+        AxesLocation atY = camera.toRaw(camera.toHeadLocation(alongY, LocationOption.Quiet),
+                LocationOption.Quiet);
+        return new double[] {
+                atX.getCoordinate(rawX) - atAnchor.getCoordinate(rawX),
+                atY.getCoordinate(rawY) - atAnchor.getCoordinate(rawY) };
+    }
+
+    /**
+     * Whether the travel changed as this compensation says it should: the raw travel per true
+     * millimetre is multiplied by the scale along X, and by the scale times the cosine of the
+     * shear along Y. Null when it did; otherwise what was found instead.
+     */
+    public String checkTravel(double[] before, double[] after) {
+        double wantX = scaleX;
+        double wantY = scaleY * Math.cos(Math.toRadians(shearDegrees));
+        double gotX = before[0] == 0 ? Double.NaN : after[0] / before[0];
+        double gotY = before[1] == 0 ? Double.NaN : after[1] / before[1];
+        if (Math.abs(gotX - wantX) > 1e-6 || Math.abs(gotY - wantY) > 1e-6) {
+            return String.format("the camera travels %.6f raw for a true mm along X and %.6f along Y "
+                    + "where before it travelled %.6f and %.6f; the ratio should have been %.6f "
+                    + "and %.6f and is %.6f and %.6f", after[0] / 100, after[1] / 100,
+                    before[0] / 100, before[1] / 100, wantX, wantY, gotX, gotY);
+        }
+        return null;
     }
 
     private static ReferenceLinearTransformAxis existingCompensation(ReferenceMachine machine,

@@ -274,6 +274,15 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     @Attribute(required = false)
     private int noiseFrames = 30;
 
+    /**
+     * How long the camera then goes on watching the fiducial with nothing moving, for the slow
+     * drift: the frame, the camera on its mount and the axes under holding current all move with
+     * temperature, and what they move in a minute is what two readings a minute apart cannot
+     * be compared closer than. Zero to skip.
+     */
+    @Attribute(required = false)
+    private int driftSeconds = 60;
+
     /** Approach pairs per cell of the backlash matrix; one pair is one frame's luck. */
     @Attribute(required = false)
     private int backlashRepeats = 3;
@@ -1554,6 +1563,16 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         return noiseFrames;
     }
 
+    public int getDriftSeconds() {
+        return driftSeconds;
+    }
+
+    public void setDriftSeconds(int driftSeconds) {
+        int old = this.driftSeconds;
+        this.driftSeconds = Math.max(0, driftSeconds);
+        firePropertyChange("driftSeconds", old, this.driftSeconds);
+    }
+
     public void setNoiseFrames(int noiseFrames) {
         int old = this.noiseFrames;
         this.noiseFrames = Math.max(5, noiseFrames);
@@ -1994,9 +2013,29 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
     // ---- compensation ------------------------------------------------------------------------
 
-    /** How close to a true millimetre the frame has to come back for the compensation to stand. */
-    private static final double COMPENSATION_CONVERGENCE = 0.0005;
-    private static final double COMPENSATION_SQUARENESS_CONVERGENCE_DEGREES = 0.05;
+    /**
+     * How close to a true millimetre a verification reading has to come back for the
+     * compensation to stand, while the scatter of the readings is not known well enough to say:
+     * 0.1 %. One reading of a belt machine's frame differs from the next by about 0.05 % - the
+     * eight quiet readings of the sixth session: sd 0.046 % in X, 0.048 % in Y - and three
+     * readings that happen to agree do not make that smaller. The seventh session's basis
+     * scattered by 0.019 % over three readings, the line was drawn at 0.05 %, and the
+     * verification came back 0.092 % off, twice, from a compensation that had taken the frame
+     * from -0.164 % to -0.092 % and was right to within the measurement.
+     */
+    private static final double COMPENSATION_LINE = 0.001;
+    /** Once the scatter is known the line is 2.5 times it, and no tighter than this. */
+    private static final double COMPENSATION_LINE_FLOOR = 0.0005;
+    /** And no looser than this; a frame that scatters more is not one to compensate. */
+    private static final double COMPENSATION_LINE_CAP = 0.003;
+    /** How many readings it takes to know the scatter. */
+    private static final int COMPENSATION_SCATTER_KNOWN_FROM = 6;
+    /**
+     * The same for the squareness. One reading's shear is good to about 0.05 degrees: 0.02 mm of
+     * positioning noise over the board's 25 mm of Y between its inner and outer fiducials.
+     */
+    private static final double COMPENSATION_SQUARENESS_LINE_DEGREES = 0.1;
+    private static final double COMPENSATION_SQUARENESS_LINE_CAP_DEGREES = 0.3;
     /** A frame residual above this is drift, not geometry, and nothing to compensate from. */
     private static final double COMPENSATION_MAX_RESIDUAL_MM = 0.05;
 
@@ -2044,14 +2083,26 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
         /**
          * How far from a true millimetre a verification may read and still count as converged:
-         * twice the scatter of the readings the basis came from, never tighter than 0.05 % and
-         * never looser than 0.3 %; 0.1 % when there are too few readings to know the scatter.
+         * 2.5 times the scatter of the readings the basis came from once there are enough of
+         * them to know it, and no tighter than 0.05 % then; 0.1 % until there are; never looser
+         * than 0.3 %.
          */
         double tolerance(double sd) {
-            if (Double.isNaN(sd) || readings < 3) {
-                return 0.001;
+            double floor = readings >= COMPENSATION_SCATTER_KNOWN_FROM ? COMPENSATION_LINE_FLOOR
+                    : COMPENSATION_LINE;
+            if (Double.isNaN(sd)) {
+                return floor;
             }
-            return Math.max(0.0005, Math.min(0.003, 2 * sd));
+            return Math.max(floor, Math.min(COMPENSATION_LINE_CAP, 2.5 * sd));
+        }
+
+        /** The same line for the squareness, in degrees. */
+        double shearTolerance() {
+            if (Double.isNaN(sdShearDegrees)) {
+                return COMPENSATION_SQUARENESS_LINE_DEGREES;
+            }
+            return Math.max(COMPENSATION_SQUARENESS_LINE_DEGREES,
+                    Math.min(COMPENSATION_SQUARENESS_LINE_CAP_DEGREES, 2.5 * sdShearDegrees));
         }
 
         /** The squareness is only worth compensating when the readings agree on it. */
@@ -2076,12 +2127,89 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         return usable.isEmpty() ? null : new CompensationBasis(usable);
     }
 
+    /**
+     * Whether a compensation stands, from what the board read after it. On each axis the frame
+     * has to come back within the line, and closer to a true millimetre than the basis was -
+     * unless the basis was within the line already - so that a compensation which changed
+     * nothing is not kept along with the coordinates it carried across. The squareness is judged
+     * the same way when it was part of the compensation. What is left within the line is not a
+     * reason to undo: a verification is one reading, or the mean of two, of a machine whose
+     * readings scatter by about the line, and the next compensation, which composes onto this
+     * one, takes the remainder out once a few more readings have said what it is.
+     */
+    public static final class CompensationVerdict {
+        public final boolean kept;
+        public final boolean xWithin, xBetter, yWithin, yBetter, shearWithin, shearBetter;
+
+        private CompensationVerdict(boolean xWithin, boolean xBetter, boolean yWithin,
+                boolean yBetter, boolean shearWithin, boolean shearBetter) {
+            this.xWithin = xWithin;
+            this.xBetter = xBetter;
+            this.yWithin = yWithin;
+            this.yBetter = yBetter;
+            this.shearWithin = shearWithin;
+            this.shearBetter = shearBetter;
+            this.kept = xWithin && xBetter && yWithin && yBetter && shearWithin && shearBetter;
+        }
+
+        /**
+         * @param beforeX    The basis, as scale minus one; likewise Y. Shear in degrees.
+         * @param afterX     What the board read after the change, the same way.
+         * @param lineX      How far from true the reading may be and still stand; likewise Y
+         *                   and the shear.
+         * @param squareness Whether the shear was part of the compensation.
+         */
+        public static CompensationVerdict judge(double beforeX, double beforeY, double beforeShear,
+                double afterX, double afterY, double afterShear, double lineX, double lineY,
+                double lineShear, boolean squareness) {
+            return new CompensationVerdict(
+                    Math.abs(afterX) <= lineX,
+                    Math.abs(afterX) < Math.abs(beforeX) || Math.abs(beforeX) <= lineX,
+                    Math.abs(afterY) <= lineY,
+                    Math.abs(afterY) < Math.abs(beforeY) || Math.abs(beforeY) <= lineY,
+                    !squareness || Math.abs(afterShear) <= lineShear,
+                    !squareness || Math.abs(afterShear) < Math.abs(beforeShear)
+                            || Math.abs(beforeShear) <= lineShear);
+        }
+
+        /** What did not hold, in English, for the log and the report; empty when kept. */
+        public String whatFailed() {
+            List<String> failed = new ArrayList<>();
+            if (!xWithin) {
+                failed.add("X outside the line");
+            }
+            if (!xBetter) {
+                failed.add("X no closer to true than before");
+            }
+            if (!yWithin) {
+                failed.add("Y outside the line");
+            }
+            if (!yBetter) {
+                failed.add("Y no closer to true than before");
+            }
+            if (!shearWithin) {
+                failed.add("squareness outside the line");
+            }
+            if (!shearBetter) {
+                failed.add("squareness no closer to square than before");
+            }
+            return String.join(", ", failed);
+        }
+    }
+
     /** What applying the compensation did, for the page to show. */
     public static final class CompensationOutcome {
         public final boolean kept;
         public final MachineCompensation compensation;
+        /** The basis: the median of the readings the compensation was made from. */
         public final MachineDiagnosticsResults.Datum before;
+        /** What the board read after the change: one reading, or the mean of two. */
         public final MachineDiagnosticsResults.Datum after;
+        public final int basisReadings;
+        public final int verificationReadings;
+        public final double lineX, lineY, lineShearDegrees;
+        public final boolean squareness;
+        public final CompensationVerdict verdict;
         public final File backup;
         public final List<String> changes;
         public final List<String> skipped;
@@ -2089,11 +2217,20 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
         CompensationOutcome(boolean kept, MachineCompensation compensation,
                 MachineDiagnosticsResults.Datum before, MachineDiagnosticsResults.Datum after,
+                int basisReadings, int verificationReadings, double lineX, double lineY,
+                double lineShearDegrees, boolean squareness, CompensationVerdict verdict,
                 File backup, List<String> changes, List<String> skipped, String message) {
             this.kept = kept;
             this.compensation = compensation;
             this.before = before;
             this.after = after;
+            this.basisReadings = basisReadings;
+            this.verificationReadings = verificationReadings;
+            this.lineX = lineX;
+            this.lineY = lineY;
+            this.lineShearDegrees = lineShearDegrees;
+            this.squareness = squareness;
+            this.verdict = verdict;
             this.backup = backup;
             this.changes = changes;
             this.skipped = skipped;
@@ -2101,15 +2238,33 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
     }
 
+    /** The mean of several readings of the board, as one reading; the residual is the worst. */
+    static MachineDiagnosticsResults.Datum meanOf(List<MachineDiagnosticsResults.Datum> readings) {
+        MachineDiagnosticsResults.Datum latest = readings.get(readings.size() - 1);
+        double x = 0, y = 0, shear = 0, residual = 0;
+        for (MachineDiagnosticsResults.Datum d : readings) {
+            x += d.getScaleX();
+            y += d.getScaleY();
+            shear += d.getShearDegrees();
+            residual = Math.max(residual, d.getRmsResidualMm());
+        }
+        int n = readings.size();
+        return new MachineDiagnosticsResults.Datum(latest.getBoard(), latest.getHeadId(), x / n,
+                y / n, shear / n, latest.getRotationDegrees(), latest.isMirrored(), residual,
+                latest.getPoints());
+    }
+
     /**
      * Put what the datum board measured into the machine as a compensation, and prove it.
      * <p>
      * machine.xml is copied aside first. The transform axes are added and every taught coordinate
-     * carried across; then the datum board group runs again on the compensated machine. If its
-     * frame comes back within {@value #COMPENSATION_CONVERGENCE} of a true millimetre the
-     * configuration is saved; if not, everything is put back and nothing is saved, and the
-     * report says what came back instead. Must run on the machine task thread, as the
-     * verification moves the machine.
+     * carried across, and the camera's axes are checked to travel the new raw distance for a
+     * true one; then the datum board group runs again on the compensated machine, once, and a
+     * second time if the first reading does not settle it. If the frame comes back within the
+     * line the readings' scatter sets - see {@link CompensationBasis#tolerance} - and closer to
+     * a true millimetre than it was, the configuration is saved; if not, everything is put back
+     * and nothing is saved, and the report says what came back instead. Must run on the machine
+     * task thread, as the verification moves the machine.
      *
      * @param job               The open job, whose board positions are carried across; null for none.
      * @param includeSquareness Whether to lean the Y axis back by the shear measured.
@@ -2155,20 +2310,56 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         log("Compensation: %s", compensation);
         log("machine.xml copied to %s", backup.getName());
 
+        // The raw travel the camera's axes make for 100 true millimetres, before and after. The
+        // coordinates are carried across on the assumption that the transform took effect on
+        // the axes the camera moves in; that is proved in software before the board is asked.
+        double[] travelBefore = MachineCompensation.rawTravelPer100(camera, anchor, rawX, rawY);
         MachineCompensation.Applied applied = compensation.apply(machine, rawX, rawY, job);
         log("%d coordinates carried across, %d left alone", applied.changes.size(),
                 applied.skipped.size());
         List<String> changes = MachineCompensation.describe(applied);
+        double[] travelAfter = MachineCompensation.rawTravelPer100(camera, anchor, rawX, rawY);
+        String notInEffect = compensation.checkTravel(travelBefore, travelAfter);
+        if (notInEffect != null) {
+            applied.undo(machine);
+            throw new Exception("The compensation did not take effect on the camera's axes ("
+                    + notInEffect + "); it was taken out again and nothing was saved.");
+        }
+        log("Camera travel per 100 true mm: X %.6f -> %.6f raw, Y %.6f -> %.6f raw",
+                travelBefore[0], travelAfter[0], travelBefore[1], travelAfter[1]);
 
-        // Prove it on the board. The verification reading is made under the new compensation,
-        // so it is tagged with the next generation; if the compensation goes, so does the reading.
+        // Prove it on the board. The verification readings are made under the new compensation,
+        // so they are tagged with the next generation; if the compensation goes, so do they.
         int generation = lastResults.getCompensationGeneration();
         lastResults.setCompensationGeneration(generation + 1);
         MachineDiagnosticsResults.Datum latestBefore = lastResults.getDatum();
-        MachineDiagnosticsResults.Datum after;
+        double lineX = basis.tolerance(basis.sdScaleX);
+        double lineY = basis.tolerance(basis.sdScaleY);
+        double lineShear = basis.shearTolerance();
+        List<MachineDiagnosticsResults.Datum> verifications = new ArrayList<>();
+        MachineDiagnosticsResults.Datum after = null;
+        CompensationVerdict verdict = null;
         try {
-            run(machine, EnumSet.of(TestGroup.DatumBoard));
-            after = lastResults == null ? null : lastResults.getDatum();
+            // One reading; a second when the first does not settle it. One reading of this
+            // machine scatters by about the line; the mean of two by less.
+            for (int reading = 1; reading <= 2; reading++) {
+                run(machine, EnumSet.of(TestGroup.DatumBoard));
+                MachineDiagnosticsResults.Datum read = lastResults == null ? null : lastResults.getDatum();
+                if (read == null || read == latestBefore) {
+                    break;
+                }
+                verifications.add(read);
+                after = verifications.size() == 1 ? read : meanOf(verifications);
+                verdict = CompensationVerdict.judge(before.getScaleX() - 1, before.getScaleY() - 1,
+                        before.getShearDegrees(), after.getScaleX() - 1, after.getScaleY() - 1,
+                        after.getShearDegrees(), lineX, lineY, lineShear, includeSquareness);
+                log("Verification reading %d: X %+.3f%%, Y %+.3f%%, shear %+.3f deg; %s", reading,
+                        (read.getScaleX() - 1) * 100, (read.getScaleY() - 1) * 100,
+                        read.getShearDegrees(), verdict.kept ? "converged" : verdict.whatFailed());
+                if (verdict.kept) {
+                    break;
+                }
+            }
         }
         catch (Exception e) {
             applied.undo(machine);
@@ -2179,37 +2370,27 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             throw new Exception("The verification run failed (" + e.getMessage()
                     + "); the compensation was taken out again and nothing was saved.", e);
         }
-        // Converged: within what the readings the basis came from can be expected to scatter,
-        // and no worse than before on either axis. The sixth real run had two compensations
-        // undone for reading 0.053 % and 0.066 % against a fixed 0.05 % line, from a basis that
-        // itself scattered by 0.05 % - both were right to within the measurement.
-        double toleranceX = basis.tolerance(basis.sdScaleX);
-        double toleranceY = basis.tolerance(basis.sdScaleY);
-        boolean converged = after != null && after != latestBefore
-                && Math.abs(after.getScaleX() - 1) <= toleranceX
-                && Math.abs(after.getScaleY() - 1) <= toleranceY
-                && Math.abs(after.getScaleX() - 1) <= Math.max(Math.abs(before.getScaleX() - 1), 0.0005)
-                && Math.abs(after.getScaleY() - 1) <= Math.max(Math.abs(before.getScaleY() - 1), 0.0005)
-                && (!includeSquareness
-                        || Math.abs(after.getShearDegrees()) <= Math.max(
-                                COMPENSATION_SQUARENESS_CONVERGENCE_DEGREES,
-                                Math.abs(before.getShearDegrees())));
+        boolean converged = verdict != null && verdict.kept;
         String message;
         if (converged) {
             getConfiguration().save();
             message = String.format("Compensated. Against the board the machine millimetre was "
-                    + "%+.3f%% / %+.3f%% (X / Y, the median of %d readings) and is now %+.3f%% / "
-                    + "%+.3f%%, within the %.3f%% / %.3f%% those readings scatter by. %d coordinates "
-                    + "were carried across; machine.xml before the change is %s.",
+                    + "%+.3f%% / %+.3f%% (X / Y, the median of %d readings) and reads %+.3f%% / "
+                    + "%+.3f%% now, from %d verification reading(s), against a line of %.3f%% / "
+                    + "%.3f%%. What is left is within what one reading of this machine scatters "
+                    + "by; to take it out as well, read the board two or three more times and "
+                    + "compensate again, which composes onto this one. %d coordinates were "
+                    + "carried across; machine.xml before the change is %s.",
                     (before.getScaleX() - 1) * 100, (before.getScaleY() - 1) * 100, basis.readings,
                     (after.getScaleX() - 1) * 100, (after.getScaleY() - 1) * 100,
-                    toleranceX * 100, toleranceY * 100, applied.changes.size(), backup.getName());
+                    verifications.size(), lineX * 100, lineY * 100, applied.changes.size(),
+                    backup.getName());
             log(message);
         }
         else {
             applied.undo(machine);
-            // The board was read on the compensated machine; with the compensation gone, that
-            // reading describes nothing. The ones it was made from stand again.
+            // The board was read on the compensated machine; with the compensation gone, those
+            // readings describe nothing. The ones it was made from stand again.
             lastResults.setCompensationGeneration(generation);
             lastResults.removeDatumHistory(generation + 1);
             lastResults.setDatum(latestBefore);
@@ -2217,29 +2398,40 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             message = after == null
                     ? "The board could not be measured after the change; the compensation was taken out again."
                     : String.format("After the change the board read %+.3f%% / %+.3f%% (X / Y) "
-                            + "and %+.3f degrees, against a basis of %+.3f%% / %+.3f%% from %d "
-                            + "reading(s) that scatter by %.3f%% / %.3f%%; that is not converged, "
-                            + "so the compensation was taken out again and nothing was saved. More "
-                            + "board readings make the basis and the tolerance more certain; a "
-                            + "machine that drifts less between the fiducials makes every reading "
-                            + "closer to the last.",
+                            + "and %+.3f degrees, from %d verification reading(s), against a basis "
+                            + "of %+.3f%% / %+.3f%% and %+.3f degrees from %d reading(s). To stand, "
+                            + "the frame had to come back within %.3f%% / %.3f%% (%.2f degrees) of "
+                            + "true and closer to it than the basis: %s. The compensation was taken "
+                            + "out again and nothing was saved. A frame that reads differently from "
+                            + "one run to the next is a machine that moves between the fiducials; "
+                            + "the datum board report's anchor drift says how much.",
                             (after.getScaleX() - 1) * 100, (after.getScaleY() - 1) * 100,
-                            after.getShearDegrees(), (before.getScaleX() - 1) * 100,
-                            (before.getScaleY() - 1) * 100, basis.readings, toleranceX * 100,
-                            toleranceY * 100);
+                            after.getShearDegrees(), verifications.size(),
+                            (before.getScaleX() - 1) * 100, (before.getScaleY() - 1) * 100,
+                            before.getShearDegrees(), basis.readings, lineX * 100, lineY * 100,
+                            lineShear, verdict == null ? "no reading" : verdict.whatFailed());
             log(message);
         }
-        // What was done, beside the verification report.
+        // What was done, beside the last verification report.
         if (lastReportDirectory != null) {
             try {
                 List<String> lines = new ArrayList<>();
                 lines.add(converged ? "COMPENSATION KEPT" : "COMPENSATION UNDONE");
                 lines.add(compensation.toString());
                 lines.add(String.format("Basis: %d reading(s); scale X %+.4f%% sd %.4f%%, Y %+.4f%% sd "
-                        + "%.4f%%, shear %+.4f deg sd %.4f; tolerance %.4f%% / %.4f%%", basis.readings,
+                        + "%.4f%%, shear %+.4f deg sd %.4f; line %.4f%% / %.4f%% / %.3f deg", basis.readings,
                         (basis.scaleX - 1) * 100, basis.sdScaleX * 100, (basis.scaleY - 1) * 100,
                         basis.sdScaleY * 100, basis.shearDegrees, basis.sdShearDegrees,
-                        toleranceX * 100, toleranceY * 100));
+                        lineX * 100, lineY * 100, lineShear));
+                lines.add(String.format("Camera travel per 100 true mm: X %.6f -> %.6f raw, Y %.6f -> %.6f raw",
+                        travelBefore[0], travelAfter[0], travelBefore[1], travelAfter[1]));
+                for (int i = 0; i < verifications.size(); i++) {
+                    MachineDiagnosticsResults.Datum v = verifications.get(i);
+                    lines.add(String.format("Verification %d: scale X %+.4f%%, Y %+.4f%%, shear %+.4f deg, "
+                            + "residual %.4f mm over %d points", i + 1, (v.getScaleX() - 1) * 100,
+                            (v.getScaleY() - 1) * 100, v.getShearDegrees(), v.getRmsResidualMm(),
+                            v.getPoints()));
+                }
                 lines.add(message);
                 lines.add("");
                 lines.add("Coordinates carried across:");
@@ -2256,8 +2448,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Logger.warn(e, "Machine diagnostics: writing compensation.txt");
             }
         }
-        return new CompensationOutcome(converged, compensation, before, after, backup, changes,
-                applied.skipped, message);
+        return new CompensationOutcome(converged, compensation, before, after, basis.readings,
+                verifications.size(), lineX, lineY, lineShear, includeSquareness, verdict, backup,
+                changes, applied.skipped, message);
     }
 
     private void runGroup(ReferenceMachine machine, TestGroup group,
@@ -3040,6 +3233,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         MachineDiagnosticsResults.VisionNoise noise = new MachineDiagnosticsResults.VisionNoise(
                 camera.getId(), sdPixels, sdMm, range, xs.size(), fps);
+        if (driftSeconds > 0) {
+            measureStandingDrift(camera, vision, feature, upp, sdMm, noise, report);
+        }
         recordResults(TestGroup.VisionNoise, report, results -> {
             List<MachineDiagnosticsResults.VisionNoise> kept = new ArrayList<>();
             for (MachineDiagnosticsResults.VisionNoise other : results.getVisionNoise()) {
@@ -3050,6 +3246,101 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             kept.add(noise);
             results.setVisionNoise(kept);
         });
+    }
+
+    /**
+     * The fiducial watched for a minute or so with nothing commanded, about once a second. The
+     * noise floor is what changes from one frame to the next; this is what changes from one
+     * minute to the next - the frame, the camera on its mount and the axes under their holding
+     * current, all moving with temperature - and it is the floor under any two readings taken
+     * minutes apart, such as a board reading and the one that verifies a compensation made from
+     * it. Read against the datum board group's anchor drift, which is taken between hops, it
+     * says whether what moves there moves because the machine moved or moves anyway.
+     */
+    private void measureStandingDrift(ReferenceCamera camera, VisionSolutions vision, Circle feature,
+            Location upp, double frameSdMm, MachineDiagnosticsResults.VisionNoise noise,
+            MachineDiagnosticsReport report) throws Exception {
+        report.blank();
+        report.line("Standing drift, the fiducial watched for %d s with nothing moving", driftSeconds);
+        List<Object[]> rows = new ArrayList<>();
+        List<Double> ts = new ArrayList<>();
+        List<Double> xs = new ArrayList<>();
+        List<Double> ys = new ArrayList<>();
+        double t0 = NanosecondTime.getRuntimeSeconds();
+        long seen = 0;
+        camera.actuateLightBeforeCapture();
+        try {
+            while (NanosecondTime.getRuntimeSeconds() - t0 < driftSeconds) {
+                checkAborted();
+                BufferedImage frame = freshFrame(camera, seen);
+                seen = fingerprint(frame);
+                double t = NanosecondTime.getRuntimeSeconds() - t0;
+                try {
+                    Circle circle = vision.getSubjectPixelLocation(camera, camera, feature, 0.0,
+                            null, new ScoreRange(), false, frame);
+                    ts.add(t);
+                    xs.add(circle.x * upp.getX());
+                    ys.add(circle.y * upp.getY());
+                    rows.add(new Object[] { t, circle.x, circle.y });
+                }
+                catch (Exception e) {
+                    // A frame without a detection; the next one will do.
+                }
+                Thread.sleep(1000);
+            }
+        }
+        finally {
+            camera.actuateLightAfterCapture();
+        }
+        if (ts.size() < 5) {
+            report.line("  too few detections (%d) to say anything about drift", ts.size());
+            return;
+        }
+        double firstX = xs.get(0), firstY = ys.get(0);
+        for (Object[] r : rows) {
+            r[1] = (Double) r[1] - xs.get(0) / upp.getX();
+            r[2] = (Double) r[2] - ys.get(0) / upp.getY();
+        }
+        report.writeCsv("vision-drift.csv", new String[] { "t_s", "dx_px", "dy_px" }, rows);
+        double[] t = new double[ts.size()], x = new double[ts.size()], y = new double[ts.size()];
+        double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (int i = 0; i < ts.size(); i++) {
+            t[i] = ts.get(i);
+            x[i] = xs.get(i) - firstX;
+            y[i] = ys.get(i) - firstY;
+            minX = Math.min(minX, x[i]);
+            maxX = Math.max(maxX, x[i]);
+            minY = Math.min(minY, y[i]);
+            maxY = Math.max(maxY, y[i]);
+        }
+        MachineDiagnosticsMath.LinearFit fitX = MachineDiagnosticsMath.linearFit(t, x);
+        MachineDiagnosticsMath.LinearFit fitY = MachineDiagnosticsMath.linearFit(t, y);
+        double perMinuteX = fitX.slope * 60;
+        double perMinuteY = fitY.slope * 60;
+        double span = t[t.length - 1] - t[0];
+        double excursion = Math.hypot(maxX - minX, maxY - minY);
+        report.line("  %d detections over %.0f s; drift %+.4f mm/min in X, %+.4f mm/min in Y "
+                + "(fit r2 %.2f / %.2f); the image wandered %.4f mm in all", ts.size(), span,
+                perMinuteX, perMinuteY, fitX.rSquared, fitY.rSquared, excursion);
+        noise.setDrift(span, perMinuteX, perMinuteY, excursion);
+        log("Standing drift: %+.4f / %+.4f mm/min over %.0f s, excursion %.4f mm", perMinuteX,
+                perMinuteY, span, excursion);
+        double perMinute = Math.hypot(perMinuteX, perMinuteY);
+        if (excursion <= Math.max(5 * frameSdMm, 0.005)) {
+            report.finding(Severity.Info, "With nothing moving for %.0f s, the image on %s stayed "
+                    + "within %.4f mm: the frame, the camera and the axes hold still between "
+                    + "readings.", span, camera.getName(), excursion);
+        }
+        else {
+            report.finding(Severity.Warning, "With nothing moving for %.0f s, the image on %s "
+                    + "drifted %.4f mm (%+.4f mm/min in X, %+.4f mm/min in Y), %.0f times the "
+                    + "frame-to-frame scatter. Something moves with nothing commanded - the camera "
+                    + "on its mount, the frame with temperature, or the axes under their holding "
+                    + "current - and two readings a minute apart cannot be compared closer than "
+                    + "this. If the datum board group's anchor drifts more than this between hops, "
+                    + "the rest is the moving.", span, camera.getName(), excursion, perMinuteX,
+                    perMinuteY, frameSdMm > 0 ? excursion / frameSdMm : 0);
+        }
     }
 
     // Camera latency: how old a frame is when it arrives.

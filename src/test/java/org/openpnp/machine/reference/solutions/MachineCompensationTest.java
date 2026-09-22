@@ -1,6 +1,7 @@
 package org.openpnp.machine.reference.solutions;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -182,6 +183,45 @@ public class MachineCompensationTest {
         assertEquals(farFiducial.getX(), head.getCalibrationSecondaryFiducialLocation().getX(), 1e-9);
         assertEquals(offsets.getX(), camera.getHeadOffsets().getX(), 1e-9);
         assertEquals(upp.getX(), camera.getUnitsPerPixel().getX(), 1e-12);
+    }
+
+    /**
+     * The camera's raw travel for 100 true millimetres is what the compensation says it is once
+     * applied, and the check says so; a transform that did not reach the camera's axes fails it.
+     */
+    @Test
+    public void theCamerasTravelChangesByTheScaleAndTheCheckSeesIt() throws Exception {
+        ReferenceControllerAxis rawX = controllerAxis(camera.getAxisX());
+        ReferenceControllerAxis rawY = controllerAxis(camera.getAxisY());
+        head.setCalibrationPrimaryFiducialLocation(ANCHOR);
+        MachineCompensation c = new MachineCompensation(0.99836, 0.99813, 0.0254, ANCHOR);
+
+        double[] before = MachineCompensation.rawTravelPer100(camera, ANCHOR, rawX, rawY);
+        assertEquals(100.0, before[0], 1e-9);
+        assertEquals(100.0, before[1], 1e-9);
+        MachineCompensation.Applied applied = c.apply(machine, rawX, rawY, null);
+        double[] after = MachineCompensation.rawTravelPer100(camera, ANCHOR, rawX, rawY);
+
+        // A true 100 mm along X is 99.836 raw; along Y 99.813 times the cosine of the lean.
+        assertEquals(99.836, after[0], 1e-9);
+        assertEquals(99.813 * Math.cos(Math.toRadians(0.0254)), after[1], 1e-9);
+        assertNull(c.checkTravel(before, after));
+        // Had the axes not been touched, the travel would not have changed, and it says so.
+        String complaint = c.checkTravel(before, before);
+        assertNotNull(complaint);
+        assertTrue(complaint.contains("should have been 0.998360"), complaint);
+
+        applied.undo(machine);
+        double[] back = MachineCompensation.rawTravelPer100(camera, ANCHOR, rawX, rawY);
+        assertEquals(100.0, back[0], 1e-9);
+        assertEquals(100.0, back[1], 1e-9);
+        // And composed onto an earlier one, the ratio is still this compensation's own scale.
+        new MachineCompensation(1.01362, 1.01243, 0.147, ANCHOR).apply(machine, rawX, rawY, null);
+        double[] first = MachineCompensation.rawTravelPer100(camera, ANCHOR, rawX, rawY);
+        c.apply(machine, rawX, rawY, null);
+        double[] second = MachineCompensation.rawTravelPer100(camera, ANCHOR, rawX, rawY);
+        assertNull(c.checkTravel(first, second));
+        assertEquals(0.99836, second[0] / first[0], 1e-9);
     }
 
     @Test
