@@ -3234,7 +3234,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         MachineDiagnosticsResults.VisionNoise noise = new MachineDiagnosticsResults.VisionNoise(
                 camera.getId(), sdPixels, sdMm, range, xs.size(), fps);
         if (driftSeconds > 0) {
-            measureStandingDrift(camera, vision, feature, upp, sdMm, noise, report);
+            report.blank();
+            report.line("Standing drift");
+            measureStandingDrift(camera, vision, feature, upp, sdMm, noise, report, "after the noise floor");
         }
         recordResults(TestGroup.VisionNoise, report, results -> {
             List<MachineDiagnosticsResults.VisionNoise> kept = new ArrayList<>();
@@ -3259,9 +3261,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      */
     private void measureStandingDrift(ReferenceCamera camera, VisionSolutions vision, Circle feature,
             Location upp, double frameSdMm, MachineDiagnosticsResults.VisionNoise noise,
-            MachineDiagnosticsReport report) throws Exception {
-        report.blank();
-        report.line("Standing drift, the fiducial watched for %d s with nothing moving", driftSeconds);
+            MachineDiagnosticsReport report, String occasion) throws Exception {
+        report.line("  the fiducial watched for %d s with nothing moving, %s", driftSeconds, occasion);
         List<Object[]> rows = new ArrayList<>();
         List<Double> ts = new ArrayList<>();
         List<Double> xs = new ArrayList<>();
@@ -3301,7 +3302,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             r[1] = (Double) r[1] - xs.get(0) / upp.getX();
             r[2] = (Double) r[2] - ys.get(0) / upp.getY();
         }
-        report.writeCsv("vision-drift.csv", new String[] { "t_s", "dx_px", "dy_px" }, rows);
+        report.writeCsv(noise != null ? "vision-drift.csv" : "homing-drift.csv",
+                new String[] { "t_s", "dx_px", "dy_px" }, rows);
         double[] t = new double[ts.size()], x = new double[ts.size()], y = new double[ts.size()];
         double minX = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, minY = Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
         for (int i = 0; i < ts.size(); i++) {
@@ -3322,24 +3324,26 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.line("  %d detections over %.0f s; drift %+.4f mm/min in X, %+.4f mm/min in Y "
                 + "(fit r2 %.2f / %.2f); the image wandered %.4f mm in all", ts.size(), span,
                 perMinuteX, perMinuteY, fitX.rSquared, fitY.rSquared, excursion);
-        noise.setDrift(span, perMinuteX, perMinuteY, excursion);
-        log("Standing drift: %+.4f / %+.4f mm/min over %.0f s, excursion %.4f mm", perMinuteX,
-                perMinuteY, span, excursion);
+        if (noise != null) {
+            noise.setDrift(span, perMinuteX, perMinuteY, excursion);
+        }
+        log("Standing drift %s: %+.4f / %+.4f mm/min over %.0f s, excursion %.4f mm", occasion,
+                perMinuteX, perMinuteY, span, excursion);
         double perMinute = Math.hypot(perMinuteX, perMinuteY);
         if (excursion <= Math.max(5 * frameSdMm, 0.005)) {
-            report.finding(Severity.Info, "With nothing moving for %.0f s, the image on %s stayed "
+            report.finding(Severity.Info, "With nothing moving for %.0f s %s, the image on %s stayed "
                     + "within %.4f mm: the frame, the camera and the axes hold still between "
-                    + "readings.", span, camera.getName(), excursion);
+                    + "readings.", span, occasion, camera.getName(), excursion);
         }
         else {
-            report.finding(Severity.Warning, "With nothing moving for %.0f s, the image on %s "
+            report.finding(Severity.Warning, "With nothing moving for %.0f s %s, the image on %s "
                     + "drifted %.4f mm (%+.4f mm/min in X, %+.4f mm/min in Y), %.0f times the "
                     + "frame-to-frame scatter. Something moves with nothing commanded - the camera "
                     + "on its mount, the frame with temperature, or the axes under their holding "
                     + "current - and two readings a minute apart cannot be compared closer than "
                     + "this. If the datum board group's anchor drifts more than this between hops, "
-                    + "the rest is the moving.", span, camera.getName(), excursion, perMinuteX,
-                    perMinuteY, frameSdMm > 0 ? excursion / frameSdMm : 0);
+                    + "the rest is the moving.", span, occasion, camera.getName(), excursion,
+                    perMinuteX, perMinuteY, frameSdMm > 0 ? excursion / frameSdMm : 0);
         }
     }
 
@@ -4485,6 +4489,40 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             report.finding(Severity.Warning, "Visual homing is off, so this scatter is the "
                     + "repeatability of the endstops and it carries into every job. Visual homing "
                     + "against the fiducial would remove it.");
+        }
+        if (offset > HOMING_SCATTER_TOLERANCE_MM / 2
+                && head.getVisualHomingMethod() != ReferenceHead.VisualHomingMethod.None) {
+            // Visual homing sets the frame from its own detection of the fiducial, so this offset
+            // is not the endstops: it is where a normal approach to the fiducial lands against
+            // the frame the homing set - the machine's positioning, seen from the origin - and
+            // any difference between the homing pipeline's centre and this test's detector. The
+            // seventh session read +0.03 / +0.04 mm in every one of fifteen cycles, with Y
+            // 0.05 mm different in three of them, while visual homing still took a short move
+            // onto the fiducial as exact and Y executed such moves as a jump or not at all.
+            report.finding(Severity.Info, "After every homing the fiducial sits %.3f mm (%+.3f, %+.3f) "
+                    + "from where it was taught, though the homings agree with one another to "
+                    + "%.3f mm. Visual homing is on, so this is not the endstops: it is where an "
+                    + "approach of 10 mm from -X lands against the frame the homing set from its "
+                    + "own detection, and any difference between the homing pipeline's centre and "
+                    + "this test's. Every measured position on this machine is made by such an "
+                    + "approach, so it is the offset the homed frame has against everything "
+                    + "taught.", offset, statsX.mean, statsY.mean, worst);
+        }
+        if (driftSeconds > 0) {
+            // The camera stands on the fiducial after the last cycle: what the origin does in
+            // the minute after a homing. The seventh session's board readings found the anchor
+            // 0.08 mm to -Y of the taught location a minute after homing and 0.20 mm after
+            // two, run after run, against +0.04 mm right after; whether that is the machine
+            // relaxing after the homing bump or moving with every hop is what this says.
+            VisionSolutions vision = machine.getVisionSolutions();
+            Circle feature = vision.getExpectedOffsetsAndDiameter(camera, camera, fiducial,
+                    diameter, false);
+            Location upp = camera.getUnitsPerPixelAtZ().convertToUnits(LengthUnit.Millimeters);
+            report.blank();
+            report.line("After the last homing, standing on the fiducial");
+            Double floor = noiseFloorMm(camera);
+            measureStandingDrift(camera, vision, feature, upp, floor == null ? 0.001 : floor, null,
+                    report, "after homing");
         }
     }
 

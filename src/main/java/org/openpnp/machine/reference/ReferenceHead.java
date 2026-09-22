@@ -79,15 +79,22 @@ public class ReferenceHead extends AbstractHead {
                 // Homing failed
                 throw new Exception("Visual homing failed");
             }
-            // The optimized fiducial locator no longer positions to the final detected location, so for homing, 
-            // we must.
-            hm.moveTo(homingLocation);
-
+            // The locator leaves the camera where it took its last frame and returns where it saw
+            // the fiducial from there. The frame is reset from the two together: the camera's
+            // coordinate in the homed frame is where it stands now, shifted by what puts the
+            // fiducial it saw onto the taught location. It used to move the camera onto the
+            // fiducial first and take that short move as exact. A move of a few hundredths of a
+            // millimetre is what an axis with stiction executes as a jump or not at all - the
+            // seventh session's Y axis moved 0.01 mm steps as 0.05 mm jumps - and its origin came
+            // out 0.03 / 0.04 mm from the fiducial after every homing, and 0.05 mm differently in
+            // Y from one homing to the next, which is that move having happened or not.
+            Location cameraLocation = hm.getLocation();
             if (apply) {
                 AxesLocation axesHomingLocation;
                 if (getVisualHomingMethod() == VisualHomingMethod.ResetToFiducialLocation) {
-                    // Convert fiducial location to raw coordinates
-                    axesHomingLocation = hm.toRaw(hm.toHeadLocation(getHomingFiducialLocation()));
+                    // Convert the camera's location in the homed frame to raw coordinates.
+                    axesHomingLocation = hm.toRaw(hm.toHeadLocation(cameraLocationInHomedFrame(
+                            getHomingFiducialLocation(), cameraLocation, homingLocation)));
                 }
                 else {
                     // Use bare X, Y homing coordinates (legacy mode).
@@ -99,15 +106,40 @@ public class ReferenceHead extends AbstractHead {
                     Location cameraHomingLocation = hm.toHeadMountableLocation(hm.toTransformed(axesHomingLocation), 
                             LocationOption.SuppressCameraCalibration);
                     // Having the legacy camera location, we can derive the axesHomingLocation, this time accounting 
-                    // for the camera calibration head offsets.
-                    axesHomingLocation = hm.toRaw(hm.toHeadLocation(cameraHomingLocation));
+                    // for the camera calibration head offsets, and for where the camera stands against the fiducial.
+                    axesHomingLocation = hm.toRaw(hm.toHeadLocation(cameraLocationInHomedFrame(
+                            cameraHomingLocation, cameraLocation, homingLocation)));
                 }
                 // Just take the X and Y axes.
                 axesHomingLocation = axesHomingLocation.byType(Axis.Type.X, Axis.Type.Y); 
                 // Reset to the axes homing location as the new Working Coordinate System.
                 machine.getMotionPlanner().setGlobalOffsets(axesHomingLocation);
+                // Leave the camera over the fiducial, as before; in the homed frame that is the
+                // taught location. Whatever this short move does or does not do, the frame stands.
+                Location taught = getHomingFiducialLocation().convertToUnits(cameraLocation.getUnits());
+                hm.moveTo(cameraLocation.derive(taught.getX(), taught.getY(), null, null));
+            }
+            else {
+                // A test: show the fiducial found, as before.
+                hm.moveTo(homingLocation);
             }
         }
+    }
+
+    /**
+     * Where the camera is in the frame that puts the fiducial it saw onto the taught location:
+     * where it stands now, shifted by taught minus seen. Z and rotation are the camera's own.
+     *
+     * @param taught         Where the fiducial is by definition, the homing fiducial location.
+     * @param cameraLocation Where the camera stands, in the frame before the reset.
+     * @param seen           Where the fiducial was seen from there, in the same frame.
+     */
+    public static Location cameraLocationInHomedFrame(Location taught, Location cameraLocation,
+            Location seen) {
+        Location t = taught.convertToUnits(cameraLocation.getUnits());
+        Location s = seen.convertToUnits(cameraLocation.getUnits());
+        return cameraLocation.derive(cameraLocation.getX() + t.getX() - s.getX(),
+                cameraLocation.getY() + t.getY() - s.getY(), null, null);
     }
 
     @Override
