@@ -65,7 +65,7 @@ public final class Form {
 
     /** What a field edits, and so which control it gets and how its text is converted. */
     enum Kind {
-        Text, Integer, Decimal, Length, Angle, Location, Choice, Segmented, Toggle, ReadOnly,
+        Text, TextArea, Integer, Decimal, Length, Angle, Location, Choice, Segmented, Toggle, ReadOnly,
         Pipeline, Action, Custom
     }
 
@@ -269,6 +269,13 @@ public final class Form {
 
         public Builder text(String property, String label) {
             return add(Kind.Text, property, label);
+        }
+
+        /** Several lines of text, such as G-code, in the mono figures. */
+        public Builder textArea(String property, String label, int rows) {
+            add(Kind.TextArea, property, label);
+            last.width = rows;
+            return this;
         }
 
         public Builder integer(String property, String label) {

@@ -171,6 +171,32 @@ public class FormWizard extends AbstractConfigurationWizard {
         switch (field.kind) {
             case Text:
                 return text(field, false);
+            case TextArea: {
+                javax.swing.JTextArea area = new javax.swing.JTextArea(Math.max(2, field.width), 20);
+                area.setFont(Ui.mono(Ui.BASE, java.awt.Font.PLAIN));
+                area.setLineWrap(false);
+                area.getDocument().addDocumentListener(new DocumentListener() {
+                    @Override
+                    public void insertUpdate(DocumentEvent e) {
+                        edited();
+                    }
+
+                    @Override
+                    public void removeUpdate(DocumentEvent e) {
+                        edited();
+                    }
+
+                    @Override
+                    public void changedUpdate(DocumentEvent e) {
+                        edited();
+                    }
+                });
+                controls.put(field, area);
+                javax.swing.JScrollPane scroll = new javax.swing.JScrollPane(area);
+                scroll.setPreferredSize(new java.awt.Dimension(160, area.getPreferredSize().height + 6));
+                scroll.setMinimumSize(new java.awt.Dimension(60, area.getPreferredSize().height + 6));
+                return scroll;
+            }
             case Integer:
             case Decimal:
             case Angle:
@@ -526,11 +552,18 @@ public class FormWizard extends AbstractConfigurationWizard {
             JComponent control = entry.getValue();
             switch (field.kind) {
                 case Text:
+                case TextArea:
                     addWrappedBinding(spec.bean, field.property, control, "text"); //$NON-NLS-1$
                     break;
-                case Integer:
-                    addWrappedBinding(spec.bean, field.property, control, "text", integer); //$NON-NLS-1$
+                case Integer: {
+                    // A long property, a time in milliseconds say, takes the long converter.
+                    Class<?> type = Form.requireProperty(spec.bean.getClass(), field.property, true)
+                            .getPropertyType();
+                    addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
+                            type == long.class || type == Long.class
+                                    ? new org.openpnp.gui.support.LongConverter() : integer);
                     break;
+                }
                 case Decimal:
                 case Angle:
                     addWrappedBinding(spec.bean, field.property, control, "text", decimal); //$NON-NLS-1$

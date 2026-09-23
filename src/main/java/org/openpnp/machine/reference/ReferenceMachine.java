@@ -96,7 +96,6 @@ import org.openpnp.machine.reference.solutions.ScriptingSolutions;
 import org.openpnp.machine.reference.solutions.VisionSolutions;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision;
 import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
-import org.openpnp.machine.reference.wizards.MachineDiagnosticsWizard;
 import org.openpnp.machine.reference.wizards.ReferenceMachineConfigurationWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;

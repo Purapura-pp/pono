@@ -366,10 +366,22 @@ public class MainFrame extends JFrame {
         }
     }
 
-    private DiagnosticsPanel diagnosticsPanel;
+    private CalibrationPanel calibrationPanel;
 
-    public DiagnosticsPanel getDiagnosticsTab() {
-        return diagnosticsPanel;
+    public CalibrationPanel getCalibrationTab() {
+        return calibrationPanel;
+    }
+
+    /**
+     * Goes to the calibration page with the step selected: the one of the kind for the subject,
+     * or the first outstanding one when no kind is given.
+     */
+    public void showCalibrationStep(org.openpnp.model.CalibrationStep kind, Object subject) {
+        if (calibrationPanel == null) {
+            return;
+        }
+        showTab(calibrationPanel);
+        calibrationPanel.show(kind, subject);
     }
 
     private boolean dockMaximised;
@@ -431,7 +443,8 @@ public class MainFrame extends JFrame {
         // A page is a card of its own below the camera. The job and feeders pages are a dock,
         // which is that card already; the others are put in one.
         Component view = page;
-        if (page != jobPanel && page != feedersPanel) {
+        if (page != jobPanel && page != feedersPanel && !(page instanceof IssuesAndSolutionsPanel)
+                && !(page instanceof CalibrationPanel)) {
             org.openpnp.gui.shell.RoundedPanel card = org.openpnp.gui.shell.RoundedPanel.card();
             card.setLayout(new BorderLayout());
             card.add(page, BorderLayout.CENTER);
@@ -1217,9 +1230,11 @@ public class MainFrame extends JFrame {
         addNavigation("Vision", org.openpnp.gui.shell.Ui.icon("eye", 20), visionSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         navigationRail.addGap();
         addNavigation("MachineSetup", org.openpnp.gui.shell.Ui.icon("machine", 20), machineSetupPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        diagnosticsPanel = new DiagnosticsPanel(configuration);
-        addNavigation("Diagnostics", org.openpnp.gui.shell.Ui.icon("ruler", 20), diagnosticsPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        // The issues page finds and measures; the calibration page after it carries out. The
+        // diagnostics page they replace was both, and neither.
         addNavigation("IssuesAndSolutions", org.openpnp.gui.shell.Ui.icon("alert", 20), issuesAndSolutionsPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        calibrationPanel = new CalibrationPanel(configuration, this);
+        addNavigation("Calibration", org.openpnp.gui.shell.Ui.icon("target", 20), calibrationPanel); //$NON-NLS-1$ //$NON-NLS-2$
         logPanel = new LogPanel();
         addNavigation("Log", org.openpnp.gui.shell.Ui.icon("log", 20), logPanel); //$NON-NLS-1$ //$NON-NLS-2$
         // Settings is a page of its own at the foot of the rail: appearance, language and units,

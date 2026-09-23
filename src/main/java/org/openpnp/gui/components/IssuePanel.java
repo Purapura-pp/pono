@@ -221,6 +221,42 @@ public class IssuePanel extends JPanel {
         initDataBindings();
     }
 
+    /**
+     * Only the solution's own controls - its choices and settings - without the subject, the
+     * issue and the solution as text, which the issues page's properties column says above it.
+     */
+    public IssuePanel controlsOnly() {
+        for (javax.swing.JComponent c : new javax.swing.JComponent[] { lblSubject, panel_1, lblIssue, panel_2,
+                lblSolution, panel_3 }) {
+            c.setVisible(false);
+        }
+        // Held at the column's width, the controls giving way down to their smallest.
+        scrollPane.setViewportView(new org.openpnp.gui.form.LegacyWizardAdapter.WidthTracking(panel));
+        return this;
+    }
+
+    /**
+     * A choice's description wrapped to the properties column: the descriptions are sentences,
+     * often HTML, and a label laid them out on one line as wide as the sentence.
+     */
+    static String wrapped(String text) {
+        if (text == null) {
+            return null;
+        }
+        String body = "<body style='width: 160px'>"; //$NON-NLS-1$
+        if (text.regionMatches(true, 0, "<html>", 0, 6)) { //$NON-NLS-1$
+            return text.contains("width") ? text : "<html>" + body + text.substring(6); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        return "<html>" + body + text.replace("&", "&amp;").replace("<", "&lt;").replace("\n", "<br>") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$
+                + "</body></html>"; //$NON-NLS-1$
+    }
+
+    /** Whether the solution has anything to choose or set, which is what is left of it then. */
+    public boolean hasControls() {
+        return issue != null && (issue.getProperties().length > 0 || issue.getChoices().length > 0
+                || issue.getExtendedDescription() != null);
+    }
+
     public int getDynamicRows(int formRow) {
         formRow += (issue.getExtendedDescription() == null) ? 0 : 1; 
         formRow += issue.getProperties().length;
@@ -238,7 +274,7 @@ public class IssuePanel extends JPanel {
                     new RowSpec[] {
                             FormSpecs.DEFAULT_ROWSPEC,}));
 
-            JLabel lbl = new JLabel(issue.getExtendedDescription());
+            JLabel lbl = new JLabel(wrapped(issue.getExtendedDescription()));
             setClipboardHandler(lbl);
             panelControl.add(lbl, "1, 1");
             lbl.setIcon(issue.getExtendedIcon());
@@ -495,10 +531,14 @@ public class IssuePanel extends JPanel {
                         new RowSpec[] {
                                 FormSpecs.DEFAULT_ROWSPEC,}));
 
-                JLabel lblMultiChoice = new JLabel(choice.getDescription());
+                JLabel lblMultiChoice = new JLabel(wrapped(choice.getDescription()));
                 panelMultiChoice.add(lblMultiChoice, "1, 1");
                 lblMultiChoice.setIcon(iconFor(choice));
-                lblMultiChoice.setIconTextGap(20);
+                // The picture over the words rather than beside them: side by side they were
+                // wider than the properties column.
+                lblMultiChoice.setVerticalTextPosition(javax.swing.SwingConstants.BOTTOM);
+                lblMultiChoice.setHorizontalTextPosition(javax.swing.SwingConstants.CENTER);
+                lblMultiChoice.setIconTextGap(8);
                 setClipboardHandler(lblMultiChoice);
                 lblMultiChoice.addMouseListener(new MouseListener() {
                     private boolean beginClick;

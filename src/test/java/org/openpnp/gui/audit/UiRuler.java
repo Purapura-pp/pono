@@ -152,8 +152,8 @@ public class UiRuler {
                 { "PartsPanel", "parts" }, { "PackagesPanel", "packages" },
                 { "BoardsPanel", "boards" }, { "PanelsPanel", "panels" },
                 { "VisionSettingsPanel", "vision" }, { "MachineSetupPanel", "machine" },
-                { "IssuesAndSolutionsPanel", "issues" }, { "DiagnosticsPanel", "diagnostics" },
-                { "CalibrationPanel", "calibration" }, { "LogPanel", "log" },
+                { "IssuesAndSolutionsPanel", "issues" }, { "CalibrationPanel", "calibration" },
+                { "LogPanel", "log" },
                 { "SettingsPanel", "settings" } };
         for (String[] id : ids) {
             PAGE_IDS.put(id[0], id[1]);
