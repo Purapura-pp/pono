@@ -6,9 +6,8 @@
 # These are the calls that were left on purpose, not a list of work waiting to
 # be done. Read the test's own comment before adding to them.
 #
-# 171 calls in 104 files.
+# 164 calls in 101 files.
 org/openpnp/Main.java	2
-org/openpnp/gui/BoardPlacementsPanel.java	1
 org/openpnp/gui/JobPlacementsPanel.java	1
 org/openpnp/gui/ScriptAction.java	1
 org/openpnp/gui/SubmitDiagnosticsDialog.java	4
@@ -76,8 +75,6 @@ org/openpnp/machine/reference/solutions/HeadSolutions.java	5
 org/openpnp/machine/reference/solutions/VisionSolutions.java	4
 org/openpnp/machine/reference/vision/ReferenceBottomVision.java	2
 org/openpnp/machine/reference/vision/ReferenceFiducialLocator.java	1
-org/openpnp/machine/reference/vision/wizards/BottomVisionSettingsConfigurationWizard.java	3
-org/openpnp/machine/reference/vision/wizards/FiducialVisionSettingsConfigurationWizard.java	3
 org/openpnp/model/AbstractPartSettingsHolder.java	6
 org/openpnp/model/AbstractVisionSettings.java	1
 org/openpnp/model/BottomVisionSettings.java	2

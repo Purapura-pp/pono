@@ -118,6 +118,14 @@ public abstract class AbstractVisionSettings extends AbstractModelObject impleme
     }
 
     /**
+     * Whether a holder is the pseudo holder that keeps stock settings from being deleted, which
+     * is not something that uses them and is not to be listed as one.
+     */
+    public static boolean isStockHolder(PartSettingsHolder holder) {
+        return holder instanceof StockSettingsHolder;
+    }
+
+    /**
      * This is a pseudo PartSettingsHolder for stock settings. It provides an implicit reference to the 
      * stock settings to the stock settings cannot be deleted etc. 
      *

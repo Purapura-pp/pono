@@ -133,6 +133,20 @@ public final class DockRenderers {
         };
     }
 
+    /** Text in the secondary colour, the stylesheet's {@code .t2}: what a row says about itself. */
+    public static TableCellRenderer secondary() {
+        return new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setForeground(isSelected ? table.getSelectionForeground() : Ui.text2());
+                setBorder(new EmptyBorder(0, 10, 0, 10));
+                return this;
+            }
+        };
+    }
+
     /** Text in the muted colour, for a column that is only sometimes worth reading. */
     /** The stylesheet's bold ID: the column a row is known by. */
     public static TableCellRenderer bold() {
@@ -153,7 +167,8 @@ public final class DockRenderers {
             public Component getTableCellRendererComponent(JTable table, Object value,
                     boolean isSelected, boolean hasFocus, int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                setForeground(Ui.muted());
+                // Muted on the accent-soft of a selected row is under 3:1; text-2 keeps 4.5.
+                setForeground(isSelected ? Ui.text2() : Ui.muted());
                 setBorder(new EmptyBorder(0, 10, 0, 10));
                 return this;
             }
