@@ -407,7 +407,9 @@ public class MainFrame extends JFrame {
         int width = inspectorPanel.isCollapsed() ? InspectorPanel.COLLAPSED_WIDTH
                 : org.openpnp.gui.shell.PageLayouts.inspectorWidth(
                         prefs.getInt(PREF_INSPECTOR_WIDTH, InspectorPanel.PREFERRED_WIDTH), getWidth());
-        splitPaneInspector.setDividerLocation(total - width - splitPaneInspector.getDividerSize());
+        // The divider is placed from the split's left edge; its right margin is not the column's.
+        splitPaneInspector.setDividerLocation(total - splitPaneInspector.getInsets().right - width
+                - splitPaneInspector.getDividerSize());
     }
 
     /**
@@ -1304,8 +1306,8 @@ public class MainFrame extends JFrame {
         // positions set while the window is still finding its size are not.
         onDividerReleased(splitPaneInspector, () -> {
             if (!inspectorPanel.isCollapsed() && splitPaneInspector.getWidth() > 0) {
-                int width = splitPaneInspector.getWidth() - splitPaneInspector.getDividerLocation()
-                        - splitPaneInspector.getDividerSize();
+                int width = splitPaneInspector.getWidth() - splitPaneInspector.getInsets().right
+                        - splitPaneInspector.getDividerLocation() - splitPaneInspector.getDividerSize();
                 if (width > InspectorPanel.COLLAPSED_WIDTH) {
                     prefs.putInt(PREF_INSPECTOR_WIDTH, width);
                     applyInspectorWidth();
