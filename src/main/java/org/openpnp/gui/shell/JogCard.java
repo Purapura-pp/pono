@@ -71,9 +71,11 @@ import com.formdev.flatlaf.FlatClientProperties;
 @SuppressWarnings("serial")
 public class JogCard extends OverlayCard {
     private static final String PREF_EXPANDED = "MachineControlsPanel.jogControlsExpanded"; //$NON-NLS-1$
-    /** The stylesheet says 328; the CJK glyphs in the foot buttons need 16 more. */
-    private static final int WIDTH = 344;
+    /** The stylesheet's .jog: 328 wide with its 12 pixel padding. */
+    private static final int WIDTH = 328;
     private static final int KEY = 40;
+    /** The page the card is on, whose own folded or unfolded state it keeps. */
+    private String page = ""; //$NON-NLS-1$
 
     private final Preferences prefs = Preferences.userNodeForPackage(MachineControlsPanel.class);
     private final MachineControlsPanel controls;
@@ -112,7 +114,7 @@ public class JogCard extends OverlayCard {
 
     public void setExpanded(boolean expanded) {
         isExpanded = expanded;
-        prefs.putBoolean(PREF_EXPANDED, expanded);
+        prefs.putBoolean(PREF_EXPANDED + page, expanded);
         faces.show(this, expanded ? "expanded" : "collapsed"); //$NON-NLS-1$ //$NON-NLS-2$
         setBorder(expanded ? BorderFactory.createEmptyBorder(12, 12, 12, 12)
                 : BorderFactory.createEmptyBorder());
@@ -121,6 +123,80 @@ public class JogCard extends OverlayCard {
             getParent().revalidate();
             getParent().repaint();
         }
+    }
+
+    /**
+     * The page on show: each keeps whether the card is folded. The feeders page starts folded,
+     * since its table and the feeder's form need the image more than the jog keys do; the others
+     * start open.
+     */
+    public void setPage(String page, boolean foldedByDefault) {
+        this.page = page == null || page.isEmpty() ? "" : "." + page; //$NON-NLS-1$ //$NON-NLS-2$
+        boolean fallback = this.page.isEmpty() ? prefs.getBoolean(PREF_EXPANDED, true) : !foldedByDefault;
+        setExpanded(prefs.getBoolean(PREF_EXPANDED + this.page, fallback));
+    }
+
+    private JPanel speedRow;
+    private JPanel footRow;
+    private java.awt.Component speedGap;
+    private java.awt.Component footGap;
+    private boolean compact;
+
+    /**
+     * Where the image is too short for the whole card, the speed and the foot's buttons go and
+     * the pads, the tool and the step stay: the keys are what the card is for, and every one of
+     * those buttons is also in the Machine menu and on a hotkey.
+     */
+    private void setCompact(boolean compact) {
+        if (this.compact == compact || speedRow == null) {
+            return;
+        }
+        this.compact = compact;
+        speedRow.setVisible(!compact);
+        footRow.setVisible(!compact);
+        speedGap.setVisible(!compact);
+        footGap.setVisible(!compact);
+        revalidate();
+        if (getParent() != null) {
+            getParent().revalidate();
+        }
+    }
+
+    private final java.awt.event.ComponentListener stageListener = new java.awt.event.ComponentAdapter() {
+        @Override
+        public void componentResized(java.awt.event.ComponentEvent e) {
+            fitStage();
+        }
+    };
+
+    private void fitStage() {
+        java.awt.Container stage = getParent();
+        if (stage == null || speedRow == null || stage.getHeight() <= 0) {
+            return;
+        }
+        // Room below the camera tools along the top: their 32 pixel row with its shadow, and a
+        // margin above, between and below.
+        int room = stage.getHeight() - 32 - OverlayCard.SHADOW_TOP - OverlayCard.SHADOW_BOTTOM
+                - 3 * OverlayAnchorLayout.MARGIN;
+        int full = expanded.getPreferredSize().height + getInsets().top + getInsets().bottom
+                + (compact ? speedRow.getPreferredSize().height + footRow.getPreferredSize().height + 20 : 0);
+        javax.swing.SwingUtilities.invokeLater(() -> setCompact(isExpanded && full > room));
+    }
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (getParent() != null) {
+            getParent().addComponentListener(stageListener);
+        }
+    }
+
+    @Override
+    public void removeNotify() {
+        if (getParent() != null) {
+            getParent().removeComponentListener(stageListener);
+        }
+        super.removeNotify();
     }
 
     private void buildExpanded() {
@@ -133,7 +209,7 @@ public class JogCard extends OverlayCard {
         tool.putClientProperty(FlatClientProperties.STYLE,
                 "arc: 12; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
                         + "buttonBackground: null; buttonArrowColor: $Pono.textMuted; focusWidth: 0"); //$NON-NLS-1$
-        tool.setFont(Ui.font(Ui.BASE, Font.BOLD));
+        tool.setFont(Ui.font(Ui.BASE));
         tool.setRenderer(new ToolRenderer());
         tool.setPreferredSize(new Dimension(tool.getPreferredSize().width, 30));
         tool.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
@@ -184,7 +260,7 @@ public class JogCard extends OverlayCard {
 
         // ---- step ----
         JPanel step = row(10);
-        JLabel stepLabel = Ui.muted(Translations.getString("JogCard.Step")); //$NON-NLS-1$
+        JLabel stepLabel = Ui.t2(Translations.getString("JogCard.Step")); //$NON-NLS-1$
         stepLabel.setFont(Ui.font(11f));
         step.add(stepLabel);
         JLabel units = Ui.mono(configuration.getSystemUnits().getShortName() + " / \u00b0", 11f); //$NON-NLS-1$
@@ -196,13 +272,16 @@ public class JogCard extends OverlayCard {
         });
         step.add(units);
         step.add(Box.createHorizontalGlue());
+        jog.getIncrementSelector().setTight(true);
         step.add(jog.getIncrementSelector());
         expanded.add(step);
-        expanded.add(Box.createVerticalStrut(10));
+        speedGap = Box.createVerticalStrut(10);
+        expanded.add(speedGap);
 
         // ---- speed ----
         JPanel speed = row(10);
-        JLabel speedLabel = Ui.muted(Translations.getString("JogCard.Speed")); //$NON-NLS-1$
+        speedRow = speed;
+        JLabel speedLabel = Ui.t2(Translations.getString("JogCard.Speed")); //$NON-NLS-1$
         speedLabel.setFont(Ui.font(11f));
         speed.add(speedLabel);
         JSlider slider = jog.getSpeedSlider();
@@ -220,10 +299,12 @@ public class JogCard extends OverlayCard {
         slider.addChangeListener(e -> percent.setText(slider.getValue() + "%")); //$NON-NLS-1$
         speed.add(percent);
         expanded.add(speed);
-        expanded.add(Box.createVerticalStrut(10));
+        footGap = Box.createVerticalStrut(10);
+        expanded.add(footGap);
 
         // ---- foot ----
         JPanel foot = new JPanel(new GridLayout(1, 5, 6, 0));
+        footRow = foot;
         foot.setOpaque(false);
         foot.setAlignmentX(LEFT_ALIGNMENT);
         foot.add(footButton(Translations.getString("JogCard.ParkXY"), jog.xyParkAction)); //$NON-NLS-1$
@@ -259,7 +340,8 @@ public class JogCard extends OverlayCard {
         inner.setOpaque(false);
         inner.setLayout(new BoxLayout(inner, BoxLayout.X_AXIS));
         inner.add(open);
-        JLabel key = Ui.kbd("J"); //$NON-NLS-1$
+        // The key that opens it, as it is really bound.
+        JLabel key = Ui.kbd("Ctrl Shift J"); //$NON-NLS-1$
         key.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createEmptyBorder(0, 0, 0, 10),
                 key.getBorder()));
         inner.add(key);
@@ -350,11 +432,11 @@ public class JogCard extends OverlayCard {
         return key;
     }
 
-    /** The muted centre of a pad: a label, not a key. */
+    /** The muted centre of a pad: a label, not a key, in a key's outline. */
     private static JComponent centre(String text, int height) {
-        RoundedPanel c = new RoundedPanel(9, Ui::surface3, () -> null);
+        RoundedPanel c = new RoundedPanel(9, Ui::surface3, Ui::borderStrong);
         c.setLayout(new BorderLayout());
-        JLabel label = Ui.muted(text);
+        JLabel label = Ui.t2(text);
         label.setFont(Ui.font(12f, Font.BOLD));
         label.setHorizontalAlignment(SwingConstants.CENTER);
         c.add(label, BorderLayout.CENTER);
@@ -396,7 +478,7 @@ public class JogCard extends OverlayCard {
         JPanel column = new JPanel();
         column.setOpaque(false);
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
-        JLabel label = Ui.muted(letter);
+        JLabel label = Ui.t2(letter);
         label.setFont(Ui.font(10f, Font.BOLD));
         label.setAlignmentX(CENTER_ALIGNMENT);
         label.setPreferredSize(new Dimension(KEY, 14));
@@ -427,6 +509,10 @@ public class JogCard extends OverlayCard {
         return button;
     }
 
+    private static String escape(String text) {
+        return text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$
+    }
+
     /** {@code N1 · NT1  head H1}: the tool's name, its tip, and where it is. */
     private final class ToolRenderer extends javax.swing.DefaultListCellRenderer {
         @Override
@@ -435,15 +521,21 @@ public class JogCard extends OverlayCard {
             super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
             if (value instanceof HeadMountableItem) {
                 HeadMountable item = ((HeadMountableItem) value).getItem();
-                StringBuilder text = new StringBuilder(item.getName());
+                // The tool and its tip at 600, where it is in the muted colour at 500.
+                StringBuilder text = new StringBuilder("<html><b>").append(escape(item.getName())); //$NON-NLS-1$
                 if (item instanceof Nozzle && ((Nozzle) item).getNozzleTip() != null) {
-                    text.append(" \u00b7 ").append(((Nozzle) item).getNozzleTip().getName()); //$NON-NLS-1$
+                    text.append(" \u00b7 ").append(escape(((Nozzle) item).getNozzleTip().getName())); //$NON-NLS-1$
                 }
+                text.append("</b>"); //$NON-NLS-1$
                 if (item.getHead() != null) {
-                    text.append("   ").append(Translations.getString("CameraPanel.Show.HeadPrefix")) //$NON-NLS-1$ //$NON-NLS-2$
-                            .append(item.getHead().getName());
+                    java.awt.Color muted = Ui.muted();
+                    text.append("&nbsp;&nbsp;<span style='font-weight:normal;color:") //$NON-NLS-1$
+                            .append(String.format("#%06x", muted.getRGB() & 0xffffff)).append("'>") //$NON-NLS-1$ //$NON-NLS-2$
+                            .append(escape(Translations.getString("CameraPanel.Show.HeadPrefix") //$NON-NLS-1$
+                                    + item.getHead().getName()))
+                            .append("</span>"); //$NON-NLS-1$
                 }
-                setText(text.toString());
+                setText(text.append("</html>").toString()); //$NON-NLS-1$
                 setIcon(Ui.iconSm(item instanceof Nozzle ? "nozzle" //$NON-NLS-1$
                         : item instanceof org.openpnp.spi.Camera ? "camera" : "zap")); //$NON-NLS-1$ //$NON-NLS-2$
                 setIconTextGap(8);

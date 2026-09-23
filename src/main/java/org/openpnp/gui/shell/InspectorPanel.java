@@ -18,7 +18,6 @@
 package org.openpnp.gui.shell;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Component;
 import java.awt.Font;
@@ -40,7 +39,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingConstants;
-import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 
 import org.openpnp.Translations;
@@ -65,7 +63,7 @@ import com.formdev.flatlaf.FlatClientProperties;
  * buttons mean, and that is a decision about the wizards rather than about the layout.
  */
 @SuppressWarnings("serial")
-public class InspectorPanel extends JPanel {
+public class InspectorPanel extends RoundedPanel {
     /**
      * The width to start with. The wizards this hosts were drawn for the full width of the window,
      * and at 380 pixels the strip feeder's had its right hand columns cut off; the user can drag
@@ -97,21 +95,25 @@ public class InspectorPanel extends JPanel {
     private boolean collapsed;
 
     public InspectorPanel() {
+        // The stylesheet's .side: a card of its own, 14 pixel corners, beside the page's.
+        super(Tokens.R_LG, Ui::surface, Ui::border);
         setLayout(new BorderLayout());
-        Color border = UIManager.getColor("Pono.borderStrong"); //$NON-NLS-1$
-        setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0,
-                border != null ? border : getBackground().darker()));
 
         // Underlined tabs rather than the card tabs used elsewhere: these sit directly under the
         // name of the thing being edited, and a second row of boxes there reads as a second panel.
+        // Tabs that do not fit go behind the button at the end of the row, as the stylesheet's
+        // "more" tab has them, rather than scrolling out of sight.
         sheets.putClientProperty("JTabbedPane.tabType", "underlined"); //$NON-NLS-1$ //$NON-NLS-2$
         sheets.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+        sheets.putClientProperty(FlatClientProperties.TABBED_PANE_TABS_POPUP_POLICY,
+                FlatClientProperties.TABBED_PANE_POLICY_AS_NEEDED);
+        sheets.putClientProperty(FlatClientProperties.TABBED_PANE_SCROLL_BUTTONS_POLICY,
+                FlatClientProperties.TABBED_PANE_POLICY_NEVER);
 
-        // The stylesheet's .insp-h: 46 high, the icon in a 28 pixel accent-soft square, the name
-        // in 13.5 semibold over the type in 11.5 muted, and "..." and the fold button at the right.
-        nameLabel.setFont(Ui.font(13.5f).deriveFont(java.util.Map.of(
-                java.awt.font.TextAttribute.WEIGHT, java.awt.font.TextAttribute.WEIGHT_SEMIBOLD)));
-        typeLabel.setFont(Ui.font(11.5f));
+        // The stylesheet's .side .hdr: 14 16 12 padding, the icon in a 38 pixel accent-soft
+        // square with 10 pixel corners, the name at 15/700 over the kind of thing in 12 muted.
+        nameLabel.setFont(Ui.weighted(Tokens.FS_TITLE, Tokens.FW_TITLE));
+        typeLabel.setFont(Ui.font(Tokens.FS_SMALL));
         typeLabel.setForeground(Ui.muted());
         nothingSelected.setForeground(Ui.muted());
         nothingSelected.setFont(Ui.font(12.5f));
@@ -120,15 +122,20 @@ public class InspectorPanel extends JPanel {
         titles.setOpaque(false);
         titles.setLayout(new BoxLayout(titles, BoxLayout.Y_AXIS));
         titles.add(nameLabel);
+        titles.add(javax.swing.Box.createVerticalStrut(1));
         titles.add(typeLabel);
+        // A long name gives way with an ellipsis, and the whole of it is the tooltip.
+        nameLabel.setMinimumSize(new Dimension(40, 10));
+        typeLabel.setMinimumSize(new Dimension(40, 10));
 
         header.setOpaque(false);
+        header.setLayout(new BorderLayout(12, 0));
         header.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
-                new EmptyBorder(0, 16, 0, 12)));
-        header.setPreferredSize(new Dimension(0, 47));
+                new EmptyBorder(14, 16, 12, 12)));
         iconBox.setLayout(new BorderLayout());
-        iconBox.setPreferredSize(new Dimension(28, 28));
+        iconBox.setPreferredSize(new Dimension(38, 38));
+        iconLabel.setForeground(Ui.accent());
         iconLabel.setHorizontalAlignment(SwingConstants.CENTER);
         iconBox.add(iconLabel, BorderLayout.CENTER);
         JPanel iconHolder = new JPanel(new java.awt.GridBagLayout());
@@ -156,16 +163,16 @@ public class InspectorPanel extends JPanel {
         body.add(nothingSelected, BorderLayout.CENTER);
         add(body, BorderLayout.CENTER);
 
-        // The stylesheet's .insp-f: Reset and Apply at the right, over a hairline.
-        footer.setOpaque(false);
-        footer.setLayout(new BoxLayout(footer, BoxLayout.X_AXIS));
+        // The stylesheet's .side .foot: Reset and Apply sharing the width, on surface-2 under a
+        // hairline.
+        footer.setOpaque(true);
+        footer.setBackground(Ui.surface2());
+        footer.setLayout(new java.awt.GridLayout(1, 2, 8, 0));
         footer.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
                 new EmptyBorder(10, 16, 10, 16)));
-        footer.add(javax.swing.Box.createHorizontalGlue());
         resetButton.addActionListener(e -> forEachWizard(org.openpnp.gui.support.AbstractConfigurationWizard::reset));
         footer.add(resetButton);
-        footer.add(javax.swing.Box.createHorizontalStrut(8));
         applyButton.addActionListener(e -> forEachWizard(org.openpnp.gui.support.AbstractConfigurationWizard::apply));
         footer.add(applyButton);
         footer.setVisible(false);
@@ -176,7 +183,8 @@ public class InspectorPanel extends JPanel {
                 Translations.getString("InspectorPanel.Action.Toggle.Description")); //$NON-NLS-1$
         unfold.addActionListener(toggleCollapsedAction);
         strip.setOpaque(false);
-        strip.setBorder(new EmptyBorder(8, 3, 0, 3));
+        // Below the card's 14 pixel corners, which would otherwise clip the button to a sliver.
+        strip.setBorder(new EmptyBorder(Tokens.R_LG, 5, 0, 5));
         strip.add(unfold, BorderLayout.NORTH);
         strip.setVisible(false);
         add(strip, BorderLayout.WEST);
@@ -192,14 +200,14 @@ public class InspectorPanel extends JPanel {
         clear();
     }
 
-    private final RoundedPanel iconBox = new RoundedPanel(6, Ui::accentSoft, () -> null);
-    private final JButton moreButton = Ui.iconButton(Ui.iconSm("more"), Ui.Size.Xs, Ui.Variant.Ghost, //$NON-NLS-1$
+    private final RoundedPanel iconBox = new RoundedPanel(Tokens.R_MD, Ui::accentSoft, () -> null);
+    private final JButton moreButton = Ui.iconButton(Ui.icon("more"), Ui.Size.Sm, Ui.Variant.Ghost, //$NON-NLS-1$
             Translations.getString("InspectorPanel.More")); //$NON-NLS-1$
     private final JPanel footer = new JPanel();
     private final JButton resetButton = Ui.button(Translations.getString("AbstractConfigurationWizard.Action.Reset"), //$NON-NLS-1$
-            null, Ui.Size.Sm, Ui.Variant.Default);
+            null, Ui.Size.Md, Ui.Variant.Default);
     private final JButton applyButton = Ui.button(Translations.getString("AbstractConfigurationWizard.Action.Apply"), //$NON-NLS-1$
-            null, Ui.Size.Sm, Ui.Variant.Primary);
+            null, Ui.Size.Md, Ui.Variant.Primary);
     private final java.beans.PropertyChangeListener dirtyListener = e -> followDirty();
 
     /** The wizards currently on show, whose Reset and Apply the footer stands in for. */
@@ -398,13 +406,37 @@ public class InspectorPanel extends JPanel {
         }
         iconLabel.setIcon(inspection.icon);
         iconBox.setVisible(inspection.icon != null);
-        nameLabel.setText(inspection.title == null ? String.valueOf(inspection.subject)
-                : inspection.title);
+        String name = inspection.title == null ? String.valueOf(inspection.subject) : inspection.title;
+        nameLabel.setText(name);
+        nameLabel.setToolTipText(name);
         typeLabel.setText(inspection.type == null || inspection.type.isEmpty() ? " " //$NON-NLS-1$
                 : inspection.type);
+        typeLabel.setToolTipText(inspection.type == null || inspection.type.isEmpty() ? null : inspection.type);
         setBody(sheets);
         adoptWizards();
+        setMoreMenu(actionsMenu(inspection.subject));
         return result;
+    }
+
+    /**
+     * The "..." menu of a thing that reports actions of its own - a machine element, a feeder -
+     * which were only on the machine setup page's toolbar; null for one that has none.
+     */
+    private static javax.swing.JPopupMenu actionsMenu(Object subject) {
+        if (!(subject instanceof PropertySheetHolder)) {
+            return null;
+        }
+        Action[] actions = ((PropertySheetHolder) subject).getPropertySheetHolderActions();
+        if (actions == null || actions.length == 0) {
+            return null;
+        }
+        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        for (Action action : actions) {
+            if (action != null) {
+                menu.add(action);
+            }
+        }
+        return menu.getComponentCount() == 0 ? null : menu;
     }
 
     /** Show nothing, and say so rather than leaving an empty tab strip. */
@@ -453,22 +485,53 @@ public class InspectorPanel extends JPanel {
      * feeder, and which one it is decides what the sheets below even contain.
      */
     public static String typeOf(Object holder) {
-        String name = holder.getClass().getSimpleName();
-        return name.startsWith("Reference") ? name.substring("Reference".length()) : name; //$NON-NLS-1$ //$NON-NLS-2$
+        // "料带飞达 · ReferenceStripFeeder": the name the user knows, and the class the
+        // configuration file and the wiki call it by.
+        String simple = holder.getClass().getSimpleName();
+        String display = org.openpnp.gui.support.DisplayNames.typeName(holder.getClass());
+        return display == null || display.isEmpty() || display.equals(simple) ? simple
+                : display + " \u00b7 " + simple; //$NON-NLS-1$
+    }
+
+    /** Fired when the column goes from showing nothing to showing something, or back. */
+    public static final String PROPERTY_CONTENT = "content"; //$NON-NLS-1$
+
+    /** Whether there are sheets on show, as against "nothing selected". */
+    public boolean hasContent() {
+        return body.getComponentCount() == 1 && body.getComponent(0) == sheets;
     }
 
     private void setBody(Component content) {
         if (body.getComponentCount() == 1 && body.getComponent(0) == content) {
             return;
         }
+        boolean had = hasContent();
         body.removeAll();
         body.add(content, BorderLayout.CENTER);
         body.revalidate();
         body.repaint();
+        firePropertyChange(PROPERTY_CONTENT, had, hasContent());
     }
 
     public PropertySheetPresenter getPresenter() {
         return presenter;
+    }
+
+    /**
+     * The sheets and the "nothing selected" note take turns in the body, and a theme change
+     * reaches only the one on show: the other kept the old theme's colours - white tabs with dark
+     * text in the dark theme, after switching while nothing was selected.
+     */
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        // Null while the superclass constructor is still running.
+        if (sheets != null && sheets.getParent() == null) {
+            javax.swing.SwingUtilities.updateComponentTreeUI(sheets);
+        }
+        if (nothingSelected != null && nothingSelected.getParent() == null) {
+            javax.swing.SwingUtilities.updateComponentTreeUI(nothingSelected);
+        }
     }
 
     @Override

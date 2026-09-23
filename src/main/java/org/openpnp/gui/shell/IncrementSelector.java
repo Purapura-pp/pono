@@ -19,7 +19,6 @@ package org.openpnp.gui.shell;
 
 import java.awt.Component;
 import java.awt.Font;
-import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
@@ -56,8 +55,25 @@ public class IncrementSelector extends JPanel {
     private boolean applying;
 
     public IncrementSelector() {
-        // The stylesheet's .seg: 3 pixel padding, 2 pixel gaps, 24 pixel segments.
-        setLayout(new GridLayout(1, LEVELS, 2, 0));
+        // The stylesheet's .seg: 3 pixel padding, 2 pixel gaps, 24 pixel segments each as wide as
+        // its distance, at least 38.
+        setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 2, 0) {
+            @Override
+            public java.awt.Dimension preferredLayoutSize(java.awt.Container target) {
+                // FlowLayout pads the row with a gap at either end; the stylesheet does not.
+                java.awt.Dimension size = super.preferredLayoutSize(target);
+                size.width -= 2 * getHgap();
+                return size;
+            }
+
+            @Override
+            public void layoutContainer(java.awt.Container target) {
+                super.layoutContainer(target);
+                for (Component c : target.getComponents()) {
+                    c.setLocation(c.getX() - getHgap(), c.getY());
+                }
+            }
+        });
         setOpaque(false);
         setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 3, 3, 3));
         ButtonGroup group = new ButtonGroup();
@@ -103,6 +119,19 @@ public class IncrementSelector extends JPanel {
         return buttons[level - 1];
     }
 
+    /** The tight segments, for the jog card, where five of them share the row with its label. */
+    public void setTight(boolean tight) {
+        for (JToggleButton button : buttons) {
+            if (tight) {
+                Ui.segTight(button);
+            }
+            else {
+                Ui.seg(button);
+            }
+        }
+        revalidate();
+    }
+
     /**
      * @param labels One distance per level, coarsest last, as the unit in force writes them.
      */
@@ -112,8 +141,17 @@ public class IncrementSelector extends JPanel {
                     "An increment selector has " + LEVELS + " levels, got " + labels.length);
         }
         for (int index = 0; index < LEVELS; index++) {
-            buttons[index].setText(labels[index]);
+            buttons[index].setText(plain(labels[index]));
         }
+        revalidate();
+    }
+
+    /** "1" rather than "1.0", "0.1" rather than "0.10": a distance as the stylesheet writes it. */
+    static String plain(String label) {
+        if (label == null || !label.matches("-?\\d+\\.\\d+")) { //$NON-NLS-1$
+            return label;
+        }
+        return label.replaceAll("0+$", "").replaceAll("\\.$", ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
     }
 
     public int getLevel() {

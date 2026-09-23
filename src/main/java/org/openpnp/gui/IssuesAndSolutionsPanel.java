@@ -382,14 +382,19 @@ public class IssuesAndSolutionsPanel extends JPanel {
             return;
         }
         int unhandled = 0;
+        boolean warning = false;
         for (Solutions.Issue issue : machine.getSolutions().getIssues()) {
             if (issue.getState() == Solutions.State.Open
                     && issue.getSeverity().ordinal() > Solutions.Severity.Information.ordinal()) {
                 unhandled++;
+                warning |= issue.getSeverity().ordinal() >= Solutions.Severity.Warning.ordinal();
             }
         }
         if (frame.getNavigation() != null) {
-            frame.getNavigation().setBadge(frame.getIssuesAndSolutionsTab(), unhandled);
+            // Red only when something is a warning or worse; suggestions alone are yellow.
+            frame.getNavigation().setBadge(frame.getIssuesAndSolutionsTab(), unhandled,
+                    warning ? org.openpnp.gui.shell.NavigationRail.Badge.Err
+                            : org.openpnp.gui.shell.NavigationRail.Badge.Warn);
         }
     }
 

@@ -216,14 +216,13 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         return null;
     }
 
-    public void selectCurrentTreePath() {
+    /**
+     * The actions of every node on the way down to the path, not just the selected one: a nozzle
+     * tip's actions belong beside the head's and the machine's.
+     */
+    private void fillToolbar(TreePath path) {
         toolBar.removeAll();
-
-        TreePath path = tree.getSelectionPath();
-        PropertySheetHolder holder = null;
         if (path != null) {
-            // The actions of every node on the way down, not just the selected one: a nozzle tip's
-            // actions belong beside the head's and the machine's.
             List<Object> pathsReverse = Arrays.asList(path.getPath());
             Collections.reverse(pathsReverse);
             for (Object o : pathsReverse) {
@@ -235,16 +234,50 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
                     }
                 }
             }
+        }
+        toolBar.revalidate();
+        toolBar.repaint();
+    }
+
+    /** The path whose properties are on show, for putting back when the user keeps unapplied edits. */
+    private TreePath shownPath;
+    private boolean revertingSelection;
+
+    public void selectCurrentTreePath() {
+        if (revertingSelection) {
+            return;
+        }
+        TreePath path = tree.getSelectionPath();
+        fillToolbar(path);
+        PropertySheetHolder holder = null;
+        if (path != null) {
             PropertySheetHolderTreeNode node =
                     (PropertySheetHolderTreeNode) path.getLastPathComponent();
             if (node != null) {
                 holder = node.obj;
             }
         }
-        MainFrame.get().getInspector().show(MachineSetupPanel.this, holder,
+        org.openpnp.gui.shell.PropertySheetPresenter.Result shown = MainFrame.get().getInspector()
+                .show(MachineSetupPanel.this, holder,
                 MachineSetupPanel.this,
                 holder == null ? null : holder.getPropertySheetHolderTitle(),
                 holder == null ? null : holder.getPropertySheetHolderIcon());
+        if (shown == org.openpnp.gui.shell.PropertySheetPresenter.Result.Cancelled) {
+            // The user kept the unapplied edits: the element they belong to stays selected, with
+            // its own actions in the toolbar.
+            revertingSelection = true;
+            try {
+                tree.setSelectionPath(shownPath);
+            }
+            finally {
+                revertingSelection = false;
+            }
+            fillToolbar(shownPath);
+            return;
+        }
+        if (shown == org.openpnp.gui.shell.PropertySheetPresenter.Result.Shown) {
+            shownPath = path;
+        }
 
         revalidate();
         repaint();

@@ -128,7 +128,9 @@ public class IncrementSelectorTest {
         selector.setLabels(new String[] {"0.001", "0.01", "0.1", "1.0", "10.0"});
 
         assertEquals("0.001", buttonsOf(selector).get(0).getText());
-        assertEquals("10.0", buttonsOf(selector).get(4).getText());
+        // Written as the stylesheet writes a distance: 1 and 10, not 1.0 and 10.0.
+        assertEquals("1", buttonsOf(selector).get(3).getText());
+        assertEquals("10", buttonsOf(selector).get(4).getText());
     }
 
     @Test

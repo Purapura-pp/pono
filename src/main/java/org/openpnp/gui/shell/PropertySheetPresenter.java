@@ -97,7 +97,7 @@ public class PropertySheetPresenter {
     private boolean asking;
 
     public PropertySheetPresenter(JTabbedPane sheets) {
-        this(sheets, new DialogPrompt());
+        this(sheets, new DialogPrompt(sheets));
     }
 
     public PropertySheetPresenter(JTabbedPane sheets, Prompt prompt) {
@@ -244,11 +244,20 @@ public class PropertySheetPresenter {
         }
     }
 
-    /** The question as the user has always been asked it, in a dialog. */
+    /**
+     * The question as the user has always been asked it, in a dialog - over the window it is
+     * about, where it used to open in the middle of the primary screen whichever screen that was.
+     */
     static class DialogPrompt implements Prompt {
+        private final Component parent;
+
+        DialogPrompt(Component parent) {
+            this.parent = parent;
+        }
+
         @Override
         public Choice ask(String name) {
-            int selection = JOptionPane.showConfirmDialog(null,
+            int selection = JOptionPane.showConfirmDialog(parent,
                     Translations.getString("PropertySheetPresenter.ApplyChanges.Message") //$NON-NLS-1$
                             .replace("%s", String.valueOf(name)), //$NON-NLS-1$
                     Translations.getString("PropertySheetPresenter.ApplyChanges.Title"), //$NON-NLS-1$

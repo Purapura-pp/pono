@@ -485,19 +485,54 @@ public class JobPanel extends JPanel {
     /** Fired whenever {@link #isJobRunning()} may have changed, for the top bar to follow. */
     public static final String PROPERTY_JOB_RUNNING = "jobRunning"; //$NON-NLS-1$
 
+    /** Fired on every change of the job's state: stopped, running, paused and the steps between. */
+    public static final String PROPERTY_JOB_STATE = "jobState"; //$NON-NLS-1$
+
     void setState(State newState) {
         boolean wasRunning = isJobRunning();
+        State was = this.state;
         this.state = newState;
         updateJobActions();
         firePropertyChange(PROPERTY_JOB_RUNNING, wasRunning, isJobRunning());
+        firePropertyChange(PROPERTY_JOB_STATE, was, newState);
         MainFrame frame = MainFrame.get();
         if (frame != null) {
-            frame.setStatusState(
-                    Translations.getString(state == State.Stopped ? "StatusBar.State.Idle" //$NON-NLS-1$
-                            : "StatusBar.State.Running"), //$NON-NLS-1$
-                    state == State.Stopped ? org.openpnp.gui.shell.Chip.Tone.Pending
-                            : org.openpnp.gui.shell.Chip.Tone.Run);
+            // What the status bar says is what the job is doing: a job paused by an error is
+            // paused, not running.
+            String key;
+            org.openpnp.gui.shell.Chip.Tone tone;
+            switch (state) {
+                case Paused:
+                    key = "StatusBar.State.Paused"; //$NON-NLS-1$
+                    tone = org.openpnp.gui.shell.Chip.Tone.Warn;
+                    break;
+                case Running:
+                case Pausing:
+                    key = "StatusBar.State.Running"; //$NON-NLS-1$
+                    tone = org.openpnp.gui.shell.Chip.Tone.Run;
+                    break;
+                case Stopping:
+                    key = "StatusBar.State.Stopping"; //$NON-NLS-1$
+                    tone = org.openpnp.gui.shell.Chip.Tone.Run;
+                    break;
+                case Stopped:
+                default:
+                    key = "StatusBar.State.Idle"; //$NON-NLS-1$
+                    tone = org.openpnp.gui.shell.Chip.Tone.Pending;
+                    break;
+            }
+            frame.setStatusState(Translations.getString(key), tone);
         }
+    }
+
+    /** Whether the job is paused, which is when Start means Resume. */
+    public boolean isJobPaused() {
+        return state == State.Paused;
+    }
+
+    /** Whether no job is under way at all. */
+    public boolean isJobStopped() {
+        return state == State.Stopped;
     }
 
     /**

@@ -22,36 +22,43 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.Insets;
 import java.awt.LayoutManager2;
+import java.awt.Rectangle;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Lays one component out to fill the container and pins the rest to its corners and top edge.
+ * Lays what is anchored to fill out over the whole container and pins the rest to its corners
+ * and top edge.
  * <p>
  * This is what puts the machine controls, the readout and the wizard instructions over the camera
  * image rather than in a column beside it. The camera view is the one thing on screen that gets
  * more useful the larger it is, and everything anchored here is small, so the space they used to
  * occupy goes to the image.
  * <p>
- * Each anchored component keeps its preferred size, clamped to the container so that a card can
- * never grow itself out of reach. The order components were added decides nothing; the anchor
- * does.
+ * The stylesheet's {@code .ov}: 12 pixels in from the edges, and the cards sharing a corner in a
+ * row 6 pixels apart, in the order they were added. The instructions go under the lower of the
+ * two rows along the top. Each card keeps its preferred size, clamped to the container so that a
+ * card can never grow itself out of reach.
  */
 public class OverlayAnchorLayout implements LayoutManager2 {
     public enum Anchor {
-        /** The layer underneath, given the whole container. */
+        /** The layers underneath, each given the whole container. */
         Fill,
         NorthWest,
         North,
         NorthEast,
         SouthWest,
+        /** The middle of the foot, as the strip's drag handle. */
+        South,
         SouthEast
     }
 
     /** Distance from the container's edges, so a card does not touch the image border. */
-    private static final int MARGIN = 10;
-    /** The stylesheet's .instr top: clear of the camera tools along the top edge. */
-    private static final int NORTH_TOP = 56;
+    static final int MARGIN = Tokens.PAD_OVERLAY;
+    /** Between the cards sharing a corner. */
+    static final int GAP = 6;
 
     private final Map<Component, Anchor> anchors = new LinkedHashMap<>();
 
@@ -83,51 +90,73 @@ public class OverlayAnchorLayout implements LayoutManager2 {
             int top = insets.top;
             int width = parent.getWidth() - insets.left - insets.right;
             int height = parent.getHeight() - insets.top - insets.bottom;
+            for (Component component : at(Anchor.Fill)) {
+                component.setBounds(left, top, width, height);
+            }
             // The east side is placed first, because the west side is the one that gives way.
-            for (Anchor anchor : new Anchor[] { Anchor.Fill, Anchor.NorthEast, Anchor.SouthEast,
-                    Anchor.North, Anchor.NorthWest, Anchor.SouthWest }) {
-                Component component = componentAt(anchor);
-                if (component == null || !component.isVisible()) {
-                    continue;
+            for (Anchor anchor : new Anchor[] { Anchor.NorthEast, Anchor.SouthEast, Anchor.NorthWest,
+                    Anchor.SouthWest }) {
+                row(anchor, left, top, width, height);
+            }
+            for (Anchor anchor : new Anchor[] { Anchor.NorthWest, Anchor.SouthWest }) {
+                List<Component> row = at(anchor);
+                if (row.size() == 1) {
+                    stackIfCrowded(row.get(0), anchor);
                 }
-                if (anchor == Anchor.Fill) {
-                    component.setBounds(left, top, width, height);
-                    continue;
+            }
+            // The instructions go under the camera tools rather than over them: the banner at the
+            // top edge covered the camera selector and the reticle switches, and they covered the
+            // step's title.
+            int below = top + MARGIN;
+            for (Anchor anchor : new Anchor[] { Anchor.NorthWest, Anchor.NorthEast }) {
+                Rectangle bounds = bounds(anchor);
+                if (bounds != null) {
+                    below = Math.max(below, bounds.y + bounds.height + MARGIN);
                 }
+            }
+            for (Component component : at(Anchor.North)) {
+                Dimension size = component.getPreferredSize();
+                int w = Math.min(size.width, Math.max(0, width - 2 * MARGIN));
+                int h = Math.min(size.height, Math.max(0, top + height - MARGIN - below));
+                component.setBounds(left + (width - w) / 2, below, w, h);
+                below += h + GAP;
+            }
+            for (Component component : at(Anchor.South)) {
                 Dimension size = component.getPreferredSize();
                 int w = Math.min(size.width, Math.max(0, width - 2 * MARGIN));
                 int h = Math.min(size.height, Math.max(0, height - 2 * MARGIN));
-                int x;
-                int y;
-                switch (anchor) {
-                    case North:
-                        // Below the two rows of camera tools rather than over them: the banner
-                        // at the top edge covered the camera selector and the reticle switches,
-                        // and they covered the step's title.
-                        x = left + (width - w) / 2;
-                        y = top + NORTH_TOP;
-                        break;
-                    case NorthEast:
-                        x = left + width - w - MARGIN;
-                        y = top + MARGIN;
-                        break;
-                    case SouthWest:
-                        x = left + MARGIN;
-                        y = top + height - h - MARGIN;
-                        break;
-                    case SouthEast:
-                        x = left + width - w - MARGIN;
-                        y = top + height - h - MARGIN;
-                        break;
-                    case NorthWest:
-                    default:
-                        x = left + MARGIN;
-                        y = top + MARGIN;
-                        break;
+                int x = left + (width - w) / 2;
+                // Beside the readout in the corner rather than over it, when the middle is taken.
+                Rectangle west = bounds(Anchor.SouthWest);
+                if (west != null && x < west.x + west.width + MARGIN) {
+                    x = Math.min(west.x + west.width + MARGIN, left + width - w - MARGIN);
                 }
-                component.setBounds(x, y, w, h);
-                stackIfCrowded(component, anchor);
+                component.setBounds(x, top + height - h - MARGIN, w, h);
             }
+        }
+    }
+
+    /** The visible cards at one corner, side by side, the row flush with that corner. */
+    private void row(Anchor anchor, int left, int top, int width, int height) {
+        List<Component> row = at(anchor);
+        if (row.isEmpty()) {
+            return;
+        }
+        int total = -GAP;
+        for (Component component : row) {
+            total += Math.min(component.getPreferredSize().width, Math.max(0, width - 2 * MARGIN)) + GAP;
+        }
+        boolean east = anchor == Anchor.NorthEast || anchor == Anchor.SouthEast;
+        boolean south = anchor == Anchor.SouthWest || anchor == Anchor.SouthEast;
+        int x = east ? left + width - MARGIN - total : left + MARGIN;
+        x = Math.max(left + MARGIN, x);
+        for (Component component : row) {
+            Dimension size = component.getPreferredSize();
+            int w = Math.min(size.width, Math.max(0, width - 2 * MARGIN));
+            int h = Math.min(size.height, Math.max(0, height - 2 * MARGIN));
+            int y = south ? top + height - h - MARGIN : top + MARGIN;
+            component.setBounds(x, y, w, h);
+            x += w + GAP;
         }
     }
 
@@ -144,16 +173,12 @@ public class OverlayAnchorLayout implements LayoutManager2 {
      * they return to the corners they were asked for.
      */
     private void stackIfCrowded(Component component, Anchor anchor) {
-        Anchor eastern = anchor == Anchor.SouthWest ? Anchor.SouthEast
-                : anchor == Anchor.NorthWest ? Anchor.NorthEast : null;
-        if (eastern == null) {
+        Anchor eastern = anchor == Anchor.SouthWest ? Anchor.SouthEast : Anchor.NorthEast;
+        Rectangle neighbour = bounds(eastern);
+        if (neighbour == null) {
             return;
         }
-        Component neighbour = componentAt(eastern);
-        if (neighbour == null || !neighbour.isVisible()) {
-            return;
-        }
-        int roomBeside = neighbour.getX() - MARGIN - component.getX();
+        int roomBeside = neighbour.x - MARGIN - component.getX();
         if (component.getWidth() <= roomBeside) {
             return;
         }
@@ -164,29 +189,40 @@ public class OverlayAnchorLayout implements LayoutManager2 {
         }
         int y;
         if (anchor == Anchor.SouthWest) {
-            y = neighbour.getY() - component.getHeight() - MARGIN;
+            y = neighbour.y - component.getHeight() - MARGIN;
             int floor = MARGIN;
             for (Anchor top : new Anchor[] { Anchor.NorthWest, Anchor.North }) {
-                Component above = componentAt(top);
-                if (above != null && above.isVisible()) {
-                    floor = Math.max(floor, above.getY() + above.getHeight() + MARGIN);
+                Rectangle above = bounds(top);
+                if (above != null) {
+                    floor = Math.max(floor, above.y + above.height + MARGIN);
                 }
             }
             y = Math.max(y, floor);
         }
         else {
-            y = neighbour.getY() + neighbour.getHeight() + MARGIN;
+            y = neighbour.y + neighbour.height + MARGIN;
         }
         component.setBounds(component.getX(), y, component.getWidth(), component.getHeight());
     }
 
-    private Component componentAt(Anchor anchor) {
+    /** The visible components at an anchor, in the order they were added. */
+    private List<Component> at(Anchor anchor) {
+        List<Component> found = new ArrayList<>();
         for (Map.Entry<Component, Anchor> entry : anchors.entrySet()) {
-            if (entry.getValue() == anchor) {
-                return entry.getKey();
+            if (entry.getValue() == anchor && entry.getKey().isVisible()) {
+                found.add(entry.getKey());
             }
         }
-        return null;
+        return found;
+    }
+
+    /** What the visible components at an anchor cover together, or null for nothing. */
+    private Rectangle bounds(Anchor anchor) {
+        Rectangle union = null;
+        for (Component component : at(anchor)) {
+            union = union == null ? component.getBounds() : union.union(component.getBounds());
+        }
+        return union;
     }
 
     /**
@@ -202,7 +238,9 @@ public class OverlayAnchorLayout implements LayoutManager2 {
             Dimension size = new Dimension(0, 0);
             for (Map.Entry<Component, Anchor> entry : anchors.entrySet()) {
                 if (entry.getValue() == Anchor.Fill) {
-                    size = entry.getKey().getPreferredSize();
+                    Dimension preferred = entry.getKey().getPreferredSize();
+                    size = new Dimension(Math.max(size.width, preferred.width),
+                            Math.max(size.height, preferred.height));
                 }
             }
             return new Dimension(size.width + insets.left + insets.right,

@@ -273,9 +273,9 @@ public class RegionOfInterestProcess {
             saveResults();
             cleanup();
         } else {
-            String title = String.format("%s (%d / %d)", processTitle, stepIndex, stepSequence.size()-1);
-            
-            mainFrame.showInstructions(title, instructions[stepIndex - 1], true, true,
+            // The step and the count go in the banner's circle rather than after the title.
+            mainFrame.showInstructions(processTitle, instructions[stepIndex - 1], stepIndex,
+                    stepSequence.size() - 1, true, true,
                     step == ROIStep.Complete ? "Finish" : "Next", cancelActionListener, proceedActionListener);
             
         }

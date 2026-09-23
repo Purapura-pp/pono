@@ -81,9 +81,30 @@ public class OverlayCard extends JPanel {
         }
     }
 
+    private boolean accentEdge;
+
+    /** The instructions' card: its left edge is the accent rule. */
+    public void setAccentEdge(boolean accentEdge) {
+        this.accentEdge = accentEdge;
+        repaint();
+    }
+
+    /** Room around the glass for the stylesheet's --shadow: mostly below, a little at the sides. */
+    public static final int SHADOW_SIDE = 3;
+    public static final int SHADOW_TOP = 1;
+    public static final int SHADOW_BOTTOM = 5;
+
+    /** The content keeps its padding from the glass, the shadow's room outside that. */
+    @Override
+    public java.awt.Insets getInsets() {
+        java.awt.Insets insets = super.getInsets();
+        return new java.awt.Insets(insets.top + SHADOW_TOP, insets.left + SHADOW_SIDE,
+                insets.bottom + SHADOW_BOTTOM, insets.right + SHADOW_SIDE);
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
-        Color background = UIManager.getColor("Pono.overlayBackground"); //$NON-NLS-1$
+        Color background = UIManager.getColor(Tokens.OVERLAY);
         if (background == null) {
             // Not a Pono theme: fall back to the panel colour, which is opaque but readable.
             background = UIManager.getColor("Panel.background"); //$NON-NLS-1$
@@ -93,12 +114,29 @@ public class OverlayCard extends JPanel {
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
                         RenderingHints.VALUE_ANTIALIAS_ON);
+                int x = SHADOW_SIDE;
+                int y = SHADOW_TOP;
+                int w = getWidth() - 2 * SHADOW_SIDE;
+                int h = getHeight() - SHADOW_TOP - SHADOW_BOTTOM;
+                // A soft shadow as a few widening, fading rounded rectangles below the card.
+                Color shadow = Ui.color("Pono.shadow", 0x000000, 0x73); //$NON-NLS-1$
+                for (int i = SHADOW_BOTTOM; i >= 1; i--) {
+                    int alpha = shadow.getAlpha() * (SHADOW_BOTTOM + 1 - i) / (SHADOW_BOTTOM * 4);
+                    g2.setColor(new Color(shadow.getRed(), shadow.getGreen(), shadow.getBlue(), alpha));
+                    int spread = Math.min(i, SHADOW_SIDE);
+                    g2.fillRoundRect(x - spread, y + i - 1, w + 2 * spread, h + 1, ARC + 2 * spread, ARC + 2 * spread);
+                }
                 g2.setColor(background);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), ARC, ARC);
-                Color border = UIManager.getColor("Pono.border"); //$NON-NLS-1$
-                if (border != null) {
-                    g2.setColor(border);
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, ARC, ARC);
+                g2.fillRoundRect(x, y, w, h, ARC, ARC);
+                g2.setColor(Ui.border());
+                g2.drawRoundRect(x, y, w - 1, h - 1, ARC, ARC);
+                if (accentEdge) {
+                    // The stylesheet's border-left: 3px accent, which is the card's own edge.
+                    java.awt.Shape clip = g2.getClip();
+                    g2.clip(new java.awt.geom.RoundRectangle2D.Float(x, y, w, h, ARC, ARC));
+                    g2.setColor(Ui.accent());
+                    g2.fillRect(x, y, 3, h);
+                    g2.setClip(clip);
                 }
             }
             finally {

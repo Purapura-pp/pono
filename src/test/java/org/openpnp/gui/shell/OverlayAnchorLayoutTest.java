@@ -35,8 +35,8 @@ import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
  * being written, and neither shows up in a screenshot of a window that happens to be large enough.
  */
 public class OverlayAnchorLayoutTest {
-    private static final int MARGIN = 10;
-    /** Where the instructions start: below the camera tools that line the top edge. */
+    private static final int MARGIN = 12;
+    /** Where the instructions start: below the 32 pixel camera tools that line the top edge. */
     private static final int NORTH_TOP = 56;
 
     /** A card that cannot be made narrower than it asks for, like a grid of buttons. */
@@ -188,12 +188,58 @@ public class OverlayAnchorLayoutTest {
         JPanel stage = stage(800, 600);
         JPanel instructions = card(400, 60);
         stage.add(card(100, 100), Anchor.Fill);
+        stage.add(card(250, 32), Anchor.NorthWest);
+        stage.add(card(200, 32), Anchor.NorthEast);
         stage.add(instructions, Anchor.North);
 
         stage.doLayout();
 
         assertEquals((800 - 400) / 2, instructions.getX());
         assertEquals(NORTH_TOP, instructions.getY());
+    }
+
+    @Test
+    public void theInstructionsGoUnderTheLowerOfTheTwoTopRows() {
+        JPanel stage = stage(800, 600);
+        JPanel instructions = card(400, 60);
+        stage.add(card(100, 100), Anchor.Fill);
+        stage.add(card(250, 32), Anchor.NorthWest);
+        stage.add(card(200, 70), Anchor.NorthEast);
+        stage.add(instructions, Anchor.North);
+
+        stage.doLayout();
+
+        assertEquals(MARGIN + 70 + MARGIN, instructions.getY());
+    }
+
+    @Test
+    public void cardsSharingACornerStandInARowInTheOrderAdded() {
+        JPanel stage = stage(800, 600);
+        JPanel reticles = card(120, 32);
+        JPanel view = card(160, 32);
+        stage.add(card(100, 100), Anchor.Fill);
+        stage.add(reticles, Anchor.NorthEast);
+        stage.add(view, Anchor.NorthEast);
+
+        stage.doLayout();
+
+        assertEquals(800 - MARGIN - 160, view.getX(), "the last one added is at the corner");
+        assertEquals(view.getX() - 6 - 120, reticles.getX());
+        assertEquals(MARGIN, reticles.getY());
+    }
+
+    @Test
+    public void everyFillingComponentTakesEverything() {
+        JPanel stage = stage(800, 600);
+        JPanel image = card(100, 100);
+        JPanel frame = card(10, 10);
+        stage.add(image, Anchor.Fill);
+        stage.add(frame, Anchor.Fill);
+
+        stage.doLayout();
+
+        assertEquals(800, frame.getWidth());
+        assertEquals(600, frame.getHeight());
     }
 
     @Test

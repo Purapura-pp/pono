@@ -659,6 +659,15 @@ public final class Ui {
         button.putClientProperty(MIN_WIDTH, 38);
     }
 
+    /** The stylesheet's {@code .seg.tight .s}: at least 30 wide, 6 pixel padding. */
+    public static void segTight(javax.swing.AbstractButton button) {
+        seg(button);
+        Object style = button.getClientProperty(FlatClientProperties.STYLE);
+        button.putClientProperty(FlatClientProperties.STYLE,
+                style + "; minimumWidth: 30; margin: 0,6,0,6"); //$NON-NLS-1$
+        button.putClientProperty(MIN_WIDTH, 30);
+    }
+
     /** An icon-only pill, 7 pixel padding, whose "on" state is the surface-3 fill. */
     public static void iconPill(javax.swing.AbstractButton button) {
         pill(button);
