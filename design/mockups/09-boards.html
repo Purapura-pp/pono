@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 单板页（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var caret = '<span class="muted" style="margin-left:4px">' + ic('chevdown', 'sm') + '</span>';
+var side = function (s) { return s === 'T' ? '<span class="side-icon top">T</span>Top' + caret : '<span class="side-icon bot">B</span>Bottom' + caret; };
+var rows = [
+  [1, 'R11', 'R0603-10K', 'T', '118.200', '83.000', '0.0', '贴装', '提示', ''],
+  [1, 'R12', 'R0603-10K', 'T', '120.450', '85.210', '90.0', '贴装', '提示', '靠近 U3，注意方向'],
+  [1, 'C14', 'C0402-100N', 'T', '126.900', '92.100', '90.0', '贴装', '提示', ''],
+  [1, 'U3', 'SOIC-8-LM358', 'T', '112.000', '96.500', '270.0', '贴装', '提示', ''],
+  [0, 'FID1', 'FIDUCIAL-1MM', 'T', '140.000', '70.000', '0.0', '基准点', '—', ''],
+  [1, 'D2', 'LED-0805-RED', 'B', '98.300', '64.200', '180.0', '贴装', '提示', ''],
+  [1, 'R1', 'R0603-1K', 'T', '28.500', '18.000', '0.0', '贴装', '提示', ''],
+  [1, 'R2', 'R0603-1K', 'T', '37.000', '18.000', '90.0', '贴装', '提示', ''],
+  [1, 'R3', 'R0402-4K7', 'T', '45.500', '18.000', '0.0', '贴装', '提示', ''],
+  [1, 'U1', 'QFN-32-STM32G0', 'T', '70.000', '60.000', '0.0', '贴装', '延后', '最后贴']
+].map(function (r) {
+  return ['<span class="check' + (r[0] ? ' on' : '') + '"></span>', '<b>' + r[1] + '</b>', r[2], side(r[3]), r[4], r[5], r[6], r[7] + caret, '<span class="t2">' + r[8] + '</span>' + (r[8] === '—' ? '' : caret), '<span class="muted">' + r[9] + '</span>'];
+});
+
+var list = '<section class="dock" style="width:290px;flex:none">'
+  + '<div class="tabs"><div class="tab active">' + ic('board', 'sm') + '单板定义 <span class="n">2</span></div></div>'
+  + '<div class="toolbar">' + F.btn('新建', 'plus') + F.btn('打开…', 'folder') + '<span class="grow"></span>' + F.btn('', 'x', 'ghost icon', ' title="从列表移除（不删文件），会先确认"') + '</div>'
+  + '<div class="dock-body">'
+  + '<div class="group sel"><div class="gt"><b>demo-board <span class="dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--warn);margin-left:4px"></span></b><span>jobs\\demo-board.board.xml · 160 × 120 mm</span></div><span class="mono t2" style="font-size:12px">48</span></div>'
+  + '<div class="group"><div class="gt"><b>demo-cell</b><span>jobs\\demo-cell.board.xml · 40 × 30 mm</span></div><span class="mono t2" style="font-size:12px">3</span></div>'
+  + '</div><div class="dock-foot">任务 demo-board.job.xml 用到 demo-board ×2</div></section>';
+
+var toolbar = '<button class="btn sm primary">' + ic('save', 'sm') + '保存</button><span class="chip warn" style="height:24px">已修改 · 2 处</span>' + F.sep()
+  + F.btn('新增', 'plus') + F.btn('', 'trash', 'ghost icon', ' title="删除所选贴片位，会先确认"') + F.sep()
+  + '<button class="btn sm">' + ic('download', 'sm') + '导入' + ic('chevdown', 'sm') + '</button>' + F.btn('相机对准', 'camera') + F.filter('筛选 ID / 元件…');
+var placements = F.dock({
+  style: 'flex:1;min-width:0',
+  tabs: [{ icon: 'parts', t: '贴片位', n: 48 }, { icon: 'footprint', t: '焊膏焊盘', n: 0 }],
+  toolbar: toolbar,
+  body: F.table([
+    { t: '<span class="check on"></span>', w: 34 }, { t: 'ID', w: 60 }, { t: '元件', w: 128 }, { t: '面', w: 92 },
+    { t: 'X', r: 1, cls: 'num', w: 72 }, { t: 'Y', r: 1, cls: 'num', w: 66 }, { t: '角度', r: 1, cls: 'num', w: 54 },
+    { t: '类型', w: 78 }, { t: '错误处理', w: 80 }, { t: '注释' }
+  ], rows, 1),
+  foot: '面、类型、错误处理、启用直接在表里改；右键菜单里的同样操作还在'
+});
+
+var sideBody =
+  F.sec('位置', 'move', [
+    ['X / Y', '<div class="inp-row">' + F.inp('120.450', { mono: true, pre: 'X' }) + F.inp('85.210', { mono: true, pre: 'Y' }) + '</div>'],
+    ['角度', '<div class="inp-row">' + F.inp('90.000', { mono: true, u: '°', w: 120 }) + '<button class="btn sm icon" title="捕获相机位置">' + ic('camera', 'sm') + '</button><button class="btn sm icon" title="捕获吸嘴位置">' + ic('nozzle', 'sm') + '</button><button class="btn sm icon" title="相机移到此处（会移动机器）">' + ic('target', 'sm') + '</button></div>'],
+    ['面', F.seg(['Top', 'Bottom'], 0)]
+  ], { rt: '板坐标 · mm' }) +
+  F.sec('元件', 'parts', [
+    ['元件', F.inp('<b>R0603-10K</b><span class="muted" style="margin-left:6px">10kΩ ±1%</span>', { select: true })],
+    ['封装', F.inp('R0603 <span class="u">高度 0.45 mm</span>', { ro: true })]
+  ]) +
+  F.sec('贴装选项', 'gear', [
+    ['类型', F.inp('贴装', { select: true })],
+    ['错误处理', F.inp('提示（暂停并询问）', { select: true })],
+    ['启用', F.toggle(true, '参与任务')]
+  ]) +
+  F.sec('注释', 'edit', [['注释', '<div class="inp" style="height:52px;align-items:flex-start;padding-top:6px">靠近 U3，注意方向</div>']]);
+
+F.app({
+  page: 'boards', centerClass: 'strip-top',
+  top: { jobDirty: true },
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 9] },
+  center: F.strip() + '<div class="duo">' + list + placements + '</div>',
+  side: F.side({ icon: 'parts', title: 'R12', sub: '贴片位 · demo-board', body: sideBody }),
+  status: { chip: '<span class="status warn" style="height:18px">未保存</span>', text: 'demo-board 有 2 处修改 · Ctrl+S 保存', right: ['单板 2 · 贴片位 51'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

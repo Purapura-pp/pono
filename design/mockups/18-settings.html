@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 设置页（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var nav = '<div class="set-nav">' + [['palette', '外观', 1], ['globe', '语言与单位'], ['user', '操作员'], ['save', '保存与备份'], ['keyboard', '快捷键'], ['info', '关于']].map(function (n) {
+  return '<div class="it' + (n[2] ? ' active' : '') + '">' + ic(n[0]) + n[1] + '</div>';
+}).join('') + '</div>';
+
+var themeCard = function (name, bg, surface, accent, on) {
+  return '<div class="theme-card' + (on ? ' on' : '') + '"><div class="pv" style="background:' + bg + '"><i style="background:' + surface + '"></i><div style="display:grid;grid-template-rows:14px 1fr;gap:4px"><i style="background:' + surface + '"></i><i style="background:' + surface + ';border-left:3px solid ' + accent + '"></i></div></div><div class="nm">' + (on ? ic('check', 'sm') : '') + name + '</div></div>';
+};
+var themes = '<div class="row" style="gap:12px">' + themeCard('深色', '#0d1015', '#1a2028', '#4f8cff', true) + themeCard('浅色', '#eceff3', '#ffffff', '#2f6fe0') + themeCard('跟随系统', 'linear-gradient(90deg,#0d1015 50%,#eceff3 50%)', '#6c7787', '#4f8cff') + '</div>';
+
+var body = '<div class="set-body">'
+  + F.sec('主题', 'palette', [['主题', themes], ['', '<span class="muted" style="font-size:12px">只有 Pono 深色和浅色两种；Metal、Nimbus 这类主题会让外壳变形，已经去掉。</span>']])
+  + F.sec('文字', 'edit', [['字号', F.seg(['小 · 12', '标准 · 13', '大 · 14'], 1)], ['动画', F.toggle(true, '切换主题和展开区块时的过渡')]])
+  + F.sec('语言与单位', 'globe', [
+      ['语言', '<div class="row">' + F.inp('简体中文', { select: true, w: 220 }) + '<span class="muted" style="font-size:12px">重启后生效</span></div>'],
+      ['长度单位', F.seg(['mm', 'inch'], 0)],
+      ['小数位', F.inp('3', { mono: true, w: 90 })]
+    ])
+  + F.sec('操作员', 'user', [['名字', '<div class="row">' + F.inp('王工', { w: 220 }) + '<span class="muted" style="font-size:12px">显示在生产模式的状态栏</span></div>']])
+  + F.sec('保存与备份', 'save', [
+      ['自动保存', F.toggle(true, '改完 3 秒后自动保存配置')],
+      ['备份', '<span class="t2" style="font-size:12px">手动保存每次都备份；自动保存最多每 15 分钟备份一次</span>'],
+      ['配置目录', '<div class="inp-row">' + F.inp('C:\\Users\\PP\\.openpnp2', { ro: true }) + '<button class="btn sm">' + ic('folder', 'sm') + '打开</button></div>']
+    ])
+  + '</div>';
+
+var center = '<section class="dock" style="flex-direction:row"><div style="border-right:1px solid var(--border)">' + nav + '</div>' + body + '</section>';
+
+F.app({
+  page: 'settings', centerClass: 'no-camera',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 5] },
+  center: center,
+  status: { text: '设置 · 改动立即生效', right: ['配置已保存 · 16:42'] }
+});
+</script>
+</body>
+</html>

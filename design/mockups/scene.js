@@ -142,5 +142,28 @@ window.Scene = (function () {
     return s;
   }
 
-  return { pcb: pcb, tape: tape };
+  // Bottom camera looking up at an 0603 on the nozzle, with the vision result drawn over it.
+  function nozzle(opts) {
+    opts = opts || {};
+    var w = 1200, h = 760, cx = w / 2, cy = h / 2;
+    var s = '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">';
+    s += '<defs><radialGradient id="nz" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#3a3f46"/><stop offset="1" stop-color="#0b0d10"/></radialGradient></defs>';
+    s += '<rect width="' + w + '" height="' + h + '" fill="#050607"/>';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="250" fill="url(#nz)"/>';
+    s += '<circle cx="' + cx + '" cy="' + cy + '" r="96" fill="#15181c" stroke="#2a2f36" stroke-width="6"/>';
+    s += '<g transform="rotate(4 ' + cx + ' ' + cy + ')">';
+    s += '<rect x="' + (cx - 150) + '" y="' + (cy - 78) + '" width="300" height="156" rx="10" fill="#1d1f22"/>';
+    s += '<rect x="' + (cx - 150) + '" y="' + (cy - 78) + '" width="70" height="156" rx="6" fill="#d9dde2"/>';
+    s += '<rect x="' + (cx + 80) + '" y="' + (cy - 78) + '" width="70" height="156" rx="6" fill="#d9dde2"/>';
+    s += '</g>';
+    if (opts.detect !== false) {
+      s += '<g transform="rotate(4 ' + cx + ' ' + cy + ')"><rect x="' + (cx - 158) + '" y="' + (cy - 86) + '" width="316" height="172" fill="none" stroke="#3dff8a" stroke-width="3"/></g>';
+      s += '<line x1="' + (cx - 22) + '" y1="' + cy + '" x2="' + (cx + 22) + '" y2="' + cy + '" stroke="#3dff8a" stroke-width="2"/>';
+      s += '<line x1="' + cx + '" y1="' + (cy - 22) + '" x2="' + cx + '" y2="' + (cy + 22) + '" stroke="#3dff8a" stroke-width="2"/>';
+      s += '<text x="' + (cx + 176) + '" y="' + (cy - 100) + '" fill="#3dff8a" font-family="Segoe UI, sans-serif" font-size="18" font-weight="600">R0603 · \u0394 0.012 mm · 0.6\u00b0</text>';
+    }
+    return s + '</svg>';
+  }
+
+  return { pcb: pcb, tape: tape, nozzle: nozzle };
 })();

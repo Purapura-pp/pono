@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 机器页（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var node = function (level, open, icon, name, extra) {
+  var tw = open == null ? '<span class="tw"></span>' : '<span class="tw">' + ic(open ? 'chevdown' : 'chevright') + '</span>';
+  return '<span style="padding-left:' + (level * 18) + 'px">' + tw + '<span class="muted" style="vertical-align:middle">' + ic(icon, 'sm') + '</span> <b style="vertical-align:middle">' + name + '</b>' + (extra ? ' <span class="muted" style="vertical-align:middle">' + extra + '</span>' : '') + '</span>';
+};
+var st = function (cls, text) { return '<span class="status ' + cls + '">' + text + '</span>'; };
+var rows = [
+  [node(0, true, 'machine', '机器'), '参考机器', st('ok', '已启用'), '<span class="t2">单位 mm · 1 个贴装头</span>'],
+  [node(1, true, 'machine', '贴装头 H1'), '贴装头', '', '<span class="t2">停靠位 0, 0</span>'],
+  [node(2, null, 'nozzle', '吸嘴 N1'), '吸嘴', st('ok', 'NT1'), '<span class="t2">轴 x · y · zN1 · rotationN1</span>'],
+  [node(2, null, 'camera', '相机 Top'), '图像相机（模拟）', st('warn', '未标定'), '<span class="t2">向下 · 1920 × 984</span>'],
+  [node(2, null, 'zap', '执行器 LIGHT_TOP'), '执行器', '', '<span class="t2">布尔 · 拍照前开</span>'],
+  [node(2, null, 'zap', '执行器 PUMP'), '执行器', '', '<span class="t2">布尔 · 取料时开</span>'],
+  [node(1, null, 'camera', '相机 Bottom'), '模拟底部相机', st('warn', '未标定'), '<span class="t2">向上</span>'],
+  [node(1, false, 'feeder', '飞达', '24'), '', st('warn', '1 个空料'), ''],
+  [node(1, false, 'tree', '轴', '6'), '', '', '<span class="t2">x · y · zN1 · rotationN1 · zTop · rotationTop</span>'],
+  [node(1, false, 'upload', '驱动', '1'), '', st('ok', '已连接'), '<span class="t2">NullDriver（模拟）</span>'],
+  [node(1, false, 'nozzle', '吸嘴头', '1'), '', st('warn', '跳动未标定'), '<span class="t2">NT1</span>'],
+  [node(1, false, 'gear', '作业处理器 · 运动规划器 · 视觉'), '', '', '']
+];
+var toolbar = '<button class="btn sm">' + ic('plus', 'sm') + '在「贴装头 H1」下新建' + ic('chevdown', 'sm') + '</button>' + F.btn('复制', 'copy') + F.btn('粘贴', 'upload') + F.sep()
+  + F.btn('全部展开', 'chevdown', 'ghost') + F.btn('全部收起', 'chevright', 'ghost') + F.filter('搜索名称或类型…')
+  + '<span class="sep"></span><button class="btn sm danger">' + ic('trash', 'sm') + '删除相机 Top</button>';
+var dock = F.dock({
+  tabs: [{ icon: 'tree', t: '机器结构' }],
+  toolbar: toolbar,
+  body: F.table([{ t: '名称' }, { t: '类型', w: 150 }, { t: '状态', w: 110 }, { t: '说明', w: 250 }], rows, 3)
+});
+
+var side = F.side({
+  icon: 'camera', title: 'Top', sub: '相机 · 图像相机（模拟） · 贴装头 H1',
+  tabs: ['通用', '位置', '视觉', '标定', '更多'], tab: 0,
+  body:
+    F.sec('通用', 'info', [
+      ['名称', F.inp('Top')],
+      ['朝向', F.seg(['向下', '向上'], 0)],
+      ['图像源', F.inp('ui-fixture\\camera-pcb.png', { select: false })],
+      ['画面', '<div class="inp-row">' + F.inp('1920', { mono: true, u: 'px' }) + F.inp('984', { mono: true, u: 'px' }) + '</div>'],
+      ['预览帧率', F.inp('24', { mono: true, u: 'fps', w: 120 })]
+    ]) +
+    F.sec('光照', 'zap', [
+      ['补光执行器', F.inp('LIGHT_TOP', { select: true })],
+      ['拍照前', F.toggle(true, '开灯')],
+      ['手动操作时', F.toggle(true, '开灯')],
+      ['拍照后', F.toggle(false, '关灯')]
+    ]) +
+    F.sec('稳定', 'clock', [
+      ['方法', F.inp('固定时间', { select: true })],
+      ['时间', '<div class="row">' + F.inp('250', { mono: true, u: 'ms', w: 120 }) + '<span class="link" style="font-size:12px">校准页 · 相机延迟与稳定 ›</span></div>']
+    ], { rt: '由校准页测定' })
+});
+
+F.app({
+  page: 'machine',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 9] },
+  center: F.camera() + dock,
+  side: side,
+  status: { text: '机器 · 1 个贴装头 · 2 个相机 · 24 个飞达', right: ['配置已保存 · 16:42'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

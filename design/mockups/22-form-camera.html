@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 表单样张 · 相机（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="frame.js"></script>
+<style>
+  .forms { display: flex; gap: 14px; padding: 18px 22px; }
+  .forms .side { margin: 0; width: 500px; height: 960px; flex: none; }
+  .err-text { grid-column: 2; margin-top: -4px; font-size: 11.5px; color: var(--err); }
+  .inp.bad { border-color: var(--err); }
+  .cond { grid-column: 1 / -1; margin: 2px 0 0; padding: 6px 10px; border-radius: 8px; border: 1px dashed var(--border-strong); font-size: 11.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var head = { icon: 'camera', title: 'Top', sub: 'OpenCV 相机 · ReferenceCamera · 贴装头 H1' };
+var tabs = ['通用', '位置', '视觉', '标定', '更多'];
+var capture = function (what) {
+  return '<button class="btn sm icon" title="捕获' + what + '当前位置">' + ic('camera', 'sm') + '</button><button class="btn sm icon" title="移到这里（会移动机器）">' + ic('target', 'sm') + ic('zap', 'moves') + '</button>';
+};
+
+var general = F.side(Object.assign({ tabs: tabs, tab: 0, body:
+  F.sec('基本', 'info', [
+    ['名称', F.inp('Top')],
+    ['朝向', F.seg(['向下', '向上'], 0)],
+    ['设备', '<div class="inp-row">' + F.inp('USB2.0 Camera #1', { select: true }) + '<button class="btn sm icon" title="重新扫描设备">' + ic('refresh', 'sm') + '</button></div>'],
+    ['分辨率', F.inp('1920 × 1080 · MJPG', { select: true })],
+    ['预览帧率', F.inp('24', { mono: true, u: 'fps', w: 120 })],
+    ['任务中', F.toggle(true, '暂停预览，把带宽让给视觉')]
+  ]) +
+  F.sec('光照', 'zap', [
+    ['补光执行器', F.inp('LIGHT_TOP', { select: true })],
+    ['拍照前', F.toggle(true, '开灯')],
+    ['拍照后', F.toggle(false, '关灯')],
+    ['手动操作时', F.toggle(true, '开灯')],
+    ['防眩光', F.toggle(true, '其它相机拍照时关掉这盏灯')]
+  ]) +
+  F.sec('画面变换', 'refresh', null, { collapsed: true, rt: '旋转 0° · 不翻转 · 不裁剪' }) +
+  F.sec('白平衡', 'palette', null, { collapsed: true, rt: '自动' })
+}, head));
+
+var position = F.side(Object.assign({ tabs: tabs, tab: 1, body:
+  F.sec('相对贴装头的偏移', 'move', [
+    ['X / Y', '<div class="inp-row">' + F.inp('0.000', { mono: true, pre: 'X', u: 'mm' }) + F.inp('0.000', { mono: true, pre: 'Y', u: 'mm' }) + '</div>'],
+    ['Z / C', '<div class="inp-row">' + F.inp('0.000', { mono: true, pre: 'Z', u: 'mm' }) + F.inp('0.000', { mono: true, pre: 'C', u: '°' }) + '</div>'],
+    ['', '<div class="row">' + capture('相机') + '<span class="t2" style="font-size:12px">捕获会读当前机器位置</span></div>']
+  ], { rt: '机器坐标 · mm' }) +
+  F.sec('1 px 等于', 'ruler', [
+    ['X / Y', '<div class="inp-row"><div class="inp mono"><span class="pre">X</span>0.0209<span class="u">mm</span></div><div class="inp mono bad"><span class="pre">Y</span>0<span class="u">mm</span></div></div>'],
+    [null, '<div class="err-text">Y 要大于 0：测一次，或者填和 X 一样的值</div>'],
+    ['测量', '<div class="row"><button class="btn sm">' + ic('target', 'sm') + '对着基准点测' + ic('zap', 'moves') + '</button><span class="t2" style="font-size:12px">移动 2 次，约 10 秒</span></div>']
+  ], { rt: '由校准页「相机初标」写入' }) +
+  F.sec('Safe Z', 'up', [
+    ['Safe Z', '<div class="inp-row">' + F.inp('0.000', { mono: true, u: 'mm', w: 130 }) + capture('吸嘴') + '</div>']
+  ]) +
+  F.sec('3D 单位像素', 'layers', null, { collapsed: true, rt: '关闭' }),
+  foot: '<button class="btn">重置</button><button class="btn primary disabled" title="「1 px 等于」的 Y 要大于 0">应用</button>'
+}, head));
+
+var vision = F.side(Object.assign({ tabs: tabs, tab: 2, body:
+  F.sec('稳定', 'clock', [
+    ['方法', F.inp('自适应（等画面停下）', { select: true })],
+    ['阈值', F.inp('2.0', { mono: true, u: '灰度', w: 130 })],
+    ['超时', F.inp('500', { mono: true, u: 'ms', w: 130 })],
+    ['去抖', F.inp('2', { mono: true, u: '帧', w: 130 })],
+    ['模糊', F.inp('0', { mono: true, u: 'px', w: 130 })]
+  ], { rt: '校准页可以测定', after: '<div class="form" style="margin-top:8px"><div class="cond">方法选「固定时间」时，这里只剩「时间」一项；选「自适应」才出现阈值、超时、去抖和模糊。</div></div>' }) +
+  F.sec('识别', 'eye', [
+    ['最大移动', F.inp('0.05', { mono: true, u: 'mm', w: 130 })],
+    ['模板匹配', F.inp('0.90', { mono: true, w: 130 })],
+    ['最小对比度', F.inp('16', { mono: true, w: 130 })]
+  ]) +
+  F.sec('拍摄', 'capture', [
+    ['重试', F.inp('4', { mono: true, u: '次', w: 130 })],
+    ['每次超时', F.inp('2000', { mono: true, u: 'ms', w: 130 })]
+  ]) +
+  F.sec('诊断', 'activity', null, { collapsed: true, rt: '关闭' })
+}, head));
+
+document.body.insertAdjacentHTML('beforeend', '<div class="forms">' + general + position + vision + '</div>');
+</script>
+</body>
+</html>

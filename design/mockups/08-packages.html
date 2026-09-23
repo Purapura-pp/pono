@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 封装页（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var nt = function (list) { return list.map(function (t) { return '<span class="tag">' + t + '</span>'; }).join(''); };
+var pkgs = [
+  ['R0402', '1.0 × 0.5', '2', ['NT1'], '默认底部视觉', '3'],
+  ['R0603', '1.6 × 0.8', '2', ['NT1', 'NT2'], '默认底部视觉', '3'],
+  ['C0402', '1.0 × 0.5', '2', ['NT1'], '默认底部视觉', '1'],
+  ['C0603', '1.6 × 0.8', '2', ['NT1', 'NT2'], '默认底部视觉', '1'],
+  ['C0805', '2.0 × 1.25', '2', ['NT2'], '默认底部视觉', '1'],
+  ['LED-0805', '2.0 × 1.25', '2', ['NT2'], 'LED 顶面识别', '1'],
+  ['SOT-23', '2.9 × 1.3', '3', ['NT2'], '默认底部视觉', '1'],
+  ['SOIC-8', '4.9 × 3.9', '8', ['NT3'], 'SOIC 引脚', '1'],
+  ['QFN-32', '5.0 × 5.0', '<span class="muted">0</span>', ['NT3'], 'QFN 焊盘', '1'],
+  ['FIDUCIAL-1MM', '1.0 × 1.0', '1', [], '—', '1']
+].map(function (p) {
+  return ['<b>' + p[0] + '</b>', p[1], p[2], p[3].length ? nt(p[3]) : '<span class="warn" style="color:var(--warn)">未分配</span>', '<span class="t2">' + p[4] + '</span>', p[5]];
+});
+
+var dock = F.dock({
+  tabs: [{ icon: 'pkg', t: '封装', n: 10 }],
+  toolbar: F.btn('新建封装', 'plus', 'primary') + F.btn('', 'trash', 'ghost icon', ' title="删除所选封装"') + F.sep() + F.btn('复制', 'copy') + F.btn('粘贴', 'upload') + F.filter('筛选 ID / 吸嘴…'),
+  body: F.table([
+    { t: 'ID', w: 150 }, { t: '本体 mm', cls: 'num', w: 110 }, { t: '焊盘', r: 1, cls: 'num', w: 56 },
+    { t: '吸嘴头' }, { t: '底部视觉', w: 130 }, { t: '元件', r: 1, cls: 'num', w: 56 }
+  ], pkgs, 1),
+  foot: '10 个封装 · QFN-32 还没有焊盘：视觉合成和封装轮廓都要用到'
+});
+
+var preview = '<div style="margin:6px 16px 4px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);height:170px;position:relative;overflow:hidden">'
+  + '<svg viewBox="0 0 440 170" style="width:100%;height:100%">'
+  + '<defs><pattern id="g" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="var(--border)" stroke-width="1"/></pattern></defs>'
+  + '<rect width="440" height="170" fill="url(#g)"/>'
+  + '<rect x="140" y="45" width="160" height="80" rx="4" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="5 4"/>'
+  + '<rect x="120" y="50" width="70" height="70" rx="3" fill="var(--accent)" opacity=".75"/>'
+  + '<rect x="250" y="50" width="70" height="70" rx="3" fill="var(--accent)" opacity=".45" stroke="var(--accent)" stroke-width="2"/>'
+  + '<text x="155" y="90" fill="#fff" font-size="13" font-weight="700" font-family="Segoe UI">1</text><text x="285" y="90" fill="#fff" font-size="13" font-weight="700" font-family="Segoe UI">2</text>'
+  + '<line x1="140" y1="140" x2="300" y2="140" stroke="var(--muted)"/><text x="206" y="156" fill="var(--muted)" font-size="11" font-family="Segoe UI">1.60 mm</text>'
+  + '<line x1="220" y1="85" x2="224" y2="85" stroke="var(--err)"/><line x1="222" y1="83" x2="222" y2="87" stroke="var(--err)"/>'
+  + '</svg><span class="chip neutral" style="position:absolute;right:8px;top:8px;height:22px">焊盘 2 已选中</span></div>';
+
+var padRows = [['1', '-0.750', '0.000', '0.90', '0.80', '0', '0'], ['2', '0.750', '0.000', '0.90', '0.80', '0', '0']];
+var pads = '<div style="margin:0 16px;border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+  + F.table([{ t: '焊盘' }, { t: 'X', r: 1, cls: 'num' }, { t: 'Y', r: 1, cls: 'num' }, { t: '宽', r: 1, cls: 'num' }, { t: '高', r: 1, cls: 'num' }, { t: '旋转', r: 1, cls: 'num' }, { t: '圆角 %', r: 1, cls: 'num' }], padRows, 1)
+  + '</div><div class="row" style="margin:8px 16px 0">' + F.btn('新增焊盘', 'plus') + F.btn('', 'trash', 'ghost icon') + '<span class="grow"></span>' + F.btn('按参数生成…', 'sliders') + '</div>';
+
+var side = F.side({
+  icon: 'pkg', title: 'R0603', sub: '封装 · 2 焊盘 · 3 个元件',
+  tabs: ['设置', '焊盘', '视觉', '视觉合成', '吸嘴头'], tab: 1,
+  body: preview +
+    F.sec('本体', 'move', [
+      ['宽 × 长', '<div class="inp-row">' + F.inp('1.600', { mono: true, u: 'mm' }) + F.inp('0.800', { mono: true, u: 'mm' }) + '</div>'],
+      ['单位', F.seg(['mm', 'inch', 'mil'], 0)]
+    ], { rt: '封装轮廓也用它' }) +
+    F.sec('焊盘', 'footprint', null, { rt: '2 个', after: pads })
+});
+
+F.app({
+  page: 'packages', centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 9] },
+  center: F.strip() + dock,
+  side: side,
+  status: { text: '封装 10 · 元件 11', right: ['配置已保存 · 16:42'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

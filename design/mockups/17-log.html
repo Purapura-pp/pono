@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 日志页（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var lv = { d: ['debug', '调试'], i: ['info', '信息'], w: ['warn', '警告'], e: ['err', '错误'] };
+var lines = [
+  ['16:38:02.114', 'i', 'Configuration', '已读入配置：machine.xml、parts.xml（11 个元件）、packages.xml（10 个封装）'],
+  ['16:38:02.931', 'i', 'ReferenceMachine', '机器已启用：NullDriver'],
+  ['16:38:03.402', 'i', 'ReferenceHead', '贴装头 H1 已归位'],
+  ['16:38:03.405', 'd', 'AbstractMotionPlanner', 'moveTo x=0.000 y=0.000 z=0.000 c=0.000 速度 1.00'],
+  ['16:40:11.020', 'i', 'Solutions', '查找问题完成：9 个问题，5 个在校准页处理'],
+  ['16:42:07.551', 'i', 'MainFrame', '配置已保存（自动保存）'],
+  ['16:44:30.118', 'w', 'ReferenceStripFeeder', 'F-12：余量 0，等待补料'],
+  ['16:45:02.700', 'e', 'ReferencePnpJobProcessor', 'D2 取料失败 3 次（F-12 空料），按「提示」暂停任务'],
+  ['16:45:02.701', 'd', 'ReferencePnpJobProcessor', 'retry 3/3 feeder=F-12 nozzle=N1 part=LED-0805-RED'],
+  ['16:46:15.330', 'i', 'JobPanel', '任务继续：跳过 D2'],
+  ['16:47:40.912', 'i', 'OpenCvVisionProvider', '基准点 FID2 找到：偏差 0.018 mm'],
+  ['16:47:41.260', 'i', 'OpenCvVisionProvider', '基准点 FID3 找到：偏差 0.022 mm'],
+  ['16:48:03.004', 'w', 'ImageCamera', 'Top：一帧拍摄用了 612 ms，超过 500 ms'],
+  ['16:50:44.781', 'i', 'MachineDiagnostics', '测量开始：视觉噪声底、基准板、XY 定位、相机稳定'],
+  ['16:51:02.221', 'i', 'MachineDiagnostics', '基准板 · 第 3 跳：锚点漂移 +0.004 / −0.011 mm'],
+  ['16:51:40.090', 'w', 'MachineDiagnostics', '基准板 · 第 5 跳：读数散布 0.046 %，重读一次'],
+  ['16:52:06.402', 'i', 'MachineDiagnostics', '基准板完成：比例 X −0.090 %，垂直度 0.07°'],
+  ['16:52:40.013', 'i', 'CalibrationRunner', '一键校准开始：9 步，已备份'],
+  ['16:53:10.566', 'w', 'CalibrationRunner', '旋转间隙：等你操作']
+];
+var list = '<div class="log">' + lines.map(function (l, i) {
+  return '<div class="ln"' + (i === 7 ? ' style="background:var(--err-soft)"' : '') + '><span class="t">' + l[0] + '</span><span class="lv ' + lv[l[1]][0] + '">' + lv[l[1]][1] + '</span><span class="muted" style="width:190px;flex:none;overflow:hidden">' + l[2] + '</span><span>' + l[3] + '</span></div>';
+}).join('') + '</div>';
+
+var toolbar = '<span class="t2" style="font-size:12px">记录等级</span><div class="inp" style="height:28px;width:150px" title="改变写进日志文件的内容，并保存">信息' + ic('chevdown', 'sm caret') + '</div>' + F.sep()
+  + '<span class="t2" style="font-size:12px">显示</span>' + F.seg(['全部', '调试', '信息', '警告', '错误'], 0) + F.sep()
+  + '<label class="row" style="font-size:12px;gap:6px"><span class="toggle on"></span>自动滚动</label>'
+  + F.filter('搜索日志…');
+var dock = F.dock({
+  tabs: [{ icon: 'log', t: '日志', n: 1204 }],
+  toolbar: toolbar + F.btn('复制所选', 'copy', 'ghost') + F.btn('日志文件夹', 'folder', 'ghost') + '<button class="btn sm danger">' + ic('trash', 'sm') + '清空…</button>',
+  body: list,
+  foot: '「记录等级」决定写进日志文件的内容，会保存；「显示」只筛选这里看到的，不影响记录 · 选中行按 Ctrl+C 复制'
+});
+
+F.app({
+  page: 'log', centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 5] },
+  center: F.strip() + dock,
+  status: { text: '日志 · 1 204 行 · 1 条错误', right: ['记录到 log\\OpenPnP.log'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 问题页 · 测量（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var group = function (on, name, what, time, moves, last, sel) {
+  return '<div class="group' + (sel ? ' sel' : '') + '"><span class="check' + (on ? ' on' : '') + '" style="margin-top:2px"></span><div class="gt"><b>' + name + (moves ? ' <span class="moves">' + ic('zap', 'sm') + '</span>' : '') + '</b><span>' + what + ' · ' + time + '</span></div>' + last + '</div>';
+};
+var ok = function (t) { return '<span class="status ok" style="height:18px">' + t + '</span>'; };
+var none = '<span class="muted" style="font-size:11px">没测过</span>';
+var groups =
+  group(1, '视觉噪声底', '相机静止拍 30 帧', '1 分钟', false, ok('09-22')) +
+  group(1, '基准板', '5 个点的比例和垂直度', '6 分钟', true, ok('09-22'), true) +
+  group(1, 'XY 定位', '每根轴的原始间隙', '4 分钟', true, '<span class="status warn" style="height:18px">X 0.20</span>') +
+  group(1, '相机稳定', '移动后画面多久停下', '2 分钟', true, ok('09-22')) +
+  group(0, '丢步检测', '越跑越快直到丢步', '5 分钟', true, none) +
+  group(0, '运动学', '实测速度与加速度', '3 分钟', true, none) +
+  group(0, '行程上的迟滞', '5 个位置 + 左右 Y 皮带', '8 分钟', true, none) +
+  group(0, '重复归位', '归位 3 次比基准点', '4 分钟', true, ok('09-22'));
+
+var log = '<div class="log" style="height:150px;overflow:hidden;border-bottom:1px solid var(--border)">'
+  + [['16:51:02', 'info', '基准板 · 第 3 跳：锚点 (140.000, 70.000) 漂移 +0.004 / −0.011 mm'],
+     ['16:51:18', 'info', '基准板 · 第 4 跳：比例 X −0.092 %，Y +0.018 %'],
+     ['16:51:40', 'warn', '基准板 · 第 5 跳：读数散布 0.046 %，大于上次，重读一次'],
+     ['16:52:05', 'info', '基准板 · 第 5 跳（重读）：比例 X −0.089 %，Y +0.021 %'],
+     ['16:52:06', 'info', '基准板完成：比例 X −0.090 % ± 0.02，垂直度 0.07°']]
+    .map(function (l) { return '<div class="ln"><span class="t">' + l[0] + '</span><span class="lv ' + l[1] + '">' + (l[1] === 'warn' ? '警告' : '信息') + '</span><span>' + l[2] + '</span></div>'; }).join('')
+  + '</div>';
+var chart = function (title, rt, path, color) {
+  return '<div class="chart"><div class="ct">' + title + '<span class="rt">' + rt + '</span></div><svg viewBox="0 0 300 92" preserveAspectRatio="none"><path d="M0 70 H300 M0 46 H300 M0 22 H300" stroke="var(--border)" stroke-width="1"/><path d="' + path + '" fill="none" stroke="' + color + '" stroke-width="2"/></svg></div>';
+};
+var charts = '<div class="kv2">'
+  + chart('基准板 · 比例 X %', '5 次', 'M0 60 L60 40 L120 52 L180 44 L240 48 L300 46', 'var(--accent)')
+  + chart('XY 定位 · 原始间隙 mm', 'X / Y', 'M0 30 L75 28 L150 32 L225 27 L300 30 M0 76 L75 72 L150 78 L225 74 L300 75', 'var(--warn)')
+  + chart('相机稳定 · 帧差', '250 ms 处稳定', 'M0 10 L30 50 L60 72 L90 80 L150 82 L300 82', 'var(--ok)')
+  + chart('重复归位 · 基准点偏差 mm', '3 次', 'M0 50 L100 44 L200 52 L300 47', 'var(--info)')
+  + '</div>';
+
+var body = '<div style="display:flex;height:100%"><div style="width:330px;border-right:1px solid var(--border);overflow:hidden">' + groups + '</div><div style="flex:1;min-width:0">' + log + charts + '</div></div>';
+var dock = F.dock({
+  tabs: [{ icon: 'alert', t: '问题', n: 9 }, { icon: 'activity', t: '测量' }, { icon: 'machine', t: '机器概况' }], active: 1,
+  tools: '<button class="btn xs primary">' + ic('refresh', 'sm') + '采集全部' + ic('zap', 'moves') + '</button>',
+  toolbar: F.seg(['校准所需', '全部', '自选'], 0) + F.sep() + '<button class="btn sm primary disabled" title="测量进行中">' + ic('play', 'sm') + '开始测量（4 组 · 约 13 分钟）' + ic('zap', 'moves') + '</button>'
+    + '<button class="btn sm danger">' + ic('stop', 'sm') + '停止（本组做完后）</button>' + F.btn('打开报告', 'external', 'ghost') + '<span class="grow"></span><span class="chip neutral" style="height:24px">正在测：基准板 · 第 5 跳</span>',
+  body: body
+});
+
+var side = F.side({
+  icon: 'activity', title: '基准板', sub: '测量组 · 会移动机器 · 约 6 分钟',
+  body:
+    F.sec('做什么', 'info', null, { after: '<p class="note">相机依次对准基准板上 5 个点，每跳之后回锚点重读一次，算出 X、Y 的比例误差和两轴垂直度。结果给校准页的「基准板坐标补偿」当依据。</p>' }) +
+    F.sec('参数', 'sliders', [
+      ['跳数', F.inp('5', { mono: true, w: 100 })],
+      ['每点读数', F.inp('3', { mono: true, w: 100, u: '次' })],
+      ['定位移动速度', F.inp('0.50', { mono: true, w: 100 })],
+      ['静止漂移', '<div class="row">' + F.inp('60', { mono: true, w: 100, u: 's' }) + '<span class="t2">0 = 不测</span></div>']
+    ]) +
+    F.sec('上次结果', 'clock', [
+      ['时间', '<span class="t2">09-22 14:03 · 报告已存</span>'],
+      ['比例', '<span class="mono t2">X −0.164 %  Y −0.187 %</span>'],
+      ['垂直度', '<span class="mono t2">0.07°</span>']
+    ]),
+  foot: '<button class="btn">恢复默认</button><button class="btn primary">应用</button>'
+});
+
+F.app({
+  page: 'issues', centerClass: 'strip-top',
+  top: { machine: 'busy' },
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 5] },
+  center: F.strip({ dro: ['140.000', '70.000', '-2.000', '0.00'] }) + dock,
+  side: side,
+  status: { chip: '<span class="status run" style="height:18px">测量中</span>', text: '基准板 · 第 5 跳 / 5 · 还剩约 9 分钟', right: ['总进度 <b class="mono t2">2 / 4 组</b>'] },
+  scene: Scene.pcb({ footprintLabel: 'FID1' })
+});
+</script>
+</body>
+</html>

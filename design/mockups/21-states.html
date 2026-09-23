@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 空表、忙碌、出错（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="frame.js"></script>
+<style>
+  .sheet { padding: 22px 26px; display: grid; grid-template-columns: 110px repeat(3, 1fr); grid-auto-rows: 290px; gap: 14px; }
+  .sheet .rowh { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .sheet .rowh b { font-size: 15px; }
+  .sheet .rowh span { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .sheet .dock { margin: 0; }
+  .title { padding: 22px 26px 0; display: flex; align-items: baseline; gap: 12px; }
+  .title b { font-size: 18px; }
+</style>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var empty = function (icon, title, text, buttons, err) {
+  return '<div class="empty"><div class="ei' + (err ? ' err' : '') + '">' + ic(icon) + '</div><b>' + title + '</b><p>' + text + '</p><div class="row">' + buttons + '</div></div>';
+};
+var skel = function (n) {
+  var s = '<table class="grid"><tbody>';
+  for (var i = 0; i < n; i++) s += '<tr><td style="width:80px"><span class="skel" style="width:52px"></span></td><td><span class="skel" style="width:' + (120 + (i * 37) % 90) + 'px"></span></td><td style="width:90px"><span class="skel" style="width:60px"></span></td></tr>';
+  return s + '</tbody></table>';
+};
+var bar = function (pct, text) {
+  return '<div class="row" style="flex:1;gap:8px"><span class="t2" style="font-size:12px">' + text + '</span><div class="bar" style="flex:1"><i style="width:' + pct + '%"></i></div><span class="mono t2" style="font-size:12px">' + pct + '%</span></div>';
+};
+var cells = [];
+cells.push('<div class="rowh"><b>空表</b><span>说清楚这里放什么，给出下一步。不出现空白表头。</span></div>');
+cells.push(F.dock({ tabs: [{ icon: 'parts', t: '元件', n: 0 }], toolbar: F.btn('新建元件', 'plus', 'primary') + F.filter('筛选…'), body: empty('parts', '还没有元件', '元件是贴片位用到的料号。可以在这里新建，也可以导入单板时自动建好。', F.btn('新建元件', 'plus', 'primary') + F.btn('导入单板…', 'download')) }));
+cells.push(F.dock({ tabs: [{ icon: 'alert', t: '问题', n: 0 }, { icon: 'activity', t: '测量' }], body: empty('alert', '还没查找过问题', '「采集全部」会检查配置，再跑一遍校准要用的测量：约 15 分钟，会移动机器。', '<button class="btn sm primary">' + ic('refresh', 'sm') + '采集全部' + ic('zap', 'moves') + '</button>' + F.btn('只查找问题', 'search')) }));
+cells.push(F.dock({ tabs: [{ icon: 'board', t: '单板', n: 0 }, { icon: 'parts', t: '贴片位', n: 0 }], body: empty('board', '任务里还没有单板', '添加一块已有的单板，或者新建一块再导入 KiCad / Eagle 的坐标文件。', '<button class="btn sm primary">' + ic('plus', 'sm') + '添加单板' + ic('chevdown', 'sm') + '</button>') }));
+
+cells.push('<div class="rowh"><b>忙碌</b><span>显示在做什么、做到哪、还要多久；能停就给「停止」。被挡住的按钮灰掉并说明原因。</span></div>');
+cells.push(F.dock({ tabs: [{ icon: 'alert', t: '问题', n: 3 }], toolbar: '<button class="btn sm disabled">' + ic('search', 'sm') + '查找问题</button>' + bar(58, '正在查找问题 · 23 / 40 项检查') + '<button class="btn sm danger">' + ic('stop', 'sm') + '停止</button>', body: skel(6) }));
+cells.push(F.dock({ tabs: [{ icon: 'target', t: '校准步骤', n: 25 }], toolbar: '<button class="btn sm primary disabled">' + ic('play', 'sm') + '一键校准（9 项）</button><button class="btn sm danger">' + ic('stop', 'sm') + '停止</button>' + bar(22, 'XY 间隙 · 2 / 9'),
+  body: '<div style="position:relative;height:100%">' + skel(5) + '<div class="tip" style="left:14px;top:6px">一键校准正在进行（第 2 步 / 9）。等它做完，或者先点「停止」。</div></div>' }));
+cells.push(F.dock({ tabs: [{ icon: 'feeder', t: '飞达', n: 24 }], banner: '<div class="banner info">' + ic('loader') + '<div class="bt"><b>F-08 自动设置 · 第 2 步 / 4</b><span>正在识别料带上的第二个孔，相机会沿料带走 12 mm</span></div><div class="acts"><button class="btn xs">取消</button></div></div>', body: skel(4) }));
+
+cells.push('<div class="rowh"><b>出错</b><span>一句话说出了什么事，给出能做的事；原文放进详情。已经改过的东西说明是否回滚。</span></div>');
+cells.push(F.dock({ tabs: [{ icon: 'parts', t: '元件', n: 0 }], banner: '<div class="banner err">' + ic('alert') + '<div class="bt"><b>parts.xml 读不出来</b><span>第 12 行的元件 C0603-1U 引用了不存在的封装 C0603X</span></div><div class="acts"><button class="btn xs">详情</button><button class="btn xs">用备份恢复…</button></div></div>', body: empty('file', '元件列表是空的', '配置目录里有 3 份自动备份，最近一份是今天 16:42。', F.btn('用 16:42 的备份恢复', 'refresh', 'primary')) }));
+cells.push(F.dock({ tabs: [{ icon: 'camera', t: '相机 Top' }], body: '<div style="height:100%;background:var(--camera-bg)">' + empty('camera', '相机 Top 没有画面', '找不到设备「USB2.0 Camera」。检查连线，或者在机器页给相机换一个设备。', F.btn('重新连接', 'refresh') + F.btn('去机器页', 'machine'), true) + '</div>' }));
+cells.push(F.dock({ tabs: [{ icon: 'target', t: '校准步骤', n: 25 }], banner: '<div class="banner err">' + ic('alert') + '<div class="bt"><b>XY 间隙没通过复测，已回滚</b><span>补偿后 X 还差 0.041 mm（目标 0.020）。配置回到了开始这一步之前的样子。</span></div><div class="acts"><button class="btn xs">看报告</button><button class="btn xs primary">重试</button></div></div>', body: skel(4) }));
+
+document.body.insertAdjacentHTML('beforeend', '<div class="title"><b>空表 · 忙碌 · 出错</b><span class="muted">每一页的数据区都按这三种状态画；这里各举三页</span></div><div class="sheet">' + cells.join('') + '</div>');
+</script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 问题页 · 问题（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var sev = { e: '<span class="status err">错误</span>', w: '<span class="status warn">警告</span>', s: '<span class="status run">建议</span>', i: '<span class="status pending">信息</span>' };
+var go = function (step) { return '<span class="link">校准页 · ' + step + ' ›</span>'; };
+var here = '<span class="t2">本页处理</span>';
+var rows = [
+  ['e', '待处理', '相机 Top', '镜头畸变没有标定，画面边缘的位置会偏', go('下视相机高级标定')],
+  ['e', '待处理', '轴 x', '反向间隙没有补偿：实测 0.200 mm', go('XY 间隙')],
+  ['w', '待处理', '吸嘴头 NT1', '跳动没有标定', go('吸嘴头跳动与背景')],
+  ['w', '待处理', '机器', '视觉归位没有启用：每次归位后坐标会差几十微米', go('视觉归位')],
+  ['w', '待处理', '驱动 NullDriver', '这是模拟驱动；接真机前要换成 G 代码驱动', here],
+  ['s', '待处理', '相机 Top', '相机稳定时间可以从 250 ms 缩到 180 ms', go('相机延迟与稳定')],
+  ['s', '待处理', '作业处理器', '允许用没标定的吸嘴头贴装', here],
+  ['s', '已接受', '轴 zN1', '软限位已按行程设置', here],
+  ['i', '已忽略', '飞达 F-09', '禁用的飞达没有元件', here]
+].map(function (r) {
+  return [sev[r[0]], '<span class="tag">' + r[1] + '</span>', '<b>' + r[2] + '</b>', r[3], r[4]];
+});
+
+var dock = F.dock({
+  tabs: [{ icon: 'alert', t: '问题', n: 9 }, { icon: 'activity', t: '测量' }, { icon: 'machine', t: '机器概况' }],
+  tools: '<button class="btn xs primary">' + ic('refresh', 'sm') + '采集全部' + ic('zap', 'moves') + '</button>',
+  toolbar: F.btn('查找问题', 'search') + '<span class="t2" style="font-size:12px;margin-left:6px">目标</span>' + '<div class="inp" style="height:28px;width:120px">高级' + ic('chevdown', 'sm caret') + '</div>'
+    + '<label class="row" style="font-size:12px;gap:6px"><span class="check"></span>显示已解决和已忽略</label>' + F.filter('筛选主题 / 问题…'),
+  body: F.table([{ t: '严重度', w: 76 }, { t: '状态', w: 76 }, { t: '主题', w: 150 }, { t: '问题' }, { t: '处理', w: 190 }], rows, 0),
+  foot: '上次查找 16:40 · 9 个问题，5 个在校准页处理 · 「采集全部」= 查找问题 + 校准所需的测量（约 15 分钟）'
+});
+
+var side = F.side({
+  icon: 'alert', title: '镜头畸变没有标定', sub: '问题 · 相机 Top · 错误',
+  body:
+    F.sec('说明', 'info', null, { after: '<p class="note">相机镜头会让画面边缘的点离中心更远或更近。没有标定时，视觉对位只在画面中央准确，基准点、飞达孔在画面边缘时会差出 0.05–0.2 mm。</p>' }) +
+    F.sec('依据', 'activity', [
+      ['测量', '<span class="t2">测量 · 相机 · 09-22 14:03</span>'],
+      ['边缘畸变', '<span class="mono t2">0.8 px（约 0.017 mm）</span>'],
+      ['高级标定', '<span class="status warn" style="height:18px">没有</span>']
+    ]) +
+    F.sec('怎么处理', 'target', null, { after: '<p class="note">在校准页做「下视相机高级标定」：相机在标定板上走 9 个位置，约 3 分钟，需要你先放好标定板。标定做完，这条问题会自动变成已解决。</p>' }),
+  foot: '<button class="btn">忽略</button><button class="btn" title="把说明和依据复制到剪贴板">' + ic('copy', 'sm') + '复制</button><button class="btn primary" style="flex:2">去校准页 · 下视相机高级标定 ›</button>'
+});
+
+F.app({
+  page: 'issues', centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 5] },
+  center: F.strip() + dock,
+  side: side,
+  status: { chip: '<span class="status warn" style="height:18px">5 项要校准</span>', text: '9 个问题 · 去校准页一键处理', right: ['上次查找 16:40'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>
