@@ -126,14 +126,8 @@ public class TopBarPanel extends JPanel {
         // which is the only time the job's own Stop is enabled.
         JButton stopMachineButton = Ui.button(stopMachine, Ui.Size.Md, Ui.Variant.SolidDanger);
         stopMachineButton.setIcon(Ui.icon("power")); //$NON-NLS-1$
-        // It never gives way: on a narrow window the other controls truncate before this does.
-        // Measured again with its icon, which the styling's fixed width was taken without.
-        stopMachineButton.setPreferredSize(null);
-        Dimension stopSize = new Dimension(stopMachineButton.getPreferredSize().width,
-                Ui.Size.Md.height);
-        stopMachineButton.setPreferredSize(stopSize);
-        stopMachineButton.setMinimumSize(stopSize);
-        stopMachineButton.setMaximumSize(stopSize);
+        // It never gives way: a button's minimum is its preferred size, so on a narrow window the
+        // job's name and the search box give up their width before this does.
         add(stopMachineButton);
         add(Box.createHorizontalStrut(14));
         add(progress());
@@ -220,6 +214,39 @@ public class TopBarPanel extends JPanel {
         return pill;
     }
 
+    private boolean windowButtons;
+
+    /**
+     * The bar is the window's title bar too: room at its right end for the window's own
+     * buttons, which the look and feel draws there, sized by the look and feel.
+     */
+    public void reserveWindowButtons() {
+        if (windowButtons) {
+            return;
+        }
+        windowButtons = true;
+        JPanel placeholder = new JPanel() {
+            @Override
+            public Dimension getMaximumSize() {
+                return getPreferredSize();
+            }
+        };
+        placeholder.setOpaque(false);
+        placeholder.putClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT_BUTTONS_PLACEHOLDER, "win"); //$NON-NLS-1$
+        placeholder.setAlignmentY(TOP_ALIGNMENT);
+        add(Box.createHorizontalStrut(8));
+        add(placeholder);
+        setBorder(border());
+        revalidate();
+    }
+
+    /** The hairline under the bar, and its padding: none at the right when the window's buttons are there. */
+    private javax.swing.border.Border border() {
+        return BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
+                new EmptyBorder(0, 12, 0, windowButtons ? 0 : 14));
+    }
+
     /** Whether to show that the configuration has unsaved changes. */
     public void setConfigurationDirty(boolean dirty) {
         configurationDirty.setVisible(dirty);
@@ -230,7 +257,10 @@ public class TopBarPanel extends JPanel {
     private void showJobName(String displayName) {
         // The display name carries the dirty flag as a leading asterisk, which the dot replaces.
         boolean dirty = displayName.startsWith("*"); //$NON-NLS-1$
-        jobNameLabel.setText(dirty ? displayName.substring(1) : displayName);
+        String name = dirty ? displayName.substring(1) : displayName;
+        jobNameLabel.setText(name);
+        // Cut short on a narrow window; the whole name is on hover.
+        jobNameLabel.setToolTipText(name);
         unsavedDot.setVisible(dirty);
     }
 
@@ -255,36 +285,64 @@ public class TopBarPanel extends JPanel {
         row.add(step);
         row.add(stop);
         // One action drives both Start and Pause, saying which it is by its name. The buttons
-        // keep their own names and take turns being enabled instead.
+        // keep their own names and take turns being enabled instead; paused, Start is Resume.
         Runnable follow = () -> {
             boolean running = jobPanel.isJobRunning();
+            startButton.setText(Translations.getString(jobPanel.isJobPaused() ? "TopBar.Job.Resume" //$NON-NLS-1$
+                    : "TopBar.Job.Start")); //$NON-NLS-1$
             startButton.setEnabled(startPause.isEnabled() && !running);
             pauseButton.setEnabled(startPause.isEnabled() && running);
             step.setEnabled(jobPanel.stepJobAction.isEnabled());
             stop.setEnabled(jobPanel.stopJobAction.isEnabled());
+            showProgressState();
         };
         startPause.addPropertyChangeListener(e -> follow.run());
         jobPanel.stepJobAction.addPropertyChangeListener(e -> follow.run());
         jobPanel.stopJobAction.addPropertyChangeListener(e -> follow.run());
         jobPanel.addPropertyChangeListener(JobPanel.PROPERTY_JOB_RUNNING, e -> follow.run());
+        jobPanel.addPropertyChangeListener(JobPanel.PROPERTY_JOB_STATE, e -> follow.run());
         follow.run();
         return row;
     }
 
-    /** {@code 31 / 48 [====  ] 64%}, 180 pixels wide. */
+    /** {@code 31 / 48 [====  ] 64%}, 128 pixels wide; "Ready" where the percentage goes while idle. */
     private JComponent progress() {
         JPanel row = row(8);
         row.add(progressText);
         row.add(progressBar);
         row.add(progressPercent);
-        row.setPreferredSize(new Dimension(180, HEIGHT));
-        row.setMinimumSize(new Dimension(120, HEIGHT));
-        row.setMaximumSize(new Dimension(180, HEIGHT));
+        row.setPreferredSize(new Dimension(128 + 40, HEIGHT));
+        row.setMinimumSize(new Dimension(90, HEIGHT));
+        row.setMaximumSize(new Dimension(128 + 40, HEIGHT));
         progressPercent.setFont(Ui.font(12f));
+        progressText.setForeground(Ui.text2());
+        // Squeezed, the bar goes first: the count and "ready" are what the group says.
+        row.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                boolean room = row.getWidth() >= 140;
+                if (progressBar.isVisible() != room) {
+                    progressBar.setVisible(room);
+                    row.revalidate();
+                }
+            }
+        });
         return row;
     }
 
-    /** The command search as {@code .search}: 190 x 32, muted placeholder, a keycap. */
+    private int done;
+    private int total;
+
+    private void showProgressState() {
+        int percent = total > 0 ? Math.round(done * 100f / total) : 0;
+        progressPercent.setText(jobPanel.isJobStopped()
+                ? Translations.getString("TopBar.Progress.Ready") : percent + "%"); //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
+    /**
+     * The command search as {@code .search}: 150 x 32, muted placeholder, a keycap. On a narrow
+     * window it is the magnifier alone, with the rest on hover.
+     */
     private JComponent search(Runnable openCommands) {
         RoundedPanel box = new RoundedPanel(6, Ui.surface2(), Ui.border());
         box.setLayout(new BoxLayout(box, BoxLayout.X_AXIS));
@@ -292,17 +350,32 @@ public class TopBarPanel extends JPanel {
         JLabel icon = new JLabel(Ui.iconSm("search")); //$NON-NLS-1$
         icon.setForeground(Ui.muted());
         box.add(icon);
-        box.add(Box.createHorizontalStrut(8));
+        java.awt.Component strut = Box.createHorizontalStrut(8);
+        box.add(strut);
         JLabel placeholder = Ui.muted(Translations.getString("TopBar.Search.Placeholder")); //$NON-NLS-1$
         box.add(placeholder);
         box.add(Box.createHorizontalGlue());
-        box.add(Ui.kbd("Ctrl K")); //$NON-NLS-1$
-        Dimension size = new Dimension(190, 32);
+        JLabel key = Ui.kbd("Ctrl K"); //$NON-NLS-1$
+        box.add(key);
+        Dimension size = new Dimension(150, 32);
         box.setPreferredSize(size);
         // On a narrow window the box gives up its placeholder before anything else loses a button.
-        box.setMinimumSize(new Dimension(60, 32));
+        box.setMinimumSize(new Dimension(34, 32));
         box.setMaximumSize(size);
         placeholder.setMinimumSize(new Dimension(0, 20));
+        box.setToolTipText(Translations.getString("TopBar.Search.toolTipText")); //$NON-NLS-1$
+        box.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                boolean wide = box.getWidth() >= 110;
+                if (placeholder.isVisible() != wide) {
+                    placeholder.setVisible(wide);
+                    key.setVisible(wide);
+                    strut.setVisible(wide);
+                    box.setBorder(new EmptyBorder(0, wide ? 10 : 9, 0, wide ? 10 : 0));
+                }
+            }
+        });
         box.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         box.addMouseListener(new MouseAdapter() {
             @Override
@@ -315,10 +388,11 @@ public class TopBarPanel extends JPanel {
 
     /** Placements done out of the total, as the progress group shows them. */
     public void setProgress(int done, int total) {
+        this.done = done;
+        this.total = total;
         progressText.setText(done + " / " + total); //$NON-NLS-1$
-        int percent = total > 0 ? Math.round(done * 100f / total) : 0;
         progressBar.setFraction(total > 0 ? done / (double) total : 0);
-        progressPercent.setText(percent + "%"); //$NON-NLS-1$
+        showProgressState();
     }
 
     /**
@@ -349,9 +423,7 @@ public class TopBarPanel extends JPanel {
         if (themeButton != null) {
             themeButton.setIcon(Ui.icon(FlatLaf.isLafDark() ? "moon" : "sun")); //$NON-NLS-1$ //$NON-NLS-2$
             setBackground(Ui.surface());
-            setBorder(BorderFactory.createCompoundBorder(
-                    BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
-                    new EmptyBorder(0, 12, 0, 14)));
+            setBorder(border());
             if (menuBar != null) {
                 menus(menuBar);
             }

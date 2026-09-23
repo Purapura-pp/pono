@@ -349,6 +349,25 @@ public class CameraView extends JComponent implements CameraListener {
         this.showName = showName;
     }
 
+    /** Where the view's own text goes below the cards along the top of the image. */
+    public static final int STAGE_TOP = 56;
+
+    private boolean stageMode;
+
+    /**
+     * On the main window's image, whose corners carry cards of their own: the view's own text
+     * moves out from under them, and the light switch it draws gives way to the one among the
+     * view tools.
+     */
+    public void setStageMode(boolean stageMode) {
+        this.stageMode = stageMode;
+        repaint();
+    }
+
+    public boolean isStageMode() {
+        return stageMode;
+    }
+
     public boolean isShowName() {
         return this.showName;
     }
@@ -730,16 +749,28 @@ public class CameraView extends JComponent implements CameraListener {
             }
 
             if (text != null) {
-                drawTextOverlay(g2d, 10, 10, text);
+                if (stageMode) {
+                    // The corners belong to the cards on the image; the middle of the foot does not.
+                    Dimension dim = measureTextOverlay(g2d, text);
+                    drawTextOverlay(g2d, (width - dim.width) / 2, height - dim.height - 12, text);
+                }
+                else {
+                    drawTextOverlay(g2d, 10, 10, text);
+                }
             }
 
             if (showName) {
                 Dimension dim = measureTextOverlay(g2d, camera.getName());
-                drawTextOverlay(g2d, 10, height - dim.height - 10, camera.getName());
+                if (stageMode) {
+                    drawTextOverlay(g2d, (width - dim.width) / 2, 12, camera.getName());
+                }
+                else {
+                    drawTextOverlay(g2d, 10, height - dim.height - 10, camera.getName());
+                }
             }
 
             if (showImageInfo && text == null) {
-                drawImageInfo(g2d, 10, 10, image);
+                drawImageInfo(g2d, stageMode ? 12 : 10, stageMode ? STAGE_TOP : 10, image);
             }
 
             if (selectionEnabled && selection != null) {
@@ -748,7 +779,9 @@ public class CameraView extends JComponent implements CameraListener {
 
             if (!selectionEnabled) {
                 paintDragJogging(g2d);
-                paintLightToggle(g2d);
+                if (!stageMode) {
+                    paintLightToggle(g2d);
+                }
             }
 
             if (camera.isUnitsPerPixelAtZCalibrated()) {
@@ -758,7 +791,13 @@ public class CameraView extends JComponent implements CameraListener {
                     LengthConverter lengthConverter = new LengthConverter();
                     String text = "Z: " + lengthConverter.convertForward(camera.getLocation().getLengthZ());
                     Dimension dim = measureTextOverlay(g2d, text);
-                    drawTextOverlay(g2d, width - dim.width - 10, height - dim.height - 10, text);
+                    if (stageMode) {
+                        // Under the view tools rather than under the machine controls' card.
+                        drawTextOverlay(g2d, width - dim.width - 12, STAGE_TOP, text);
+                    }
+                    else {
+                        drawTextOverlay(g2d, width - dim.width - 10, height - dim.height - 10, text);
+                    }
                 }
             }
         }
@@ -827,7 +866,7 @@ public class CameraView extends JComponent implements CameraListener {
 
     private boolean isPointInsideLightToggle(int x, int y) {
         Actuator actuator = camera.getLightActuator();
-        if (actuator == null) {
+        if (actuator == null || stageMode) {
             return false;
         }
         
@@ -1656,6 +1695,22 @@ public class CameraView extends JComponent implements CameraListener {
             MovableUtils.moveToLocationAtSafeZ(selectedTool, location);
             MovableUtils.fireTargetedUserAction(selectedTool, true);
         });
+    }
+
+    /** Whether the camera has a light that can be switched from the view. */
+    public boolean hasLight() {
+        return camera != null && camera.getLightActuator() != null;
+    }
+
+    /** Whether the camera's light is on, as far as its actuator knows. */
+    public boolean isLightOn() {
+        Actuator actuator = camera == null ? null : camera.getLightActuator();
+        return actuator != null && Boolean.TRUE.equals(actuator.isActuated());
+    }
+
+    /** Switches the camera's light, as a click on the view's own light switch does. */
+    public void toggleLight() {
+        toggleLight(null);
     }
 
     private void toggleLight(MouseEvent e) {

@@ -564,14 +564,14 @@ public class CameraViewPopupMenu extends JPopupMenu {
         reticleOptionsMenu = menu;
     }
 
-    private Action showImageInfoAction = new AbstractAction("Show Image Info?") {
+    private Action showImageInfoAction = new AbstractAction(Translations.getString("CameraViewPopupMenu.ShowImageInfo")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent e) {
             cameraView.setShowImageInfo(((JCheckBoxMenuItem) e.getSource()).isSelected());
         }
     };
 
-    private Action noReticleAction = new AbstractAction("None") {
+    private Action noReticleAction = new AbstractAction(Translations.getString("CameraViewPopupMenu.Reticle.None")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
             setReticleOptionsMenu(null);
@@ -579,7 +579,7 @@ public class CameraViewPopupMenu extends JPopupMenu {
         }
     };
 
-    private Action crosshairReticleAction = new AbstractAction("Crosshair") {
+    private Action crosshairReticleAction = new AbstractAction(Translations.getString("CameraViewPopupMenu.Reticle.Crosshair")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
             CrosshairReticle reticle = new CrosshairReticle();
@@ -589,7 +589,7 @@ public class CameraViewPopupMenu extends JPopupMenu {
         }
     };
 
-    private Action gridReticleAction = new AbstractAction("Grid") {
+    private Action gridReticleAction = new AbstractAction(Translations.getString("CameraViewPopupMenu.Reticle.Grid")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
             GridReticle reticle = new GridReticle();
@@ -599,7 +599,7 @@ public class CameraViewPopupMenu extends JPopupMenu {
         }
     };
 
-    private Action rulerReticleAction = new AbstractAction("Ruler") {
+    private Action rulerReticleAction = new AbstractAction(Translations.getString("CameraViewPopupMenu.Reticle.Ruler")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
             RulerReticle reticle = new RulerReticle();
@@ -609,7 +609,7 @@ public class CameraViewPopupMenu extends JPopupMenu {
         }
     };
 
-    private Action fiducialReticleAction = new AbstractAction("Fiducial") {
+    private Action fiducialReticleAction = new AbstractAction(Translations.getString("CameraViewPopupMenu.Reticle.Fiducial")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
             FiducialReticle reticle = new FiducialReticle();

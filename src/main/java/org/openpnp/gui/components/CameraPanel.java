@@ -102,8 +102,25 @@ public class CameraPanel extends JPanel {
         });
     }
 
+    private boolean stageMode;
+
+    /** See {@link CameraView#setStageMode(boolean)}: for every view, those to come included. */
+    public void setStageMode(boolean stageMode) {
+        this.stageMode = stageMode;
+        for (CameraView view : cameraViews.values()) {
+            view.setStageMode(stageMode);
+            if (stageMode) {
+                view.setBackground(org.openpnp.gui.shell.Ui.cameraBg());
+            }
+        }
+    }
+
     public void addCamera(Camera camera) {
         CameraView cameraView = new CameraView();
+        cameraView.setStageMode(stageMode);
+        if (stageMode) {
+            cameraView.setBackground(org.openpnp.gui.shell.Ui.cameraBg());
+        }
         cameraView.setCamera(camera);
         cameraViews.put(camera, cameraView);
         camerasCombo.addItem(new CameraItem(camera));

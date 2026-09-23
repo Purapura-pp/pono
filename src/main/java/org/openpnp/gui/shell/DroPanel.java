@@ -17,23 +17,31 @@
 
 package org.openpnp.gui.shell;
 
-import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.util.Locale;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
-import javax.swing.UIManager;
+import javax.swing.SwingUtilities;
 
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Location;
 
 /**
  * The four axis readouts, as an axis letter in small type above a monospaced value.
+ * <p>
+ * The stylesheet's {@code .dro}: four columns 18 pixels apart, the letter at 10 pixels bold and
+ * spaced out in the muted colour, the value in monospaced 20/600 with its unit after it on the
+ * same baseline, padded 10 by 14. Where the card does not get its full width - a narrow window,
+ * the machine controls beside it - it changes to the 16 pixel {@code .dro.compact} rather than
+ * being squeezed until its numbers are cut.
  * <p>
  * This replaces a single label holding {@code "X:1.000 Y:2.000 Z:0.000 C:0.000"} with a bevel
  * border and a hardcoded black on pale green, which was unreadable on a dark theme and told the
@@ -43,24 +51,20 @@ import org.openpnp.model.Location;
 @SuppressWarnings("serial")
 public class DroPanel extends JPanel {
     private static final String[] AXES = { "X", "Y", "Z", "C" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-    /** Used when the theme carries no Pono.dro.fontScale, i.e. on a non-Pono look and feel. */
-    private static final float DEFAULT_FONT_SCALE = 1.5f;
-    /** Wide enough for a signed four digit coordinate, so the row does not jitter as it counts. */
-    private static final int VALUE_COLUMNS = 9;
+    /** Wide enough for a signed three digit coordinate, so the row does not jitter as it counts. */
+    private static final int VALUE_COLUMNS = 8;
 
     private final JLabel[] axisLabels = new JLabel[AXES.length];
     private final JLabel[] valueLabels = new JLabel[AXES.length];
     private final JLabel[] unitLabels = new JLabel[AXES.length];
     private final Configuration configuration;
     private boolean marked;
+    private boolean compact;
 
     public DroPanel(Configuration configuration) {
         this.configuration = configuration;
         setLayout(new GridBagLayout());
         setOpaque(false);
-
-        // The stylesheet's .dro: four columns 18 pixels apart, the letter above the value with the
-        // unit tucked after it, the whole thing padded 10 by 14.
         setBorder(new javax.swing.border.EmptyBorder(10, 14, 10, 14));
         GridBagConstraints gc = new GridBagConstraints();
         for (int i = 0; i < AXES.length; i++) {
@@ -70,22 +74,32 @@ public class DroPanel extends JPanel {
 
             gc.gridx = i * 2;
             gc.gridwidth = 2;
-            gc.insets = new Insets(0, i == 0 ? 0 : 18, 0, 0);
+            gc.insets = new Insets(0, i == 0 ? 0 : 18, 1, 0);
             gc.gridy = 0;
-            gc.anchor = GridBagConstraints.SOUTHWEST;
+            gc.anchor = GridBagConstraints.WEST;
             add(axisLabels[i], gc);
 
             gc.gridy = 1;
             gc.gridwidth = 1;
-            gc.anchor = GridBagConstraints.EAST;
+            gc.insets = new Insets(0, i == 0 ? 0 : 18, 0, 0);
+            gc.anchor = GridBagConstraints.BASELINE_TRAILING;
             add(valueLabels[i], gc);
             gc.gridx = i * 2 + 1;
             gc.insets = new Insets(0, 3, 0, 0);
-            gc.anchor = GridBagConstraints.SOUTHWEST;
+            gc.anchor = GridBagConstraints.BASELINE_LEADING;
             add(unitLabels[i], gc);
         }
         applyStyle();
         clear();
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                boolean wanted = forcedCompact || (getWidth() > 0 && getWidth() < fullWidth());
+                if (wanted != compact) {
+                    SwingUtilities.invokeLater(() -> setCompact(wanted));
+                }
+            }
+        });
     }
 
     /**
@@ -112,6 +126,28 @@ public class DroPanel extends JPanel {
         applyColors();
     }
 
+    public boolean isCompact() {
+        return compact;
+    }
+
+    private boolean forcedCompact;
+
+    /** The camera strip's readout is the compact one whatever room it has, as the stylesheet draws it. */
+    public void setForcedCompact(boolean forced) {
+        forcedCompact = forced;
+        setCompact(forced || (getWidth() > 0 && getWidth() < fullWidth()));
+        revalidate();
+    }
+
+    private void setCompact(boolean compact) {
+        if (this.compact != compact) {
+            this.compact = compact;
+            applyStyle();
+            revalidate();
+            repaint();
+        }
+    }
+
     private void clear() {
         for (JLabel value : valueLabels) {
             value.setText(""); //$NON-NLS-1$
@@ -119,66 +155,63 @@ public class DroPanel extends JPanel {
         applyColors();
     }
 
+    private Font valueFont(boolean compact) {
+        return Ui.mono(compact ? Tokens.FS_DRO_COMPACT : Tokens.FS_DRO, Font.BOLD);
+    }
+
     private void applyStyle() {
-        Font base = UIManager.getFont("Label.font"); //$NON-NLS-1$
-        if (base == null) {
-            base = new Font(Font.DIALOG, Font.PLAIN, 12);
-        }
-        Font mono = UIManager.getFont("monospaced.font"); //$NON-NLS-1$
-        if (mono == null) {
-            mono = new Font(Font.MONOSPACED, Font.PLAIN, base.getSize());
-        }
-
-        Object scale = UIManager.get("Pono.dro.fontScale"); //$NON-NLS-1$
-        float factor = scale instanceof Number ? ((Number) scale).floatValue() : DEFAULT_FONT_SCALE;
-        Font valueFont = mono.deriveFont(Font.BOLD, base.getSize2D() * factor);
-        // The letter is 10 pixels, bold, spaced out; the unit 10 pixels, medium.
-        Font axisFont = base.deriveFont(Font.BOLD, 10f).deriveFont(
+        Font axisFont = Ui.font(Tokens.FS_MICRO, Font.BOLD).deriveFont(
                 java.util.Map.of(java.awt.font.TextAttribute.TRACKING, 0.1f));
-        Font unitFont = base.deriveFont(10f);
-
+        Font unitFont = Ui.weighted(Tokens.FS_MICRO, 500);
         for (int i = 0; i < AXES.length; i++) {
             axisLabels[i].setFont(axisFont);
-            valueLabels[i].setFont(valueFont);
+            valueLabels[i].setFont(valueFont(compact));
             unitLabels[i].setFont(unitFont);
-            // Reserving the width here rather than per update keeps the numbers from shifting
-            // sideways as digits come and go.
-            valueLabels[i].setPreferredSize(null);
-            valueLabels[i].setText(valueLabels[i].getText());
         }
         applyColors();
     }
 
     private void applyColors() {
-        Color axisColor = color("Pono.textMuted", UIManager.getColor("Label.disabledForeground")); //$NON-NLS-1$ //$NON-NLS-2$
-        Color valueColor = marked
-                ? color("Component.accentColor", UIManager.getColor("Label.foreground")) //$NON-NLS-1$ //$NON-NLS-2$
-                : UIManager.getColor("Label.foreground"); //$NON-NLS-1$
         for (int i = 0; i < AXES.length; i++) {
-            if (axisColor != null) {
-                axisLabels[i].setForeground(axisColor);
-                unitLabels[i].setForeground(axisColor);
-            }
-            if (valueColor != null) {
-                valueLabels[i].setForeground(valueColor);
-            }
+            // The secondary text colour rather than the stylesheet's muted: on the light theme's
+            // glass over a green board, muted comes out at a contrast of 2.5.
+            axisLabels[i].setForeground(Ui.text2());
+            unitLabels[i].setForeground(Ui.text2());
+            valueLabels[i].setForeground(marked ? Ui.accent() : Ui.text());
         }
     }
 
-    private static Color color(String key, Color fallback) {
-        Color color = UIManager.getColor(key);
-        return color != null ? color : fallback;
+    /** The width the four columns take at full size, with the numbers' room reserved. */
+    private int fullWidth() {
+        return width(valueFont(false));
     }
 
-    /** Reserves a stable width so the row does not resize while the machine moves. */
+    private int width(Font valueFont) {
+        int digit = getFontMetrics(valueFont).charWidth('0');
+        int unit = getFontMetrics(Ui.weighted(Tokens.FS_MICRO, 500)).stringWidth("mm") + 3; //$NON-NLS-1$
+        Insets insets = getInsets();
+        // The compact readout keeps room for 120.450, the full one for -120.450 as well.
+        int columns = valueFont.getSize2D() < Tokens.FS_DRO ? VALUE_COLUMNS - 1 : VALUE_COLUMNS;
+        return insets.left + insets.right + AXES.length * (digit * columns + unit) + 3 * 18;
+    }
+
+    /**
+     * Reserves a stable width so the row does not resize while the machine moves. Always the
+     * full width, compact or not: that is what the card asks for, and it goes back to the full
+     * size as soon as it gets it.
+     */
     @Override
-    public java.awt.Dimension getPreferredSize() {
-        java.awt.Dimension size = super.getPreferredSize();
-        if (valueLabels[0] != null && valueLabels[0].getFont() != null) {
-            int digit = getFontMetrics(valueLabels[0].getFont()).charWidth('0');
-            int wanted = AXES.length * (digit * VALUE_COLUMNS + 13);
-            size.width = Math.max(size.width, wanted);
-        }
+    public Dimension getPreferredSize() {
+        Dimension size = super.getPreferredSize();
+        size.width = Math.max(size.width, forcedCompact ? width(valueFont(true)) : fullWidth());
+        return size;
+    }
+
+    /** The compact readout's width: what the card may be narrowed to before it has to move. */
+    @Override
+    public Dimension getMinimumSize() {
+        Dimension size = super.getMinimumSize();
+        size.width = width(valueFont(true));
         return size;
     }
 

@@ -108,12 +108,22 @@ public class PillBar extends JPanel {
         }
     }
 
+    private Function<Object, javax.swing.Icon> iconer = item -> null;
+
+    /** The icon before a pill's text, such as the camera on a camera's pill; null for none. */
+    public void setIconer(Function<Object, javax.swing.Icon> iconer) {
+        this.iconer = iconer;
+        for (int index = 0; index < items.size(); index++) {
+            buttons.get(index).setIcon(iconer.apply(items.get(index)));
+        }
+    }
+
     public void addItem(Object item) {
         insertItemAt(item, items.size());
     }
 
     public void insertItemAt(Object item, int index) {
-        JToggleButton button = new Ui.ToggleButton(labeller.apply(item), null);
+        JToggleButton button = new Ui.ToggleButton(labeller.apply(item), iconer.apply(item));
         Ui.pill(button);
         button.setVisible(!hidden.test(item));
         button.addActionListener(e -> setSelectedItem(item));

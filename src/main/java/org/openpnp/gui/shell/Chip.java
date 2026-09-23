@@ -135,10 +135,19 @@ public class Chip extends JLabel {
         }
     }
 
+    private int height;
+
+    /** A height other than the shape's own, as the status bar's 18 pixel status. */
+    public Chip withHeight(int height) {
+        this.height = height;
+        revalidate();
+        return this;
+    }
+
     @Override
     public Dimension getPreferredSize() {
         Dimension size = super.getPreferredSize();
-        size.height = shape == Shape.Chip ? 26 : 20;
+        size.height = height > 0 ? height : shape == Shape.Chip ? 26 : 20;
         return size;
     }
 

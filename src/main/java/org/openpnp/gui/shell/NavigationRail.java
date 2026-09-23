@@ -20,27 +20,25 @@ package org.openpnp.gui.shell;
 import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
+import java.awt.LayoutManager;
 import java.awt.RenderingHints;
-import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import javax.swing.BorderFactory;
-import javax.swing.Box;
-import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.Icon;
+import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
-import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
@@ -52,6 +50,12 @@ import javax.swing.event.ChangeListener;
  * wrote an HTML dot into its own tab title to do it. An icon above a two-word label takes a
  * fraction of the horizontal space, and a badge belongs to the item rather than to its text.
  * <p>
+ * Drawn as the stylesheet's {@code .rail}: 68 pixels wide, 56 by 54 items 4 pixels apart, the
+ * selected one on a rounded accent-soft block with its name in the accent at 600 and a 3 by 26
+ * bar at the rail's edge, 32 pixel rules between the groups, and settings at the foot. When the
+ * window is too short for all of them the items drop their labels, which keeps settings at the
+ * foot rather than cut off below it.
+ * <p>
  * The pages live in a card layout this owns, so that the selected item and the visible page cannot
  * disagree. Callers address a page by its component, the way they did with the tabbed pane, rather
  * than by a title: a title is translated, which is why {@code showTab("Feeders")} had quietly
@@ -59,27 +63,42 @@ import javax.swing.event.ChangeListener;
  */
 @SuppressWarnings("serial")
 public class NavigationRail extends JPanel {
-    /** From the mockup: wide enough for two Chinese characters under a 24px icon. */
-    private static final Dimension ITEM_SIZE = new Dimension(56, 54);
-    /** The accent stripe that marks the selected item. */
-    private static final int INDICATOR_WIDTH = 3;
-    private static final int BADGE_DIAMETER = 15;
+    static final int ITEM_WIDTH = 56;
+    static final int ITEM_HEIGHT = 54;
+    /** An item without its label, when the window is too short for the full rail. */
+    static final int COMPACT_HEIGHT = 40;
+    private static final int GAP = 4;
+    private static final int PADDING = 10;
+    /** A rule between groups: 1 pixel with 6 above and below, on top of the item gap. */
+    private static final int RULE = 13;
+
+    /** How loud a badge is: a warning is yellow, anything that needs doing about it red. */
+    public enum Badge {
+        Warn, Err
+    }
 
     private final JPanel pages = new JPanel(new CardLayout());
     private final ButtonGroup group = new ButtonGroup();
     private final Map<Component, RailButton> buttons = new LinkedHashMap<>();
     private final List<ChangeListener> listeners = new ArrayList<>();
-    private final Box top = Box.createVerticalBox();
-    private final Box bottom = Box.createVerticalBox();
+    /** The items and rules from the top, then the ones pinned to the foot. */
+    private final List<JComponent> head = new ArrayList<>();
+    private final List<JComponent> foot = new ArrayList<>();
     private Component selected;
+    private boolean compact;
 
     public NavigationRail() {
-        setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBackground(color("Pono.rail.background", getBackground())); //$NON-NLS-1$
-        setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
-        add(top);
-        add(Box.createVerticalGlue());
-        add(bottom);
+        setLayout(new RailLayout());
+        setBackground(Ui.color("Pono.rail.background", 0xffffff)); //$NON-NLS-1$
+        setBorder(javax.swing.BorderFactory.createMatteBorder(0, 0, 0, 1, Ui.border()));
+        setOpaque(true);
+        pages.setOpaque(false);
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        setBorder(javax.swing.BorderFactory.createMatteBorder(0, 0, 0, 1, Ui.border()));
     }
 
     /** The pages, in rail order. */
@@ -90,7 +109,7 @@ public class NavigationRail extends JPanel {
     /** The short label a page is shown under, or null for a component that is not a page. */
     public String getLabel(Component page) {
         RailButton button = buttons.get(page);
-        return button == null ? null : button.getText();
+        return button == null ? null : button.label;
     }
 
     /** The card panel holding the pages. Belongs next to the rail in the window's layout. */
@@ -103,20 +122,31 @@ public class NavigationRail extends JPanel {
      * @param toolTip The full name of the page, which no longer fits under an icon.
      */
     public void addPage(String label, String toolTip, Icon icon, Component page) {
+        addPage(label, toolTip, icon, page, page);
+    }
+
+    /**
+     * @param page What callers select the page by.
+     * @param view What is shown for it: the page itself, or the page in a card.
+     */
+    public void addPage(String label, String toolTip, Icon icon, Component page, Component view) {
         RailButton button = new RailButton(label, toolTip, icon, page);
         button.card = String.valueOf(buttons.size());
         buttons.put(page, button);
         group.add(button);
-        top.add(button);
-        pages.add(page, button.card);
+        head.add(button);
+        add(button);
+        pages.add(view, button.card);
         if (selected == null) {
             setSelectedComponent(page);
         }
     }
 
-    /** A gap that groups the items above it, as the mockup groups job, library and machine. */
+    /** The stylesheet's {@code .sep}: a 32 pixel rule between the groups above and below it. */
     public void addGap() {
-        top.add(Box.createVerticalStrut(10));
+        JComponent rule = new Rule();
+        head.add(rule);
+        add(rule);
     }
 
     /**
@@ -130,7 +160,8 @@ public class NavigationRail extends JPanel {
             button.setSelected(false);
             action.actionPerformed(e);
         });
-        bottom.add(button);
+        foot.add(button);
+        add(button);
     }
 
     public Component getSelectedComponent() {
@@ -158,102 +189,220 @@ public class NavigationRail extends JPanel {
 
     /**
      * Show a count on a page's item, or clear it with zero. What the count means is the page's
-     * business; the rail only reports that there is something to attend to there.
+     * business; the rail only reports that there is something to attend to there, in red when
+     * it needs doing and in yellow when it is a warning.
      */
-    public void setBadge(Component page, int count) {
+    public void setBadge(Component page, int count, Badge badge) {
         RailButton button = buttons.get(page);
-        if (button != null && button.badge != count) {
+        if (button != null && (button.badge != count || button.tone != badge)) {
             button.badge = count;
+            button.tone = badge;
             button.repaint();
         }
     }
 
-    /** A theme colour that follows a theme switch; see {@link ThemeColor}. */
-    private static Color color(String key, Color fallback) {
-        return Ui.color(key, fallback == null ? 0 : fallback.getRGB() & 0xffffff,
-                fallback == null ? 0 : fallback.getAlpha());
+    /** A red badge. */
+    public void setBadge(Component page, int count) {
+        setBadge(page, count, Badge.Err);
+    }
+
+    /** The count on a page's item, zero for none. */
+    public int getBadge(Component page) {
+        RailButton button = buttons.get(page);
+        return button == null ? 0 : button.badge;
+    }
+
+    /** Whether the items are showing without their labels, the window being too short. */
+    public boolean isCompact() {
+        return compact;
+    }
+
+    private void setCompact(boolean compact) {
+        if (this.compact == compact) {
+            return;
+        }
+        this.compact = compact;
+        for (Component c : getComponents()) {
+            if (c instanceof RailButton) {
+                ((RailButton) c).showLabel(!compact);
+            }
+        }
+    }
+
+    @Override
+    protected void paintChildren(Graphics g) {
+        super.paintChildren(g);
+        RailButton button = selected == null ? null : buttons.get(selected);
+        if (button == null || !button.isVisible()) {
+            return;
+        }
+        // The 3 by 26 bar 6 pixels left of the selected item, which is the rail's own edge.
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(Ui.accent());
+            int h = Math.min(26, button.getHeight() - 8);
+            g2.fillRoundRect(button.getX() - 6 - 2, button.getY() + (button.getHeight() - h) / 2, 5, h, 4, 4);
+        }
+        finally {
+            g2.dispose();
+        }
+    }
+
+    /** The height the items take in full, with their labels. */
+    private int fullHeight() {
+        int height = 2 * PADDING;
+        for (List<JComponent> list : List.of(head, foot)) {
+            for (JComponent c : list) {
+                height += (c instanceof Rule ? RULE : ITEM_HEIGHT) + GAP;
+            }
+        }
+        return height;
     }
 
     /**
-     * One item: an icon, a short label, an accent stripe when it is the page being shown, and a
-     * badge when its page has a count to report.
+     * The items from the top, 4 pixels apart; the foot's items from the bottom. Items lose their
+     * labels when the rail is shorter than it needs with them.
+     */
+    private final class RailLayout implements LayoutManager {
+        @Override
+        public void addLayoutComponent(String name, Component comp) {
+        }
+
+        @Override
+        public void removeLayoutComponent(Component comp) {
+        }
+
+        @Override
+        public Dimension preferredLayoutSize(Container parent) {
+            return new Dimension(Tokens.W_RAIL, fullHeight());
+        }
+
+        @Override
+        public Dimension minimumLayoutSize(Container parent) {
+            return new Dimension(Tokens.W_RAIL, 0);
+        }
+
+        @Override
+        public void layoutContainer(Container parent) {
+            Insets insets = parent.getInsets();
+            int width = parent.getWidth() - insets.left - insets.right;
+            setCompact(parent.getHeight() < fullHeight());
+            int itemHeight = compact ? COMPACT_HEIGHT : ITEM_HEIGHT;
+            int x = insets.left + (width - ITEM_WIDTH) / 2;
+            int y = insets.top + PADDING;
+            for (JComponent c : head) {
+                int h = c instanceof Rule ? RULE : itemHeight;
+                c.setBounds(c instanceof Rule ? insets.left : x, y, c instanceof Rule ? width : ITEM_WIDTH, h);
+                y += h + GAP;
+            }
+            int bottom = parent.getHeight() - insets.bottom - PADDING;
+            for (int i = foot.size() - 1; i >= 0; i--) {
+                JComponent c = foot.get(i);
+                bottom -= itemHeight;
+                c.setBounds(x, bottom, ITEM_WIDTH, itemHeight);
+                bottom -= GAP;
+            }
+        }
+    }
+
+    /** The stylesheet's {@code .rail .sep}: 32 by 1 in the border colour, centred. */
+    private static final class Rule extends JComponent {
+        @Override
+        protected void paintComponent(Graphics g) {
+            g.setColor(Ui.border());
+            g.fillRect((getWidth() - 32) / 2, getHeight() / 2, 32, 1);
+        }
+    }
+
+    /**
+     * One item: an icon, a short label, the accent block and bar when it is the page being shown,
+     * and a badge when its page has a count to report.
      */
     private final class RailButton extends JToggleButton {
         private final Component page;
+        private final String label;
         private String card;
         private int badge;
+        private Badge tone = Badge.Err;
 
         RailButton(String label, String toolTip, Icon icon, Component page) {
             super(label, icon);
             this.page = page;
+            this.label = label;
             setToolTipText(toolTip);
             setVerticalTextPosition(SwingConstants.BOTTOM);
             setHorizontalTextPosition(SwingConstants.CENTER);
-            setFont(getFont().deriveFont(getFont().getSize2D() - 1f).deriveFont(Font.PLAIN));
-            setIconTextGap(2);
+            setFont(Ui.font(Tokens.FS_TAG));
+            setIconTextGap(4);
             setFocusPainted(false);
             setBorderPainted(false);
             setContentAreaFilled(false);
             setOpaque(false);
-            setMinimumSize(ITEM_SIZE);
-            setPreferredSize(ITEM_SIZE);
-            setMaximumSize(ITEM_SIZE);
-            setAlignmentX(CENTER_ALIGNMENT);
-            addActionListener(new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    if (RailButton.this.page != null) {
-                        setSelectedComponent(RailButton.this.page);
-                    }
+            setMargin(new Insets(0, 0, 0, 0));
+            setBorder(null);
+            setRolloverEnabled(true);
+            getAccessibleContext().setAccessibleName(label);
+            addActionListener(e -> {
+                if (RailButton.this.page != null) {
+                    setSelectedComponent(RailButton.this.page);
                 }
             });
         }
 
+        /** Without the label the full name is still the tooltip and the accessible name. */
+        void showLabel(boolean show) {
+            setText(show ? label : null);
+        }
+
+        private boolean showing() {
+            return page != null && page == selected;
+        }
+
         @Override
         protected void paintComponent(Graphics g) {
-            boolean showing = page != null && page == selected;
+            boolean showing = showing();
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 if (showing) {
-                    g2.setColor(color("Pono.rail.selectedBackground", getBackground())); //$NON-NLS-1$
-                    g2.fillRect(0, 0, getWidth(), getHeight());
-                    g2.setColor(color("Pono.rail.selectedIndicator", //$NON-NLS-1$
-                            UIManager.getColor("Component.focusColor"))); //$NON-NLS-1$
-                    g2.fillRect(0, 0, INDICATOR_WIDTH, getHeight());
+                    g2.setColor(Ui.accentSoft());
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 2 * Tokens.R_MD, 2 * Tokens.R_MD);
                 }
-                else if (getModel().isRollover()) {
-                    g2.setColor(color("Pono.rail.hoverBackground", getBackground())); //$NON-NLS-1$
-                    g2.fillRect(0, 0, getWidth(), getHeight());
+                else if (getModel().isRollover() || getModel().isPressed()) {
+                    g2.setColor(Ui.hover());
+                    g2.fillRoundRect(0, 0, getWidth(), getHeight(), 2 * Tokens.R_MD, 2 * Tokens.R_MD);
                 }
             }
             finally {
                 g2.dispose();
             }
-            setForeground(showing
-                    ? color("Pono.rail.selectedIndicator", UIManager.getColor("Component.focusColor")) //$NON-NLS-1$ //$NON-NLS-2$
-                    : color("Pono.textSecondary", UIManager.getColor("Label.foreground"))); //$NON-NLS-1$ //$NON-NLS-2$
+            setForeground(showing ? Ui.accent() : Ui.text2());
+            setFont(showing ? Ui.weighted(Tokens.FS_TAG, Tokens.FW_SECTION) : Ui.font(Tokens.FS_TAG));
             super.paintComponent(g);
             if (badge > 0) {
                 paintBadge(g);
             }
         }
 
-        /** On the icon's upper right, where a count does not push the label around. */
+        /** The stylesheet's {@code .badge}: a 16 pixel capsule 6 from the top, 8 from the right. */
         private void paintBadge(Graphics g) {
             Graphics2D g2 = (Graphics2D) g.create();
             try {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int x = getWidth() / 2 + 6;
-                int y = 4;
-                g2.setColor(color("Pono.statusErr", Color.RED)); //$NON-NLS-1$
-                g2.fillOval(x, y, BADGE_DIAMETER, BADGE_DIAMETER);
+                g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 String text = badge > 99 ? "99+" : String.valueOf(badge); //$NON-NLS-1$
-                g2.setFont(getFont().deriveFont(Font.BOLD, getFont().getSize2D() - 2f));
-                g2.setColor(Color.WHITE);
+                g2.setFont(Ui.font(Tokens.FS_MICRO, java.awt.Font.BOLD));
                 int textWidth = g2.getFontMetrics().stringWidth(text);
-                g2.drawString(text, x + (BADGE_DIAMETER - textWidth) / 2,
-                        y + BADGE_DIAMETER - g2.getFontMetrics().getDescent() - 2);
+                int w = Math.max(16, textWidth + 8);
+                int x = getWidth() - 8 - w;
+                int y = compact ? 2 : 6;
+                boolean warn = tone == Badge.Warn;
+                g2.setColor(warn ? Ui.warn() : Ui.err());
+                g2.fillRoundRect(x, y, w, 16, 16, 16);
+                g2.setColor(warn ? new Color(0x1a1200) : Color.WHITE);
+                g2.drawString(text, x + (w - textWidth) / 2f,
+                        y + (16 + g2.getFontMetrics().getAscent() - g2.getFontMetrics().getDescent()) / 2f);
             }
             finally {
                 g2.dispose();

@@ -20,9 +20,16 @@ package org.openpnp.gui.shell;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.geom.Area;
+import java.awt.geom.Rectangle2D;
+import java.awt.geom.RoundRectangle2D;
 
+import javax.swing.JComponent;
 import javax.swing.JLayeredPane;
 
 import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
@@ -37,6 +44,11 @@ import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
  * <p>
  * A layered pane rather than a glass pane, because these are ordinary interactive components - the
  * jog buttons have to take clicks, and the instructions have to take a Next.
+ * <p>
+ * The stage is the stylesheet's {@code .camera}: a card with 14 pixel corners. The camera view
+ * repaints itself for every frame, from the camera's thread, and would paint square corners over
+ * a clip set here; the corners are therefore a frame on the top layer, which is repainted with
+ * every frame because the overlays make the layers overlap, and which takes no mouse events.
  */
 @SuppressWarnings("serial")
 public class CameraStage extends JLayeredPane {
@@ -48,6 +60,7 @@ public class CameraStage extends JLayeredPane {
     public CameraStage(Component cameraView) {
         setLayout(layout);
         anchor(cameraView, Anchor.Fill, JLayeredPane.DEFAULT_LAYER);
+        anchor(new CornerFrame(), Anchor.Fill, JLayeredPane.DRAG_LAYER);
         // A layered pane does not reliably lay its children out again when it is resized: after
         // the window was made smaller the cards kept the corners they had been given for the
         // larger one, which put the machine controls half off the bottom of the screen.
@@ -90,5 +103,45 @@ public class CameraStage extends JLayeredPane {
         // otherwise have been taken for the layer.
         setLayer(component, layer);
         add(component, anchor);
+    }
+
+    /**
+     * The card's corners in the window's colour and its hairline border, over everything else.
+     * It is never the target of a click: the view and the cards under it take them.
+     */
+    private static final class CornerFrame extends JComponent {
+        CornerFrame() {
+            setOpaque(false);
+            setFocusable(false);
+        }
+
+        @Override
+        public boolean contains(int x, int y) {
+            return false;
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            int w = getWidth();
+            int h = getHeight();
+            if (w <= 0 || h <= 0) {
+                return;
+            }
+            float arc = 2 * Tokens.R_LG;
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                Area corners = new Area(new Rectangle2D.Float(0, 0, w, h));
+                corners.subtract(new Area(new RoundRectangle2D.Float(0, 0, w, h, arc, arc)));
+                Container parent = getParent() == null ? null : getParent().getParent();
+                g2.setColor(parent != null && parent.isOpaque() ? parent.getBackground() : Ui.bg());
+                g2.fill(corners);
+                g2.setColor(Ui.border());
+                g2.draw(new RoundRectangle2D.Float(0.5f, 0.5f, w - 1f, h - 1f, arc, arc));
+            }
+            finally {
+                g2.dispose();
+            }
+        }
     }
 }

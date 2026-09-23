@@ -47,8 +47,13 @@ import org.openpnp.model.Configuration;
 public class StatusBarPanel extends JPanel {
     public static final int HEIGHT = 28;
 
+    /** The stylesheet's status bar status: 18 high, where a table's is 20. */
     private final Chip statePill = new Chip(
-            Translations.getString("StatusBar.State.Idle"), Tone.Pending, Shape.Status); //$NON-NLS-1$
+            Translations.getString("StatusBar.State.Idle"), Tone.Pending, Shape.Status).withHeight(18); //$NON-NLS-1$
+    /** What was last asked for, shown again when the machine comes back. */
+    private String stateText = Translations.getString("StatusBar.State.Idle"); //$NON-NLS-1$
+    private Tone stateTone = Tone.Pending;
+    private boolean machineEnabled;
     private final JLabel statusLabel = Ui.t2(" "); //$NON-NLS-1$
     private final JLabel lastPlacementLabel = Ui.muted(""); //$NON-NLS-1$
     private final JComponent lastPlacementSep = Ui.divider(14);
@@ -73,6 +78,9 @@ public class StatusBarPanel extends JPanel {
         versionLabel.setFont(Ui.font(12f));
 
         add(item(6, statePill, statusLabel));
+        buildWizardLink();
+        add(Box.createHorizontalStrut(10));
+        add(wizardLink);
         add(Box.createHorizontalStrut(14));
         add(lastPlacementSep);
         add(Box.createHorizontalStrut(14));
@@ -129,6 +137,34 @@ public class StatusBarPanel extends JPanel {
         return item;
     }
 
+    private final JLabel wizardLink = new JLabel(Translations.getString("StatusBar.ShowWizard")); //$NON-NLS-1$
+    private Runnable showWizard;
+
+    /**
+     * While a wizard is under way, a link after its step that brings its instructions back into
+     * view; null when there is none.
+     */
+    public void setWizardLink(Runnable showWizard) {
+        this.showWizard = showWizard;
+        wizardLink.setVisible(showWizard != null);
+        revalidateItems();
+    }
+
+    private void buildWizardLink() {
+        wizardLink.setFont(Ui.font(12f));
+        wizardLink.setForeground(Ui.accent());
+        wizardLink.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        wizardLink.setVisible(false);
+        wizardLink.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (showWizard != null) {
+                    showWizard.run();
+                }
+            }
+        });
+    }
+
     /** What the machine is doing right now, in words. */
     public void setStatus(String status) {
         statusLabel.setText(status == null || status.isEmpty() ? " " : status); //$NON-NLS-1$
@@ -141,8 +177,30 @@ public class StatusBarPanel extends JPanel {
      * @param tone Run while a job runs or a wizard is up, Pending when idle, Err on a fault.
      */
     public void setState(String text, Tone tone) {
-        statePill.setText(text);
-        statePill.setTone(tone);
+        stateText = text;
+        stateTone = tone;
+        showState();
+    }
+
+    /**
+     * Whether the machine is switched on. Idle with the machine off is not ready for anything:
+     * the status says the machine is disconnected until it is on again.
+     */
+    public void setMachineEnabled(boolean enabled) {
+        machineEnabled = enabled;
+        showState();
+    }
+
+    private void showState() {
+        boolean idle = stateTone == Tone.Pending;
+        if (idle && !machineEnabled) {
+            statePill.setText(Translations.getString("StatusBar.State.Disconnected")); //$NON-NLS-1$
+            statePill.setTone(Tone.Neutral);
+        }
+        else {
+            statePill.setText(stateText);
+            statePill.setTone(stateTone);
+        }
         revalidate();
     }
 

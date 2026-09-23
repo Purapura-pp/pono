@@ -64,6 +64,8 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
     private final Configuration configuration;
     private final Frame frame;
     protected AbstractVisionSettings selectedVisionSettings;
+    /** Set while the selection is put back after the user kept unapplied edits. */
+    private boolean revertingSelection;
 
     private VisionSettingsTableModel tableModel;
     private TableRowSorter<VisionSettingsTableModel> tableSorter;
@@ -96,10 +98,10 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
             }
 
             SwingUtilities.invokeLater(() -> {
-                AbstractVisionSettings selectedVisionSettings = getSelection();
-                if (selectedVisionSettings != null) {
-                    this.selectedVisionSettings = selectedVisionSettings;
+                if (revertingSelection) {
+                    return;
                 }
+                AbstractVisionSettings selectedVisionSettings = getSelection();
 
                 // One wizard, whichever kind of vision settings this is.
                 Supplier<List<PropertySheet>> sheets = () -> {
@@ -111,13 +113,34 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
                     }
                     return built;
                 };
-                MainFrame.get().getInspector().show(VisionSettingsPanel.this,
+                org.openpnp.gui.shell.PropertySheetPresenter.Result shown = MainFrame.get().getInspector()
+                        .show(VisionSettingsPanel.this,
                         selectedVisionSettings, VisionSettingsPanel.this,
                         selectedVisionSettings == null ? null : selectedVisionSettings.getName(),
                         selectedVisionSettings == null
                                 ? null
                                 : InspectorPanel.typeOf(selectedVisionSettings),
                         Icons.captureCamera, sheets);
+                if (shown == org.openpnp.gui.shell.PropertySheetPresenter.Result.Cancelled) {
+                    // The user kept the unapplied edits: the settings they belong to stay selected.
+                    revertingSelection = true;
+                    try {
+                        if (this.selectedVisionSettings != null) {
+                            Helpers.selectObjectTableRow(table, this.selectedVisionSettings);
+                        }
+                        else {
+                            table.clearSelection();
+                        }
+                    }
+                    finally {
+                        revertingSelection = false;
+                    }
+                    return;
+                }
+                if (shown == org.openpnp.gui.shell.PropertySheetPresenter.Result.Shown
+                        && selectedVisionSettings != null) {
+                    this.selectedVisionSettings = selectedVisionSettings;
+                }
             });
         });
         tableModel.addTableModelListener(e -> {

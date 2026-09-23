@@ -153,15 +153,6 @@ public class MainFrame extends JFrame {
     private static final int PREF_WINDOW_HEIGHT_DEF = 768;
     private static final String PREF_WINDOW_STYLE_MULTIPLE = "MainFrame.windowStyleMultiple"; //$NON-NLS-1$
     private static final boolean PREF_WINDOW_STYLE_MULTIPLE_DEF = false;
-    private static final String PREF_CAMERA_DIVIDER_POSITION = "MainFrame.cameraDividerPosition"; //$NON-NLS-1$
-    /**
-     * A share of the height rather than a number of pixels, because the floating controls are a
-     * fixed size: a fraction leaves the image room to grow with the window, where 400 pixels on a
-     * laptop is a strip of image with the jog card sitting on all of it.
-     */
-    private static final double CAMERA_HEIGHT_SHARE = 0.55;
-    private static final String PREF_INSPECTOR_COLLAPSED = "MainFrame.inspectorCollapsed"; //$NON-NLS-1$
-    private static final boolean PREF_INSPECTOR_COLLAPSED_DEF = false;
     private static final String PREF_INSPECTOR_WIDTH = "MainFrame.inspectorWidth"; //$NON-NLS-1$
 
     private static final String PREF_CAMERA_WINDOW_X = "CameraFrame.windowX"; //$NON-NLS-1$
@@ -174,6 +165,8 @@ public class MainFrame extends JFrame {
     private static final int PREF_CAMERA_WINDOW_HEIGHT_DEF = 600;
 
     private static final int MINIMUM_WINDOW_SIZE = 50;
+    private static final int MIN_WIDTH = 1024;
+    private static final int MIN_HEIGHT = 640;
 
     private final Configuration configuration;
 
@@ -301,7 +294,7 @@ public class MainFrame extends JFrame {
     private JMenuBar menuBar;
     private JMenu mnImport;
     private JMenu mnScripts;
-    private JMenu mnWindows;
+    private JMenu mnCommands;
 
     public NavigationRail getNavigation() {
         return navigationRail;
@@ -315,7 +308,8 @@ public class MainFrame extends JFrame {
         return inspectorPanel;
     }
 
-    private Chip unitsPerPixelChip;
+    private JLabel unitsPerPixelChip;
+    private OverlayCard unitsStrip;
 
     /** {@code 1 px = 0.0209 mm}, for the camera on show; blank while none or all are. */
     private void showUnitsPerPixel() {
@@ -333,6 +327,31 @@ public class MainFrame extends JFrame {
             unitsPerPixelChip.getParent().setVisible(true);
         }
         cameraStage.revalidate();
+    }
+
+    /** The placement selected on the job page, whose package the outline switch draws. */
+    private org.openpnp.model.Placement selectedPlacement() {
+        if (jobPanel == null || jobPanel.getJobPlacementsPanel() == null) {
+            return null;
+        }
+        return jobPanel.getJobPlacementsPanel().getSelection();
+    }
+
+    private org.openpnp.model.Footprint selectedFootprint() {
+        org.openpnp.model.Placement placement = selectedPlacement();
+        if (placement == null || placement.getPart() == null || placement.getPart().getPackage() == null) {
+            return null;
+        }
+        return placement.getPart().getPackage().getFootprint();
+    }
+
+    /** "R12 · 0603", as the mockups' scene names the outline it draws. */
+    private String selectedFootprintLabel() {
+        org.openpnp.model.Placement placement = selectedPlacement();
+        if (placement == null || placement.getPart() == null || placement.getPart().getPackage() == null) {
+            return null;
+        }
+        return placement.getId() + " \u00b7 " + placement.getPart().getPackage().getId(); //$NON-NLS-1$
     }
 
     private DiagnosticsPanel diagnosticsPanel;
@@ -384,8 +403,10 @@ public class MainFrame extends JFrame {
         if (total <= 0) {
             return;
         }
+        // At least 320 wide and at most 30 % of the window, whatever was dragged to.
         int width = inspectorPanel.isCollapsed() ? InspectorPanel.COLLAPSED_WIDTH
-                : prefs.getInt(PREF_INSPECTOR_WIDTH, InspectorPanel.PREFERRED_WIDTH);
+                : org.openpnp.gui.shell.PageLayouts.inspectorWidth(
+                        prefs.getInt(PREF_INSPECTOR_WIDTH, InspectorPanel.PREFERRED_WIDTH), getWidth());
         splitPaneInspector.setDividerLocation(total - width - splitPaneInspector.getDividerSize());
     }
 
@@ -393,11 +414,205 @@ public class MainFrame extends JFrame {
      * One rail item, labelled from its own short key and explained by the tab title it replaces.
      */
     private void addNavigation(String key, Icon icon, Component page) {
+        // A page is a card of its own below the camera. The job and feeders pages are a dock,
+        // which is that card already; the others are put in one.
+        Component view = page;
+        if (page != jobPanel && page != feedersPanel) {
+            org.openpnp.gui.shell.RoundedPanel card = org.openpnp.gui.shell.RoundedPanel.card();
+            card.setLayout(new BorderLayout());
+            card.add(page, BorderLayout.CENTER);
+            view = card;
+        }
+        else if (page instanceof javax.swing.JComponent) {
+            ((javax.swing.JComponent) page).setOpaque(false);
+        }
+        pageKeys.put(page, key);
         navigationRail.addPage(
                 Translations.getString("MainFrame.Navigation." + key), //$NON-NLS-1$
                 Translations.getString("MainFrame.RightComponent.tabs." + key), //$NON-NLS-1$
-                icon, page);
+                icon, page, view);
     }
+
+    // ---- each page's layout ---------------------------------------------------------------------
+
+    private org.openpnp.gui.shell.PageLayouts pageLayouts;
+    /** Each page's name in the layouts, which is its navigation key. */
+    private final Map<Component, String> pageKeys = new HashMap<>();
+    private org.openpnp.gui.shell.CameraToolsBar cameraToolsBar;
+    private OverlayCard cameraModeCard;
+    private OverlayCard stripHandle;
+    private final Map<org.openpnp.gui.shell.PageLayouts.Camera, javax.swing.JToggleButton> cameraModeButtons =
+            new java.util.EnumMap<>(org.openpnp.gui.shell.PageLayouts.Camera.class);
+    /** The camera was made large for a wizard's instructions and goes back when they are done. */
+    private boolean wizardEnlargedCamera;
+
+    /**
+     * Calls back when the user lets go of a split's divider: a drag, as against the window being
+     * resized, which moves the divider too. The divider is made again by a theme change, so it is
+     * looked for again then.
+     */
+    private static void onDividerReleased(JSplitPane split, Runnable released) {
+        java.awt.event.MouseAdapter listener = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                SwingUtilities.invokeLater(released);
+            }
+        };
+        Runnable attach = () -> {
+            if (split.getUI() instanceof javax.swing.plaf.basic.BasicSplitPaneUI) {
+                java.awt.Component divider = ((javax.swing.plaf.basic.BasicSplitPaneUI) split.getUI()).getDivider();
+                divider.removeMouseListener(listener);
+                divider.addMouseListener(listener);
+            }
+        };
+        attach.run();
+        split.addPropertyChangeListener("UI", e -> SwingUtilities.invokeLater(attach)); //$NON-NLS-1$
+    }
+
+    /** Lays the window out as the page on show wants it: its camera, its properties column. */
+    private void applyPageLayout(Component page) {
+        String key = pageKeys.get(page);
+        if (key == null || pageLayouts == null) {
+            return;
+        }
+        if (cameraFullScreen) {
+            toggleCameraFullScreen();
+        }
+        if (!windowStyleMultiple) {
+            org.openpnp.gui.shell.PageLayouts.Camera camera = pageLayouts.camera(key);
+            if (wizardEnlargedCamera || (instructionsCard != null && instructionsCard.isVisible())) {
+                camera = org.openpnp.gui.shell.PageLayouts.Camera.Large;
+            }
+            setCameraMode(key, camera, false);
+        }
+        applyInspectorPolicy();
+    }
+
+    /**
+     * Puts the camera at a size on a page: the page's large camera, the strip, or none.
+     * 
+     * @param store Whether the page is to keep it, as it does when the user asked for it.
+     */
+    private void setCameraMode(String key, org.openpnp.gui.shell.PageLayouts.Camera camera, boolean store) {
+        if (store) {
+            pageLayouts.setCamera(key, camera);
+        }
+        int height = splitPaneMachineAndTabs.getHeight() - splitPaneMachineAndTabs.getDividerSize();
+        if (height <= 0) {
+            // Not laid out yet: once it is.
+            SwingUtilities.invokeLater(() -> {
+                if (splitPaneMachineAndTabs.getHeight() > 0) {
+                    setCameraMode(key, camera, false);
+                }
+            });
+            showCameraMode(camera);
+            return;
+        }
+        // A large camera takes what the window gains; the strip stays a strip.
+        splitPaneMachineAndTabs.setResizeWeight(camera == org.openpnp.gui.shell.PageLayouts.Camera.Large ? 1.0 : 0.0);
+        splitPaneMachineAndTabs.setDividerLocation(pageLayouts.dividerFor(key, camera, height));
+        showCameraMode(camera);
+    }
+
+    /**
+     * What the image carries at a size: the strip has the camera choice, its readout in the
+     * compact size, the three sizes and the handle to drag it larger; the large camera has the
+     * view tools and the machine controls.
+     */
+    private void showCameraMode(org.openpnp.gui.shell.PageLayouts.Camera camera) {
+        if (cameraStage == null) {
+            return;
+        }
+        boolean strip = camera == org.openpnp.gui.shell.PageLayouts.Camera.Small;
+        if (cameraToolsBar != null) {
+            cameraToolsBar.setVisible(!strip);
+        }
+        if (jogCard != null) {
+            jogCard.setVisible(!strip);
+        }
+        if (cameraModeCard != null) {
+            cameraModeCard.setVisible(strip);
+            stripHandle.setVisible(strip);
+        }
+        if (unitsStrip != null) {
+            unitsStrip.setVisible(!strip);
+        }
+        if (droPanel != null) {
+            droPanel.setForcedCompact(strip);
+        }
+        for (Map.Entry<org.openpnp.gui.shell.PageLayouts.Camera, javax.swing.JToggleButton> entry : cameraModeButtons.entrySet()) {
+            entry.getValue().setSelected(entry.getKey() == camera);
+        }
+        cameraStage.revalidate();
+        cameraStage.repaint();
+    }
+
+    /** The View menu's and the strip's choice of camera size for the page on show. */
+    private void chooseCameraMode(org.openpnp.gui.shell.PageLayouts.Camera camera) {
+        String key = pageKeys.get(navigationRail.getSelectedComponent());
+        if (key != null && !windowStyleMultiple) {
+            if (cameraFullScreen) {
+                toggleCameraFullScreen();
+            }
+            setCameraMode(key, camera, true);
+        }
+    }
+
+    /** The strip's "large / small / hidden" pills and its handle, built once with the stage. */
+    private void buildCameraModeControls() {
+        cameraModeCard = OverlayCard.strip();
+        javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
+        for (org.openpnp.gui.shell.PageLayouts.Camera camera : org.openpnp.gui.shell.PageLayouts.Camera.values()) {
+            javax.swing.JToggleButton pill = new org.openpnp.gui.shell.Ui.ToggleButton(
+                    Translations.getString("MainFrame.Camera." + camera.name()), null); //$NON-NLS-1$
+            org.openpnp.gui.shell.Ui.pill(pill);
+            pill.setToolTipText(Translations.getString("MainFrame.Camera." + camera.name() + ".toolTipText")); //$NON-NLS-1$ //$NON-NLS-2$
+            pill.addActionListener(e -> chooseCameraMode(camera));
+            group.add(pill);
+            cameraModeButtons.put(camera, pill);
+            cameraModeCard.add(pill);
+        }
+        cameraModeCard.setVisible(false);
+        cameraStage.anchor(cameraModeCard, Anchor.NorthEast);
+        stripHandle = new OverlayCard();
+        stripHandle.setLayout(new BorderLayout());
+        stripHandle.setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 10));
+        JLabel handle = new JLabel(Translations.getString("MainFrame.Camera.DragToEnlarge"), //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.icon("grip", 12), SwingConstants.CENTER); //$NON-NLS-1$
+        handle.setFont(org.openpnp.gui.shell.Ui.font(11f));
+        handle.setForeground(org.openpnp.gui.shell.Ui.text2());
+        handle.setIconTextGap(6);
+        stripHandle.add(handle);
+        stripHandle.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        stripHandle.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                chooseCameraMode(org.openpnp.gui.shell.PageLayouts.Camera.Large);
+            }
+        });
+        stripHandle.setVisible(false);
+        cameraStage.anchor(stripHandle, Anchor.South);
+    }
+
+    /** The properties column as the page on show wants it, at a width the window allows. */
+    private void applyInspectorPolicy() {
+        String key = pageKeys.get(navigationRail.getSelectedComponent());
+        if (key == null || inspectorPanel == null) {
+            return;
+        }
+        boolean shown = pageLayouts.inspectorShown(key, inspectorPanel.hasContent());
+        applyingInspector = true;
+        try {
+            inspectorPanel.setCollapsed(!shown);
+        }
+        finally {
+            applyingInspector = false;
+        }
+        applyInspectorWidth();
+    }
+
+    /** Set while the column is folded by the page's policy rather than by the user. */
+    private boolean applyingInspector;
 
     public Map<KeyStroke, Action> getHotkeyActionMap() {
         return hotkeyActionMap;
@@ -442,6 +657,8 @@ public class MainFrame extends JFrame {
             }
         });
 
+        // Nothing stored yet: the program has not been run here before.
+        boolean firstRun = prefs.get(PREF_WINDOW_WIDTH, null) == null;
         if (prefs.getInt(PREF_WINDOW_WIDTH, MINIMUM_WINDOW_SIZE) < MINIMUM_WINDOW_SIZE) {
             prefs.putInt(PREF_WINDOW_WIDTH, PREF_WINDOW_WIDTH_DEF);
         }
@@ -457,20 +674,18 @@ public class MainFrame extends JFrame {
                 prefs.getInt(PREF_WINDOW_WIDTH, PREF_WINDOW_WIDTH_DEF),
                 prefs.getInt(PREF_WINDOW_HEIGHT, PREF_WINDOW_HEIGHT_DEF));
 
-        // Ensure the window is within the bounds of a screen.
-        Rectangle windowBounds = getBounds();
-        boolean isWithinScreen = false;
-        for (GraphicsDevice gd : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
-            Rectangle screenBounds = gd.getDefaultConfiguration().getBounds();
-            if (windowBounds.intersects(screenBounds)) {
-                isWithinScreen = true;
-                break;
-            }
+        // The shell needs 1024 by 640: below that the top bar's controls and the jog card no
+        // longer fit, however the rest gives way.
+        setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
+        // Within the usable part of the screen it is mostly on - not under the task bar, not
+        // hanging off a monitor that has since been unplugged - and no larger than that.
+        setBounds(org.openpnp.gui.shell.ScreenFit.clamp(getBounds(), new Dimension(MIN_WIDTH, MIN_HEIGHT)));
+        if (firstRun) {
+            // A first start fills the screen; the laptop screens this runs on have no room to spare.
+            setExtendedState(getExtendedState() | java.awt.Frame.MAXIMIZED_BOTH);
         }
-        if (!isWithinScreen) {
-        	// If the window is not within any screen, reset it to the default position.
-            setBounds(PREF_WINDOW_X_DEF, PREF_WINDOW_Y_DEF, PREF_WINDOW_WIDTH_DEF, PREF_WINDOW_HEIGHT_DEF);
-        }
+        // Every dialog fits the screen too, scrolling when its content does not.
+        org.openpnp.gui.shell.ScreenFit.installForDialogs();
         jobPanel = new JobPanel(configuration, this);
         panelsPanel = new PanelsPanel(configuration, this);
         boardsPanel = new BoardsPanel(configuration, this);
@@ -601,47 +816,53 @@ public class MainFrame extends JFrame {
         }
         
 
-        // Job
-        //////////////////////////////////////////////////////////////////////
-        JMenu mnJob = new JMenu(Translations.getString("Menu.Job")); //$NON-NLS-1$
-        mnJob.setMnemonic(KeyEvent.VK_J);
-        menuBar.add(mnJob);
+        // View, continued: what used to be the Window menu. The top bar has room for the
+        // mockups' six menus, and a menu of two items was one more place to look.
+        mnView.addSeparator();
+        JCheckBoxMenuItem windowStyleMultipleMenuItem =
+                new JCheckBoxMenuItem(windowStyleMultipleSelected);
+        mnView.add(windowStyleMultipleMenuItem);
+        if (windowStyleMultiple) {
+            windowStyleMultipleMenuItem.setSelected(true);
+            // The camera's own window can be closed or lost behind others; this brings it back.
+            JMenuItem showCameraWindow = new JMenuItem(Translations.getString("Menu.View.ShowCameraWindow")); //$NON-NLS-1$
+            showCameraWindow.addActionListener(e -> {
+                if (frameCamera != null) {
+                    frameCamera.setVisible(true);
+                    frameCamera.toFront();
+                }
+            });
+            mnView.add(showCameraWindow);
+        }
+        else {
+            // The camera's size on the page on show, as the strip's pills choose it.
+            JMenu mnCamera = new JMenu(Translations.getString("Menu.View.Camera")); //$NON-NLS-1$
+            for (org.openpnp.gui.shell.PageLayouts.Camera size : org.openpnp.gui.shell.PageLayouts.Camera.values()) {
+                JMenuItem item = new JMenuItem(Translations.getString("MainFrame.Camera." + size.name())); //$NON-NLS-1$
+                item.addActionListener(e -> chooseCameraMode(size));
+                mnCamera.add(item);
+            }
+            mnView.add(mnCamera);
+        }
+        mnView.add(new JMenuItem(editThemeAction));
 
-        mnJob.add(new JMenuItem(jobPanel.startPauseResumeJobAction));
-        mnJob.add(new JMenuItem(jobPanel.stepJobAction));
-        mnJob.add(new JMenuItem(jobPanel.stopJobAction));
-        
-        mnJob.addSeparator();
-        
-        mnJob.add(new JMenuItem(jobPanel.resetAllPlacedAction));
-
-        // Machine
+        // Machine, with what used to be the Job menu: running a job is running the machine.
         //////////////////////////////////////////////////////////////////////
-        JMenu mnCommands = new JMenu(Translations.getString("Menu.Machine")); //$NON-NLS-1$
+        mnCommands = new JMenu(Translations.getString("Menu.Machine")); //$NON-NLS-1$
         mnCommands.setMnemonic(KeyEvent.VK_M);
         menuBar.add(mnCommands);
         mnCommands.addSeparator();
+        mnCommands.add(new JMenuItem(jobPanel.startPauseResumeJobAction));
+        mnCommands.add(new JMenuItem(jobPanel.stepJobAction));
+        mnCommands.add(new JMenuItem(jobPanel.stopJobAction));
+        mnCommands.addSeparator();
+        mnCommands.add(new JMenuItem(jobPanel.resetAllPlacedAction));
 
         // Scripts
         /////////////////////////////////////////////////////////////////////
         mnScripts = new JMenu(Translations.getString("Menu.Scripts")); //$NON-NLS-1$
         mnScripts.setMnemonic(KeyEvent.VK_S);
         menuBar.add(mnScripts);
-
-        // Windows
-        /////////////////////////////////////////////////////////////////////
-        mnWindows = new JMenu(Translations.getString("Menu.Window")); //$NON-NLS-1$
-        mnWindows.setMnemonic(KeyEvent.VK_W);
-        menuBar.add(mnWindows);
-
-        JCheckBoxMenuItem windowStyleMultipleMenuItem =
-                new JCheckBoxMenuItem(windowStyleMultipleSelected);
-        mnWindows.add(windowStyleMultipleMenuItem);
-        if (windowStyleMultiple) {
-            windowStyleMultipleMenuItem.setSelected(true);
-        }
-
-        mnWindows.add(new JMenuItem(editThemeAction));
 
         // Help
         /////////////////////////////////////////////////////////////////////
@@ -671,7 +892,9 @@ public class MainFrame extends JFrame {
         }
 
         contentPane = new JPanel();
-        contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+        // No margin round the window: the top bar, the rail and the status bar go to its edges,
+        // and the cards between them keep the stylesheet's 10 pixels from each other.
+        contentPane.setBorder(null);
         // The window between the cards is the stylesheet's --bg; the panels are --surface.
         contentPane.setBackground(org.openpnp.gui.shell.Ui.bg());
         setContentPane(contentPane);
@@ -689,13 +912,27 @@ public class MainFrame extends JFrame {
         // them all. What is stored is the column's width, not the divider's position: the
         // position depends on how wide the window happens to be.
         splitPaneInspector = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
-        splitPaneInspector.setBorder(null);
         splitPaneInspector.setContinuousLayout(true);
         splitPaneInspector.setResizeWeight(1.0);
         splitPaneInspector.setLeftComponent(splitPaneMachineAndTabs);
         contentPane.add(splitPaneInspector, BorderLayout.CENTER);
+        // The camera, the page and the properties column are cards 10 pixels apart on the
+        // window's colour; the dividers are those gaps, with the grip dots to say they can be
+        // dragged.
+        for (JSplitPane split : new JSplitPane[] { splitPaneInspector, splitPaneMachineAndTabs }) {
+            split.setBorder(null);
+            split.setDividerSize(org.openpnp.gui.shell.Tokens.GAP_CARD);
+            split.setBackground(org.openpnp.gui.shell.Ui.bg());
+            split.setOpaque(true);
+            split.putClientProperty(com.formdev.flatlaf.FlatClientProperties.STYLE,
+                    "gripDotCount: 3; gripDotSize: 3; gripGap: 3; gripColor: $Pono.textMuted; style: grip"); //$NON-NLS-1$
+        }
+        splitPaneInspector.setBorder(new EmptyBorder(org.openpnp.gui.shell.Tokens.GAP_CARD,
+                org.openpnp.gui.shell.Tokens.GAP_CARD, org.openpnp.gui.shell.Tokens.GAP_CARD,
+                org.openpnp.gui.shell.Tokens.GAP_CARD));
 
         panelMachine = new JPanel();
+        panelMachine.setBackground(org.openpnp.gui.shell.Ui.bg());
         splitPaneMachineAndTabs.setLeftComponent(panelMachine);
         panelMachine.setLayout(new BorderLayout(0, 0));
 
@@ -730,10 +967,13 @@ public class MainFrame extends JFrame {
             }
         });
         cameraPanel = new CameraPanel();
+        // Cards cover the image's corners here, so the views keep their own text out from under them.
+        cameraPanel.setStageMode(true);
 
         // The stage is the camera image with everything that belongs to it floating on top. It is
         // what the multiple-windows mode pops out, hence the wrapper panel it lives in.
         panelCameraAndInstructions = new JPanel();
+        panelCameraAndInstructions.setBackground(org.openpnp.gui.shell.Ui.bg());
         panelCameraAndInstructions.setLayout(new BorderLayout(0, 0));
         panelMachine.add(panelCameraAndInstructions, BorderLayout.CENTER);
 
@@ -768,9 +1008,9 @@ public class MainFrame extends JFrame {
         };
         panelInstructions.setVisible(false);
         panelInstructions.setOpaque(false);
-        panelInstructions.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 3, 0, 0, org.openpnp.gui.shell.Ui.accent()),
-                new EmptyBorder(6, 8, 6, 4)));
+        // The accent rule is the card's own left edge, painted by the card; this is the padding
+        // inside it, the stylesheet's 12 by 14 less the card's own.
+        panelInstructions.setBorder(new EmptyBorder(6, 9, 6, 6));
         panelInstructions.setLayout(new BorderLayout(12, 0));
 
         // The wizard sets this per step, which is what the etched border's title used to carry.
@@ -855,8 +1095,9 @@ public class MainFrame extends JFrame {
         machineControlsPanel = new MachineControlsPanel(configuration, jobPanel);
         droPanel = new DroPanel(configuration);
 
-        mnCommands.add(new JMenuItem(machineControlsPanel.homeAction));
-        mnCommands.add(new JMenuItem(machineControlsPanel.startStopMachineAction));
+        // The machine's own commands come first, above the job's.
+        mnCommands.insert(new JMenuItem(machineControlsPanel.homeAction), 0);
+        mnCommands.insert(new JMenuItem(machineControlsPanel.startStopMachineAction), 1);
 
         JogControlsPanel jog = machineControlsPanel.getJogControlsPanel();
         for (int mask : Hotkeys.JOG_MODIFIERS) {
@@ -912,44 +1153,47 @@ public class MainFrame extends JFrame {
         navigationRail = new NavigationRail();
         splitPaneMachineAndTabs.setRightComponent(navigationRail.getPages());
 
-        // A new key rather than MainFrame.dividerPosition: the old one holds a distance from the
-        // left edge, and reading it as a distance from the top would put the divider somewhere
-        // arbitrary for everyone upgrading. Until there is a stored one, the share above decides,
-        // which can only be applied once the split has a height.
-        int storedDivider = prefs.getInt(PREF_CAMERA_DIVIDER_POSITION, -1);
-        if (storedDivider > 0) {
-            splitPaneMachineAndTabs.setDividerLocation(storedDivider);
-        }
-        else {
-            SwingUtilities.invokeLater(
-                    () -> splitPaneMachineAndTabs.setDividerLocation(CAMERA_HEIGHT_SHARE));
-        }
-        splitPaneMachineAndTabs.addPropertyChangeListener("dividerLocation", //$NON-NLS-1$
-                new PropertyChangeListener() {
-                    @Override
-                    public void propertyChange(PropertyChangeEvent evt) {
-                        prefs.putInt(PREF_CAMERA_DIVIDER_POSITION,
-                                splitPaneMachineAndTabs.getDividerLocation());
-                    }
-                });
+        // Each page keeps its own camera size and divider; see PageLayouts. Only a drag of the
+        // divider is remembered - not a window resize moving it, and not full screen - and the
+        // camera may be hidden altogether, so neither side insists on a minimum.
+        pageLayouts = new org.openpnp.gui.shell.PageLayouts(prefs);
+        panelMachine.setMinimumSize(new Dimension(0, 0));
+        navigationRail.getPages().setMinimumSize(new Dimension(0, 0));
+        // The page's layout can only be applied once the split has a height.
+        splitPaneMachineAndTabs.addComponentListener(new java.awt.event.ComponentAdapter() {
+            private boolean applied;
+
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                if (!applied && splitPaneMachineAndTabs.getHeight() > 0) {
+                    applied = true;
+                    SwingUtilities.invokeLater(() -> applyPageLayout(navigationRail.getSelectedComponent()));
+                }
+            }
+        });
+        onDividerReleased(splitPaneMachineAndTabs, () -> {
+            String key = pageKeys.get(navigationRail.getSelectedComponent());
+            if (key == null || cameraFullScreen || dockMaximised || windowStyleMultiple) {
+                return;
+            }
+            showCameraMode(pageLayouts.dragged(key, splitPaneMachineAndTabs.getDividerLocation()));
+        });
 
         // The rail's own label is short enough to sit under an icon; the tab title it replaces
-        // stays on as the tooltip, since that is the name the wiki and the menus use.
-        // The icons are the ones the library already has. Two of them are only nearly right -
-        // there is no parts icon and no gear - so they were chosen to be told apart at a glance,
-        // which matters more in a rail of eleven than being the perfect metaphor.
-        addNavigation("Job", Icons.place, jobPanel); //$NON-NLS-1$
-        addNavigation("Feeders", Icons.feeder, feedersPanel); //$NON-NLS-1$
-        addNavigation("Parts", Icons.footprintDual, partsPanel); //$NON-NLS-1$
-        addNavigation("Packages", Icons.footprintQuad, packagesPanel); //$NON-NLS-1$
-        addNavigation("Boards", Icons.board, boardsPanel); //$NON-NLS-1$
-        addNavigation("Panels", Icons.panel, panelsPanel); //$NON-NLS-1$
+        // stays on as the tooltip, since that is the name the wiki and the menus use. The icons
+        // are the mockups' 20 pixel set, which follows the theme's text colour.
+        addNavigation("Job", org.openpnp.gui.shell.Ui.icon("job", 20), jobPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        addNavigation("Feeders", org.openpnp.gui.shell.Ui.icon("feeder", 20), feedersPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        addNavigation("Parts", org.openpnp.gui.shell.Ui.icon("parts", 20), partsPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        addNavigation("Packages", org.openpnp.gui.shell.Ui.icon("pkg", 20), packagesPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        addNavigation("Boards", org.openpnp.gui.shell.Ui.icon("board", 20), boardsPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        addNavigation("Panels", org.openpnp.gui.shell.Ui.icon("layers", 20), panelsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         addNavigation("Vision", org.openpnp.gui.shell.Ui.icon("eye", 20), visionSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         navigationRail.addGap();
-        addNavigation("MachineSetup", Icons.axisCartesian, machineSetupPanel); //$NON-NLS-1$
+        addNavigation("MachineSetup", org.openpnp.gui.shell.Ui.icon("machine", 20), machineSetupPanel); //$NON-NLS-1$ //$NON-NLS-2$
         diagnosticsPanel = new DiagnosticsPanel(configuration);
-        addNavigation("Diagnostics", org.openpnp.gui.shell.Ui.icon("ruler", 20, null), diagnosticsPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        addNavigation("IssuesAndSolutions", Icons.solutions, issuesAndSolutionsPanel); //$NON-NLS-1$
+        addNavigation("Diagnostics", org.openpnp.gui.shell.Ui.icon("ruler", 20), diagnosticsPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        addNavigation("IssuesAndSolutions", org.openpnp.gui.shell.Ui.icon("alert", 20), issuesAndSolutionsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         LogPanel logPanel = new LogPanel();
         addNavigation("Log", org.openpnp.gui.shell.Ui.icon("log", 20), logPanel); //$NON-NLS-1$ //$NON-NLS-2$
         // Settings opens the appearance dialog for now; the plan is for it to gather the settings
@@ -980,6 +1224,11 @@ public class MainFrame extends JFrame {
                     finally {
                         reverting = false;
                     }
+                    return;
+                }
+                applyPageLayout(page);
+                if (jogCard != null) {
+                    jogCard.setPage(pageKeys.get(page), page == feedersPanel);
                 }
             }});
         
@@ -987,6 +1236,14 @@ public class MainFrame extends JFrame {
                 () -> showTab(issuesAndSolutionsPanel), this::openCommandPalette,
                 stopMachineAction, this::saveConfig);
         contentPane.add(topBarPanel, BorderLayout.NORTH);
+        // The top bar is the title bar, where the look and feel can put the window's buttons in
+        // it: a separate title bar cost 30 pixels of height for a name the top bar already shows.
+        // Elsewhere the title bar stays as it is.
+        if (com.formdev.flatlaf.util.SystemInfo.isWindows_10_orLater
+                && com.formdev.flatlaf.ui.FlatNativeWindowBorder.isSupported()) {
+            getRootPane().putClientProperty(com.formdev.flatlaf.FlatClientProperties.FULL_WINDOW_CONTENT, true);
+            topBarPanel.reserveWindowButtons();
+        }
         hotkeyActionMap.put(Hotkeys.COMMAND_PALETTE,
                 new AbstractAction() {
                     @Override
@@ -1028,24 +1285,38 @@ public class MainFrame extends JFrame {
         // below itself behind a split divider.
         inspectorPanel = new InspectorPanel();
         inspectorPanel.setMinimumSize(new Dimension(InspectorPanel.COLLAPSED_WIDTH, 0));
-        inspectorPanel.setCollapsed(prefs.getBoolean(PREF_INSPECTOR_COLLAPSED,
-                PREF_INSPECTOR_COLLAPSED_DEF));
         inspectorPanel.addPropertyChangeListener("collapsed", e -> { //$NON-NLS-1$
-            prefs.putBoolean(PREF_INSPECTOR_COLLAPSED, inspectorPanel.isCollapsed());
+            if (!applyingInspector && pageLayouts != null) {
+                // Folded or unfolded by hand: that is what this page wants from now on.
+                String key = pageKeys.get(navigationRail.getSelectedComponent());
+                if (key != null) {
+                    pageLayouts.setInspector(key, inspectorPanel.isCollapsed()
+                            ? org.openpnp.gui.shell.PageLayouts.Inspector.Hide
+                            : org.openpnp.gui.shell.PageLayouts.Inspector.Show);
+                }
+            }
             applyInspectorWidth();
         });
+        inspectorPanel.addPropertyChangeListener(InspectorPanel.PROPERTY_CONTENT, e -> applyInspectorPolicy());
         inspectorPanel.setActivePage(navigationRail.getSelectedComponent());
         splitPaneInspector.setRightComponent(inspectorPanel);
-        splitPaneInspector.addPropertyChangeListener("dividerLocation", evt -> { //$NON-NLS-1$
-            // Only a width the user dragged to is worth remembering; the collapsed sliver and the
-            // positions set while the window is still finding its size are not.
-            if (!inspectorPanel.isCollapsed() && splitPaneInspector.isShowing()
-                    && splitPaneInspector.getWidth() > 0) {
+        // Only a width the user dragged to is worth remembering; the collapsed sliver and the
+        // positions set while the window is still finding its size are not.
+        onDividerReleased(splitPaneInspector, () -> {
+            if (!inspectorPanel.isCollapsed() && splitPaneInspector.getWidth() > 0) {
                 int width = splitPaneInspector.getWidth() - splitPaneInspector.getDividerLocation()
                         - splitPaneInspector.getDividerSize();
                 if (width > InspectorPanel.COLLAPSED_WIDTH) {
                     prefs.putInt(PREF_INSPECTOR_WIDTH, width);
+                    applyInspectorWidth();
                 }
+            }
+        });
+        // The column's width follows the window within its limits.
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                applyInspectorWidth();
             }
         });
         // The divider can only be placed once the split has a width.
@@ -1073,30 +1344,45 @@ public class MainFrame extends JFrame {
         cameraSelector.setHidden(item -> !(item instanceof CameraItem)
                 && !"Show All Horizontal".equals(String.valueOf(item))); //$NON-NLS-1$
         cameraSelector.setOrder(item -> item instanceof CameraItem ? 0 : 1);
-        JPanel topLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        topLeft.setOpaque(false);
+        // A camera on a head carries the camera icon, the side-by-side view the panel icon.
+        cameraSelector.setIconer(item -> {
+            if (item instanceof CameraItem) {
+                return ((CameraItem) item).getCamera().getHead() == null ? null
+                        : org.openpnp.gui.shell.Ui.iconSm("camera"); //$NON-NLS-1$
+            }
+            return org.openpnp.gui.shell.Ui.iconSm("panel"); //$NON-NLS-1$
+        });
         OverlayCard selectorStrip = OverlayCard.strip();
         selectorStrip.add(cameraSelector);
-        topLeft.add(selectorStrip);
-        unitsPerPixelChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$
+        cameraStage.anchor(selectorStrip, Anchor.NorthWest);
+        // The scale is one glass chip of its own, 32 high, in the monospaced figures.
+        unitsPerPixelChip = new JLabel();
         unitsPerPixelChip.setFont(org.openpnp.gui.shell.Ui.mono(12f, java.awt.Font.PLAIN));
-        OverlayCard unitsStrip = new OverlayCard();
+        unitsPerPixelChip.setForeground(org.openpnp.gui.shell.Ui.text2());
+        unitsStrip = new OverlayCard() {
+            @Override
+            public Dimension getPreferredSize() {
+                Dimension size = super.getPreferredSize();
+                return new Dimension(size.width, 32 + OverlayCard.SHADOW_TOP + OverlayCard.SHADOW_BOTTOM);
+            }
+        };
         unitsStrip.setLayout(new BorderLayout());
-        unitsStrip.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+        unitsStrip.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         unitsStrip.add(unitsPerPixelChip);
-        topLeft.add(unitsStrip);
+        cameraStage.anchor(unitsStrip, Anchor.NorthWest);
         cameraPanel.addSelectionListener(this::showUnitsPerPixel);
-        cameraStage.anchor(topLeft, Anchor.NorthWest);
-        cameraStage.anchor(
-                new CameraToolsBar(configuration, cameraPanel, this::toggleCameraFullScreen),
-                Anchor.NorthEast);
+        cameraToolsBar = new CameraToolsBar(configuration, cameraPanel, this::toggleCameraFullScreen,
+                this::selectedFootprint, this::selectedFootprintLabel);
+        cameraStage.anchor(cameraToolsBar, Anchor.NorthEast);
         // The readout goes bottom left and the machine controls bottom right, as the mockups have
         // them; the instructions arrive at the top, over the image they are talking about.
         cameraStage.overlay(droPanel, Anchor.SouthWest);
         jogCard = new JogCard(configuration, machineControlsPanel);
         cameraStage.anchor(jogCard, Anchor.SouthEast);
         instructionsCard = cameraStage.overlay(panelInstructions, Anchor.North);
+        instructionsCard.setAccentEdge(true);
         instructionsCard.setVisible(false);
+        buildCameraModeControls();
         panelCameraAndInstructions.add(cameraStage, BorderLayout.CENTER);
 
         splitPaneMachineAndTabs.setResizeWeight(0.5);
@@ -1173,12 +1459,8 @@ public class MainFrame extends JFrame {
         }
         else {
             panelMachine.add(panelCameraAndInstructions, BorderLayout.CENTER);
-            // A value of 0 means the camera was in its own window last time, which left the
-            // divider collapsed. Give it its share back rather than no height at all.
-            if (0 == prefs.getInt(PREF_CAMERA_DIVIDER_POSITION, -1)) {
-                SwingUtilities.invokeLater(
-                        () -> splitPaneMachineAndTabs.setDividerLocation(CAMERA_HEIGHT_SHARE));
-            }
+            // The page on show decides the camera's size, once the window has one.
+            SwingUtilities.invokeLater(() -> applyPageLayout(navigationRail.getSelectedComponent()));
         }
     }
     
@@ -1280,8 +1562,37 @@ public class MainFrame extends JFrame {
     public void showInstructions(String title, String instructions, boolean showCancelButton,
             boolean showProceedButton, String proceedButtonText,
             ActionListener cancelActionListener, ActionListener proceedActionListener) {
+        showInstructions(title, instructions, 0, 0, showCancelButton, showProceedButton,
+                proceedButtonText, cancelActionListener, proceedActionListener);
+    }
+
+    /**
+     * @param step  Which step this is, from one, shown in the banner's circle as "2/4"; zero
+     *              for a wizard that does not count its steps, which shows the busy mark.
+     * @param steps How many steps there are.
+     */
+    public void showInstructions(String title, String instructions, int step, int steps,
+            boolean showCancelButton, boolean showProceedButton, String proceedButtonText,
+            ActionListener cancelActionListener, ActionListener proceedActionListener) {
+        boolean counted = step > 0 && steps > 0;
+        labelIcon.setText(counted ? step + "/" + steps : null); //$NON-NLS-1$
+        labelIcon.setForeground(org.openpnp.gui.shell.Ui.accent());
+        labelIcon.setFont(org.openpnp.gui.shell.Ui.font(12f, Font.BOLD));
+        if (counted) {
+            labelIcon.setIcon(null);
+        }
+        instructionsCounted = counted;
+        // A wizard points at the image: a page with the camera as a strip, or none, gets it
+        // large until the wizard is done.
+        String page = pageKeys.get(navigationRail.getSelectedComponent());
+        if (page != null && !windowStyleMultiple && pageLayouts != null
+                && pageLayouts.camera(page) != org.openpnp.gui.shell.PageLayouts.Camera.Large) {
+            wizardEnlargedCamera = true;
+            setCameraMode(page, org.openpnp.gui.shell.PageLayouts.Camera.Large, false);
+        }
+        statusBarPanel.setWizardLink(this::showWizard);
         setStatusState(Translations.getString("StatusBar.State.Wizard"), Chip.Tone.Run); //$NON-NLS-1$
-        setStatus(title);
+        setStatus(counted ? title + " \u00b7 " + step + "/" + steps : title); //$NON-NLS-1$ //$NON-NLS-2$
         lblInstructionsTitle.setText(title);
         lblInstructions.setText(instructions);
         btnInstructionsCancel.setVisible(showCancelButton);
@@ -1298,11 +1609,16 @@ public class MainFrame extends JFrame {
             scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
             scheduledExecutor.scheduleAtFixedRate(new Runnable() {
                 public void run() {
-                    labelIcon.setIcon(labelIcon.getIcon() == Icons.processActivity1Icon ? Icons.processActivity2Icon : Icons.processActivity1Icon);
+                    if (!instructionsCounted) {
+                        labelIcon.setIcon(labelIcon.getIcon() == Icons.processActivity1Icon ? Icons.processActivity2Icon : Icons.processActivity1Icon);
+                    }
                 }
             }, 0, 1000, TimeUnit.MILLISECONDS);
         }
     }
+
+    /** Whether the banner's circle shows the step count rather than the busy mark. */
+    private volatile boolean instructionsCounted;
 
     public void hideInstructions() {
         boolean running = jobPanel != null && jobPanel.isJobRunning();
@@ -1314,8 +1630,30 @@ public class MainFrame extends JFrame {
         }
         panelInstructions.setVisible(false);
         instructionsCard.setVisible(false);
+        statusBarPanel.setWizardLink(null);
+        if (wizardEnlargedCamera) {
+            wizardEnlargedCamera = false;
+            applyPageLayout(navigationRail.getSelectedComponent());
+        }
         cameraStage.revalidate();
         cameraStage.repaint();
+    }
+
+    /** Brings a wizard's instructions into view: the camera large, or its window to the front. */
+    private void showWizard() {
+        if (windowStyleMultiple && frameCamera != null) {
+            frameCamera.setVisible(true);
+            frameCamera.toFront();
+            return;
+        }
+        String page = pageKeys.get(navigationRail.getSelectedComponent());
+        if (page != null && pageLayouts.camera(page) != org.openpnp.gui.shell.PageLayouts.Camera.Large) {
+            wizardEnlargedCamera = true;
+        }
+        if (page != null) {
+            setCameraMode(page, org.openpnp.gui.shell.PageLayouts.Camera.Large, false);
+        }
+        toFront();
     }
 
     public boolean registerForMacOSXEvents() {
@@ -1466,7 +1804,13 @@ public class MainFrame extends JFrame {
      */
     private final MachineListener disconnectReporter = new MachineListener.Adapter() {
         @Override
+        public void machineEnabled(Machine machine) {
+            SwingUtilities.invokeLater(() -> statusBarPanel.setMachineEnabled(true));
+        }
+
+        @Override
         public void machineDisabled(Machine machine, String reason) {
+            SwingUtilities.invokeLater(() -> statusBarPanel.setMachineEnabled(false));
             report(Translations.getString("MainFrame.Machine.Disabled"), reason); //$NON-NLS-1$
         }
 
@@ -1744,12 +2088,9 @@ public class MainFrame extends JFrame {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            if (mnWindows.getItem(0).isSelected()) {
-                prefs.putBoolean(PREF_WINDOW_STYLE_MULTIPLE, true);
-            }
-            else {
-                prefs.putBoolean(PREF_WINDOW_STYLE_MULTIPLE, false);
-            }
+            boolean multiple = arg0 != null && arg0.getSource() instanceof javax.swing.AbstractButton
+                    && ((javax.swing.AbstractButton) arg0.getSource()).isSelected();
+            prefs.putBoolean(PREF_WINDOW_STYLE_MULTIPLE, multiple);
             MessageBoxes.infoBox(Translations.getString("CommonPhrases.windowsStyleChanged"), //$NON-NLS-1$
                     Translations.getString("CommonPhrases.windowsStyleChangedRestartToTakeEffect")); //$NON-NLS-1$
         }

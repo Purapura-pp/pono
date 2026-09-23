@@ -166,8 +166,10 @@ public class MultiPlacementBoardLocationProcess {
             mainFrame.hideInstructions();
         }
         else {
-            String title = String.format("Set Board Location (%d / 3)", step + 1);
-            mainFrame.showInstructions(title, String.format(autoMove ? instructionsAuto[step] : instructionsManual[step], placementId), true, true,
+            // The step and the count go in the banner's circle rather than after the title.
+            mainFrame.showInstructions("Set Board Location", //$NON-NLS-1$
+                    String.format(autoMove ? instructionsAuto[step] : instructionsManual[step], placementId),
+                    step + 1, 3, true, true,
                     step == 2 ? "Finish" : "Next", cancelActionListener, proceedActionListener);
         }
     }

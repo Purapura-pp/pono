@@ -494,6 +494,11 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             }
         }
         attentionTab.setCount(attention);
+        // The same count on the rail, in yellow: something to look at, not something broken.
+        if (mainFrame.getNavigation() != null) {
+            mainFrame.getNavigation().setBadge(this, attention,
+                    org.openpnp.gui.shell.NavigationRail.Badge.Warn);
+        }
     }
 
     @Override
