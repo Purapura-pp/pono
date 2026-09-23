@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 方案A 工作台 · 飞达视图（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">P</span>Pono <span class="ver">2.6</span></div>
+    <nav class="menus"><span>文件</span><span>编辑</span><span>视图</span><span>机器</span><span>脚本</span><span>帮助</span></nav>
+    <div class="divider-v"></div>
+    <div class="jobname"><svg class="i sm"><use href="#i-folder"/></svg><b>demo-board.job.xml</b></div>
+    <div class="grow"></div>
+    <div class="chip ok"><span class="led"></span>已启用 · 已归位</div>
+    <div class="divider-v"></div>
+    <div class="row" style="gap:6px">
+      <button class="btn primary ok"><svg class="i"><use href="#i-play"/></svg>启动</button>
+      <button class="btn disabled"><svg class="i"><use href="#i-pause"/></svg>暂停</button>
+      <button class="btn"><svg class="i"><use href="#i-step"/></svg>单步</button>
+      <button class="btn disabled"><svg class="i"><use href="#i-stop"/></svg>终止</button>
+    </div>
+    <div class="progress" style="width:180px">
+      <span class="t2 mono" style="font-size:12px">0 / 48</span>
+      <div class="bar"><i style="width:0%"></i></div>
+      <span class="muted" style="font-size:12px">就绪</span>
+    </div>
+    <div class="divider-v"></div>
+    <div class="search"><svg class="i sm"><use href="#i-search"/></svg>搜索或输入命令…<kbd>Ctrl K</kbd></div>
+    <button class="btn icon ghost"><svg class="i"><use href="#i-bell"/></svg></button>
+    <button class="btn icon ghost" title="主题"><svg class="i"><use href="#i-sun"/></svg></button>
+  </header>
+
+  <aside class="rail">
+    <div class="item"><svg class="i"><use href="#i-job"/></svg>任务</div>
+    <div class="item active"><svg class="i"><use href="#i-feeder"/></svg>飞达<span class="badge warn">1</span></div>
+    <div class="item"><svg class="i"><use href="#i-parts"/></svg>元件</div>
+    <div class="item"><svg class="i"><use href="#i-pkg"/></svg>封装</div>
+    <div class="item"><svg class="i"><use href="#i-board"/></svg>单板</div>
+    <div class="item"><svg class="i"><use href="#i-eye"/></svg>视觉</div>
+    <div class="sep"></div>
+    <div class="item"><svg class="i"><use href="#i-machine"/></svg>机器</div>
+    <div class="item"><svg class="i"><use href="#i-alert"/></svg>问题<span class="badge">2</span></div>
+    <div class="item"><svg class="i"><use href="#i-log"/></svg>日志</div>
+    <div class="spacer"></div>
+    <div class="item"><svg class="i"><use href="#i-gear"/></svg>设置</div>
+  </aside>
+
+  <main class="center">
+    <section class="camera">
+      <div class="view" id="cam"></div>
+      <div class="ov tl">
+        <div class="glass pills">
+          <span class="pill active"><svg class="i sm"><use href="#i-camera"/></svg>Top · 头 H1</span>
+          <span class="pill">Bottom</span>
+          <span class="pill"><svg class="i sm"><use href="#i-panel"/></svg>并排</span>
+        </div>
+      </div>
+      <div class="ov tr">
+        <div class="glass pills icons">
+          <span class="pill on"><svg class="i"><use href="#i-crosshair"/></svg></span>
+          <span class="pill"><svg class="i"><use href="#i-grid"/></svg></span>
+          <span class="pill on"><svg class="i"><use href="#i-ruler"/></svg></span>
+          <span class="pill"><svg class="i"><use href="#i-footprint"/></svg></span>
+        </div>
+        <div class="glass pills">
+          <span class="pill"><svg class="i sm"><use href="#i-search"/></svg>150%</span>
+          <span class="pill"><svg class="i sm"><use href="#i-capture"/></svg></span>
+          <span class="pill"><svg class="i sm"><use href="#i-maximize"/></svg></span>
+        </div>
+      </div>
+
+      <!-- 向导说明：从原来相机下方的“说明”面板，改为相机顶部的步骤横幅 -->
+      <div class="glass instr">
+        <div class="step">2<span style="font-size:9px;font-weight:600;color:var(--muted)">/4</span></div>
+        <div class="txt"><b>校准飞达 F-08 · 定位参考孔 1</b><span>把相机十字线对准料带上第一个定位孔的中心（可直接点击画面中的孔），然后点击「下一步」。</span></div>
+        <div class="acts"><button class="btn sm">取消</button><button class="btn sm primary">下一步<svg class="i sm"><use href="#i-chevright"/></svg></button></div>
+      </div>
+
+      <div class="ov bl">
+        <div class="glass dro">
+          <div class="ax"><span class="k">X</span><span class="v">312.880<span class="u">mm</span></span></div>
+          <div class="ax"><span class="k">Y</span><span class="v">44.125<span class="u">mm</span></span></div>
+          <div class="ax"><span class="k">Z</span><span class="v">0.000<span class="u">mm</span></span></div>
+          <div class="ax"><span class="k">C</span><span class="v">0.00<span class="u">°</span></span></div>
+        </div>
+      </div>
+
+      <!-- 手动控制卡片折叠状态：只剩一个按钮 -->
+      <div class="ov br">
+        <button class="btn glass" style="height:38px;border-radius:10px"><svg class="i"><use href="#i-move"/></svg>手动控制<kbd>J</kbd></button>
+      </div>
+    </section>
+
+    <section class="dock">
+      <div class="tabs">
+        <div class="tab active"><svg class="i sm"><use href="#i-feeder"/></svg>飞达 <span class="n">24</span></div>
+        <div class="tab"><svg class="i sm"><use href="#i-alert"/></svg>需要关注 <span class="n">3</span></div>
+        <div class="tools">
+          <button class="btn icon xs ghost"><svg class="i sm"><use href="#i-columns"/></svg></button>
+          <button class="btn icon xs ghost"><svg class="i sm"><use href="#i-maximize"/></svg></button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="btn sm primary"><svg class="i sm"><use href="#i-plus"/></svg>新建飞达<svg class="i sm"><use href="#i-chevdown"/></svg></button>
+        <button class="btn sm ghost"><svg class="i sm"><use href="#i-trash"/></svg></button>
+        <span class="sep"></span>
+        <button class="btn sm"><svg class="i sm"><use href="#i-camera"/></svg>移动相机</button>
+        <button class="btn sm"><svg class="i sm"><use href="#i-nozzle"/></svg>移动吸嘴</button>
+        <span class="sep"></span>
+        <button class="btn sm"><svg class="i sm"><use href="#i-step"/></svg>供料</button>
+        <button class="btn sm"><svg class="i sm"><use href="#i-hand"/></svg>取料</button>
+        <span class="sep"></span>
+        <div class="seg"><span class="s active" style="font-family:var(--font)">全部</span><span class="s" style="font-family:var(--font)">已启用</span><span class="s" style="font-family:var(--font)">本任务用到</span></div>
+        <div class="filter"><svg class="i sm"><use href="#i-search"/></svg>筛选名称 / 元件…</div>
+      </div>
+      <div style="overflow:hidden;flex:1">
+        <table class="grid">
+          <thead><tr><th style="width:56px">启用</th><th>名称</th><th>类型</th><th>元件</th><th>槽位</th><th class="r">料带宽 / 间距</th><th class="r">余量</th><th>状态</th><th>上次取料</th></tr></thead>
+          <tbody>
+            <tr><td><span class="toggle on"></span></td><td><b>F-01</b></td><td>料带飞达</td><td>R0603-10K</td><td class="num">A1</td><td class="num r">8 / 4 mm</td><td class="num r">1,240</td><td><span class="status ok">正常</span></td><td class="muted">3 分钟前</td></tr>
+            <tr><td><span class="toggle on"></span></td><td><b>F-03</b></td><td>料带飞达</td><td>C0402-100N</td><td class="num">A3</td><td class="num r">8 / 2 mm</td><td class="num r warn" style="color:var(--warn)">12</td><td><span class="status warn">余量不足</span></td><td class="muted">刚刚</td></tr>
+            <tr class="sel"><td><span class="toggle on"></span></td><td><b>F-08</b></td><td>料带飞达</td><td>C0603-1U</td><td class="num">B2</td><td class="num r">8 / 4 mm</td><td class="num r">—</td><td><span class="status run">校准中 · 2/4</span></td><td class="muted">—</td></tr>
+            <tr><td><span class="toggle"></span></td><td><b>F-09</b></td><td>自动飞达 (Yamaha)</td><td class="muted">未指定</td><td class="num">B3</td><td class="num r">12 / 4 mm</td><td class="num r muted">—</td><td><span class="status skip">已禁用</span></td><td class="muted">—</td></tr>
+            <tr><td><span class="toggle on"></span></td><td><b>TRAY-1</b></td><td>托盘飞达</td><td>SOIC-8-LM358</td><td class="num">C1</td><td class="num r">5 × 8 格</td><td class="num r">37</td><td><span class="status ok">正常</span></td><td class="muted">昨天</td></tr>
+            <tr><td><span class="toggle on"></span></td><td><b>F-12</b></td><td>料带飞达</td><td>LED-0805-RED</td><td class="num">A7</td><td class="num r">8 / 4 mm</td><td class="num r" style="color:var(--err)">0</td><td><span class="status err">空料 · 等待补料</span></td><td class="muted">12 分钟前</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <aside class="side">
+    <div class="hdr">
+      <div class="ic"><svg class="i lg"><use href="#i-feeder"/></svg></div>
+      <div class="grow"><div class="ttl">F-08</div><div class="sub">料带飞达 · ReferenceStripFeeder · 槽位 B2</div></div>
+      <button class="btn icon sm ghost"><svg class="i"><use href="#i-more"/></svg></button>
+    </div>
+    <div class="body">
+      <div class="sec">
+        <div class="sh"><svg class="i sm"><use href="#i-info"/></svg>基本</div>
+        <div class="form">
+          <label>名称</label><div class="inp">F-08</div>
+          <label>元件</label><div class="inp"><b>C0603-1U</b><span class="muted" style="margin-left:6px">1µF 16V</span><svg class="i sm caret"><use href="#i-chevdown"/></svg></div>
+          <label>启用</label><div class="row"><span class="toggle on"></span><span class="t2">允许任务使用此飞达</span></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sh"><svg class="i sm"><use href="#i-move"/></svg>料带几何 <span class="rt">mm</span></div>
+        <div class="form">
+          <label>料带宽度</label><div class="inp-row"><div class="inp mono" style="flex:0 0 84px">8<span class="u">mm</span></div><div class="seg tight"><span class="s active">8</span><span class="s">12</span><span class="s">16</span><span class="s">24</span></div></div>
+          <label>元件间距</label><div class="inp-row"><div class="inp mono" style="flex:0 0 84px">4<span class="u">mm</span></div><div class="seg tight"><span class="s">2</span><span class="s active">4</span><span class="s">8</span></div></div>
+          <label>参考孔 1</label><div class="inp-row"><div class="inp mono"><span class="pre">X</span>312.880</div><div class="inp mono"><span class="pre">Y</span>44.125</div><button class="btn sm icon primary" title="用当前相机位置"><svg class="i sm"><use href="#i-camera"/></svg></button></div>
+          <label>参考孔 2</label><div class="inp-row"><div class="inp mono ro"><span class="pre">X</span>—</div><div class="inp mono ro"><span class="pre">Y</span>—</div><button class="btn sm icon" title="用当前相机位置"><svg class="i sm"><use href="#i-camera"/></svg></button></div>
+          <label>取料 Z</label><div class="inp-row"><div class="inp mono" style="flex:0 0 120px">-32.400<span class="u">mm</span></div><button class="btn sm"><svg class="i sm"><use href="#i-nozzle"/></svg>探测</button></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sh"><svg class="i sm"><use href="#i-eye"/></svg>视觉 <span class="rt"><span class="toggle on"></span></span></div>
+        <div class="form">
+          <label>流水线</label><div class="pipeline"><span class="stage">阈值</span><span class="arrow">›</span><span class="stage">圆检测</span><span class="arrow">›</span><span class="stage">结果</span><button class="btn xs" style="margin-left:auto"><svg class="i sm"><use href="#i-edit"/></svg>编辑</button></div>
+          <label>上次结果</label><div class="row"><span class="status ok" style="height:18px">通过</span><span class="t2 mono" style="font-size:12px">偏差 0.018 mm</span><button class="btn xs ghost" style="margin-left:auto">测试</button></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sh"><svg class="i sm"><use href="#i-gear"/></svg>供料选项</div>
+        <div class="form">
+          <label>送料次数</label><div class="inp mono" style="width:100px">1</div>
+          <label>取料重试</label><div class="inp mono" style="width:100px">3</div>
+          <label>余量提醒</label><div class="row"><div class="inp mono" style="width:100px">50</div><span class="t2">件以下时提示</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="foot">
+      <button class="btn">重置</button>
+      <button class="btn primary">应用</button>
+    </div>
+  </aside>
+
+  <footer class="statusbar">
+    <div class="item"><span class="status run" style="height:18px">向导</span><span>校准飞达 F-08 · 步骤 2/4 · 定位参考孔 1</span></div>
+    <div class="right">
+      <div class="item">总进度 <b class="mono t2">0 / 48</b></div>
+      <div class="item">当前板 <b class="mono t2">0 / 16</b></div>
+      <div class="sep"></div>
+      <div class="item muted">mm</div>
+      <div class="item muted">v2.6-pono.1</div>
+    </div>
+  </footer>
+</div>
+<script>document.getElementById('cam').innerHTML = Scene.tape();</script>
+</body>
+</html>

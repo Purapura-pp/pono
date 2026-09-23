@@ -1,0 +1,66 @@
+# Latin the Chinese interface keeps. One word or phrase per line; a line with a space is a
+# phrase and is taken out of the text before the words are looked at. Names the user gave
+# things - part numbers, feeder and camera names, file names - are read from the fixture and
+# need not be listed here.
+
+# Trade terms and abbreviations, kept in English on purpose
+Safe Z
+G-code
+Gcode
+DRO
+UPP
+TCP
+IP
+USB
+URL
+HTTP
+PnP
+PCB
+SMD
+CSV
+XML
+JSON
+SVG
+PNG
+LED
+MCU
+MOSFET
+QFN
+SOIC
+SOT
+ROI
+RGB
+HSV
+OCR
+ONVIF
+MJPG
+GStreamer
+OpenCV
+OpenPnP
+LumenPnP
+Photon
+Neoden
+Pono
+
+# Units and axes
+mm
+µm
+px
+fps
+ms
+XY
+XYZ
+ID
+
+# Keys
+Ctrl
+Shift
+Alt
+Esc
+Enter
+Tab
+Space
+
+# The board sides, which the mockups show as they are
+Top
+Bottom

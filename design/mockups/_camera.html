@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The mockups' board, without the reticle, as the UI fixture's simulated top camera sees it. -->
+<script src="scene.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; }
+  #cam { width: 1920px; height: 984px; }
+  #cam svg { width: 100%; height: 100%; display: block; }
+</style>
+</head>
+<body>
+<div id="cam"></div>
+<script>document.getElementById('cam').innerHTML = Scene.pcb({ reticle: false });</script>
+</body>
+</html>

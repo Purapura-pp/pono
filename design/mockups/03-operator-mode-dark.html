@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 生产模式（操作员视图）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<style>
+  .op { display: grid; grid-template-rows: 56px 1fr 34px; grid-template-columns: 1fr 440px; grid-template-areas: "top top" "cam side" "status status"; width: 1600px; height: 1000px; }
+  .op .topbar { grid-area: top; }
+  .op .camera { grid-area: cam; margin: 12px 0 12px 12px; }
+  .op .side-col { grid-area: side; display: flex; flex-direction: column; gap: 12px; padding: 12px; min-height: 0; }
+  .op .statusbar { grid-area: status; }
+  .ring { position: relative; width: 132px; height: 132px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .c { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .ring .c b { font-size: 30px; font-weight: 800; font-family: var(--mono); line-height: 1; }
+  .ring .c span { font-size: 11px; color: var(--muted); }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  .kv .k { font-size: 11px; color: var(--muted); }
+  .kv .v { font-size: 16px; font-weight: 600; font-family: var(--mono); }
+  .list { display: flex; flex-direction: column; }
+  .list .li { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--border); }
+  .list .li:last-child { border-bottom: 0; }
+  .list .li .t { margin-left: auto; color: var(--muted); font-size: 11px; font-family: var(--mono); }
+  .now { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 16px; }
+  .now .pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px var(--ok-soft); }
+  .now b { font-size: 15px; }
+  .boards { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; padding: 12px 16px; }
+  .boards .b { height: 26px; border-radius: 6px; background: var(--surface-3); display: grid; place-items: center; font-size: 11px; font-family: var(--mono); color: var(--muted); border: 1px solid var(--border); }
+  .boards .b.done { background: var(--ok-soft); color: var(--ok); border-color: rgba(52,199,123,.35); }
+  .boards .b.run { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="op">
+  <header class="topbar">
+    <div class="brand"><span class="logo">P</span>Pono <span class="ver">生产模式</span></div>
+    <div class="divider-v"></div>
+    <div class="jobname"><svg class="i sm"><use href="#i-folder"/></svg><b>demo-board.job.xml</b><span class="t2">· 2 块单板 · 16 拼板</span></div>
+    <div class="grow"></div>
+    <div class="chip ok"><span class="led"></span>机器已启用 · 已归位</div>
+    <div class="chip neutral"><svg class="i sm"><use href="#i-nozzle"/></svg>N1 NT1 &nbsp;·&nbsp; N2 NT2</div>
+    <div class="chip warn"><span class="led"></span>1 个飞达余量不足</div>
+    <div class="divider-v"></div>
+    <button class="btn"><svg class="i"><use href="#i-keyboard"/></svg>快捷键</button>
+    <button class="btn"><svg class="i"><use href="#i-external"/></svg>退出生产模式</button>
+  </header>
+
+  <section class="camera">
+    <div class="view" id="cam"></div>
+    <div class="glass now">
+      <span class="pulse"></span>
+      <div><b>正在贴装 R12</b> <span class="t2">R0603-10K · 吸嘴 N1 · 飞达 F-01</span></div>
+      <span class="chip accent" style="height:24px">视觉对位 Δ 0.02 mm</span>
+    </div>
+    <div class="ov tl" style="top:auto;bottom:12px">
+      <div class="glass pills">
+        <span class="pill active"><svg class="i sm"><use href="#i-camera"/></svg>Top</span>
+        <span class="pill">Bottom</span>
+        <span class="pill"><svg class="i sm"><use href="#i-panel"/></svg>并排</span>
+      </div>
+    </div>
+    <div class="ov br">
+      <div class="glass dro compact">
+        <div class="ax"><span class="k">X</span><span class="v">120.450</span></div>
+        <div class="ax"><span class="k">Y</span><span class="v">85.210</span></div>
+        <div class="ax"><span class="k">Z</span><span class="v">-2.000</span></div>
+        <div class="ax"><span class="k">C</span><span class="v">90.00</span></div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side-col">
+    <!-- 任务进度 -->
+    <div class="card">
+      <div class="ch"><svg class="i sm"><use href="#i-job"/></svg>任务进度 <span class="rt">已运行 6 分 48 秒</span></div>
+      <div class="row" style="padding:16px 16px 8px;gap:18px;align-items:center">
+        <div class="ring">
+          <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" stroke="var(--surface-3)" stroke-width="10" fill="none"/><circle cx="60" cy="60" r="52" stroke="var(--accent)" stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="117.6"/></svg>
+          <div class="c"><div><b>64<span style="font-size:14px">%</span></b><br><span>31 / 48 件</span></div></div>
+        </div>
+        <div class="kv grow">
+          <div><div class="k">当前拼板</div><div class="v">3 / 16</div></div>
+          <div><div class="k">预计剩余</div><div class="v">4:12</div></div>
+          <div><div class="k">平均节拍</div><div class="v">2.1 s/件</div></div>
+          <div><div class="k">错误 / 跳过</div><div class="v"><span style="color:var(--err)">1</span> / 3</div></div>
+        </div>
+      </div>
+      <div class="boards">
+        <div class="b done">1</div><div class="b done">2</div><div class="b run">3</div><div class="b">4</div><div class="b">5</div><div class="b">6</div><div class="b">7</div><div class="b">8</div>
+        <div class="b">9</div><div class="b">10</div><div class="b">11</div><div class="b">12</div><div class="b">13</div><div class="b">14</div><div class="b">15</div><div class="b">16</div>
+      </div>
+    </div>
+
+    <!-- 大按钮：操作员最常用的四个动作 -->
+    <div class="row" style="gap:10px">
+      <button class="btn xl grow" style="background:var(--warn-soft);border-color:rgba(245,184,64,.5);color:var(--warn)"><svg class="i lg"><use href="#i-pause"/></svg>暂停</button>
+      <button class="btn xl grow"><svg class="i lg"><use href="#i-step"/></svg>单步</button>
+      <button class="btn xl grow solid-danger"><svg class="i lg"><use href="#i-stop"/></svg>终止</button>
+    </div>
+
+    <!-- 需要关注 -->
+    <div class="card">
+      <div class="ch"><svg class="i sm"><use href="#i-alert"/></svg>需要关注 <span class="rt">2 项</span></div>
+      <div class="list">
+        <div class="li"><span class="status warn">余量不足</span><div><b>F-03</b> <span class="t2">C0402-100N · 剩余 12 件</span></div><button class="btn xs" style="margin-left:auto">已补料</button></div>
+        <div class="li"><span class="status err">空料</span><div><b>F-12</b> <span class="t2">LED-0805-RED · U3 等待中</span></div><button class="btn xs primary" style="margin-left:auto">补料并继续</button></div>
+      </div>
+    </div>
+
+    <!-- 最近事件 -->
+    <div class="card grow" style="min-height:0;overflow:hidden">
+      <div class="ch"><svg class="i sm"><use href="#i-clock"/></svg>最近事件 <span class="rt">查看日志 ›</span></div>
+      <div class="list">
+        <div class="li"><span class="status ok">已贴装</span><span>R11 · R0603-10K</span><span class="t">14:32:08</span></div>
+        <div class="li"><span class="status ok">已贴装</span><span>R10 · R0603-10K</span><span class="t">14:32:06</span></div>
+        <div class="li"><span class="status warn">重试</span><span>D2 吸取失败（第 2 次），重新供料</span><span class="t">14:31:59</span></div>
+        <div class="li"><span class="status ok">已贴装</span><span>C13 · C0402-100N</span><span class="t">14:31:52</span></div>
+        <div class="li"><span class="status run">基准点</span><span>Board 3 基准点校正完成 · 偏差 0.04 mm</span><span class="t">14:31:40</span></div>
+        <div class="li"><span class="status ok">已贴装</span><span>C12 · C0402-100N</span><span class="t">14:31:31</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <footer class="statusbar">
+    <div class="item"><span class="status run" style="height:18px">运行中</span><span>R12 → 视觉对位完成，移动至贴装位</span></div>
+    <div class="right">
+      <div class="item muted">操作员：<b class="t2">王工</b></div>
+      <div class="sep"></div>
+      <div class="item muted">2026-09-10 14:32</div>
+      <div class="item muted">v2.6-pono.1</div>
+    </div>
+  </footer>
+</div>
+<script>document.getElementById('cam').innerHTML = Scene.pcb({ footprintLabel: 'R12 · R0603' });</script>
+</body>
+</html>

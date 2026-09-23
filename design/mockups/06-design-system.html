@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 视觉规范与组件</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<style>
+  body { background: #0a0c10; }
+  .half { position: absolute; top: 0; bottom: 0; width: 800px; padding: 26px 28px; color: var(--text); background: var(--bg); overflow: hidden; }
+  .half.l { left: 0; }
+  .half.r { left: 800px; border-left: 1px solid #000; }
+  .th-light { --bg: #eceff3; --surface: #ffffff; --surface-2: #f5f7fa; --surface-3: #e9edf2; --hover: rgba(0,0,0,.04); --border: #dde2e9; --border-strong: #c6cfda; --text: #171c26; --text-2: #48546a; --muted: #7f8a9c; --shadow: 0 8px 24px rgba(20,30,50,.14); --overlay: rgba(255,255,255,.82); --camera-bg: #0b0e12; --accent: #2f6fe0; --accent-strong: #2458b8; --accent-soft: rgba(47,111,224,.12); }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  h2 { font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); margin: 18px 0 10px; font-weight: 700; }
+  .sw { display: flex; gap: 8px; }
+  .sw .c { flex: 1; height: 54px; border-radius: 10px; border: 1px solid var(--border); display: flex; align-items: flex-end; padding: 6px 8px; font-family: var(--mono); font-size: 10px; color: var(--text-2); }
+  .sw .c.on { color: #fff; }
+  .rowx { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .type b { display: block; }
+  .type .x { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px; }
+  .type .x span { color: var(--muted); font-family: var(--mono); font-size: 10px; width: 130px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+</style>
+</head>
+<body>
+  <div class="half l">
+    <h1>视觉规范 · 深色</h1>
+    <div class="sub">FlatLaf 可通过 .properties 主题文件实现全部颜色 / 圆角 / 间距；图标用 flatlaf-extras 的 SVG 图标</div>
+
+    <h2>颜色</h2>
+    <div class="sw">
+      <div class="c" style="background:var(--bg)">bg #0d1015</div>
+      <div class="c" style="background:var(--surface)">surface #141920</div>
+      <div class="c" style="background:var(--surface-2)">surface-2 #1a2028</div>
+      <div class="c" style="background:var(--surface-3)">surface-3 #212932</div>
+      <div class="c" style="background:var(--border-strong)">border #35404d</div>
+    </div>
+    <div class="sw" style="margin-top:8px">
+      <div class="c on" style="background:var(--accent)">accent #4f8cff</div>
+      <div class="c on" style="background:var(--ok);color:#052">ok #34c77b</div>
+      <div class="c on" style="background:var(--warn);color:#331">warn #f5b840</div>
+      <div class="c on" style="background:var(--err)">err #ff5d5d</div>
+      <div class="c on" style="background:var(--info);color:#023">info #38bdf8</div>
+    </div>
+
+    <h2>字体</h2>
+    <div class="type">
+      <div class="x"><span>标题 15 / 700</span><b style="font-size:15px">飞达 F-08 · 料带飞达</b></div>
+      <div class="x"><span>正文 13 / 400</span><span style="width:auto;font-family:var(--font);font-size:13px;color:var(--text)">把相机十字线对准第一个定位孔的中心</span></div>
+      <div class="x"><span>辅助 11.5 / 500</span><span style="width:auto;font-family:var(--font);font-size:11.5px;color:var(--muted)">上次取料 3 分钟前 · 余量 1,240</span></div>
+      <div class="x"><span>数值 mono 20 / 600</span><span class="mono" style="width:auto;font-size:20px;font-weight:600;color:var(--text)">120.450 &nbsp;-2.000 &nbsp;90.00</span></div>
+    </div>
+
+    <h2>按钮 · 圆角 6px · 高 32px</h2>
+    <div class="rowx">
+      <button class="btn primary ok"><svg class="i"><use href="#i-play"/></svg>启动</button>
+      <button class="btn primary">应用</button>
+      <button class="btn">重置</button>
+      <button class="btn ghost">取消</button>
+      <button class="btn danger"><svg class="i"><use href="#i-stop"/></svg>终止</button>
+      <button class="btn solid-danger">紧急停止</button>
+      <button class="btn icon"><svg class="i"><use href="#i-camera"/></svg></button>
+      <button class="btn disabled">禁用</button>
+      <span class="btn-group"><button class="btn sm">Top</button><button class="btn sm primary">Bottom</button></span>
+    </div>
+
+    <h2>状态标签 · 芯片 · 开关</h2>
+    <div class="rowx">
+      <span class="status ok">已贴装</span><span class="status run">正在贴装</span><span class="status pending">待贴装</span><span class="status warn">余量不足</span><span class="status err">错误</span><span class="status skip">跳过</span>
+      <span class="chip ok"><span class="led"></span>已启用 · 已归位</span><span class="chip warn"><span class="led"></span>未归位</span><span class="chip neutral"><span class="led"></span>已断开</span>
+      <span class="toggle on"></span><span class="toggle"></span><span class="check on"></span><span class="check"></span>
+    </div>
+
+    <h2>输入 · 分段选择 · 滑条</h2>
+    <div class="two">
+      <div class="form">
+        <label>X / Y</label><div class="inp-row"><div class="inp mono"><span class="pre">X</span>120.450</div><div class="inp mono"><span class="pre">Y</span>85.210</div></div>
+        <label>元件</label><div class="inp"><b>R0603-10K</b><svg class="i sm caret"><use href="#i-chevdown"/></svg></div>
+        <label>只读</label><div class="inp ro">R0603 <span class="u">高 0.45 mm</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="seg"><span class="s">0.01</span><span class="s">0.1</span><span class="s active">1</span><span class="s">10</span><span class="s">100</span></div>
+        <div class="row"><span class="muted" style="font-size:11px">速度</span><div class="slider"><i style="width:70%"></i><b style="left:70%"></b></div><span class="mono t2" style="font-size:12px">70%</span></div>
+        <div class="search" style="width:100%"><svg class="i sm"><use href="#i-search"/></svg>搜索或输入命令…<kbd>Ctrl K</kbd></div>
+      </div>
+    </div>
+
+    <h2>导航 · 标签 · 表格行</h2>
+    <div class="rowx" style="align-items:flex-start">
+      <div class="rail" style="flex-direction:row;height:auto;padding:6px;border:1px solid var(--border);border-radius:12px;gap:4px"><div class="item active"><svg class="i"><use href="#i-job"/></svg>任务</div><div class="item"><svg class="i"><use href="#i-feeder"/></svg>飞达<span class="badge warn">1</span></div><div class="item"><svg class="i"><use href="#i-alert"/></svg>问题<span class="badge">2</span></div></div>
+      <div class="dock" style="margin:0;flex:1">
+        <div class="tabs"><div class="tab"><svg class="i sm"><use href="#i-board"/></svg>单板 <span class="n">2</span></div><div class="tab active"><svg class="i sm"><use href="#i-parts"/></svg>贴片位 <span class="n">48</span></div></div>
+        <table class="grid"><thead><tr><th>ID</th><th>元件</th><th class="r">X</th><th>状态</th></tr></thead><tbody>
+          <tr><td><b>R11</b></td><td>R0603-10K</td><td class="num r">118.200</td><td><span class="status ok">已贴装</span></td></tr>
+          <tr class="sel"><td><b>R12</b></td><td>R0603-10K</td><td class="num r">120.450</td><td><span class="status run">正在贴装</span></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="half r th-light">
+    <h1>视觉规范 · 浅色</h1>
+    <div class="sub">同一套组件在浅色主题下的表现；两套主题只改颜色变量，尺寸 / 圆角 / 间距完全一致</div>
+
+    <h2>颜色</h2>
+    <div class="sw">
+      <div class="c" style="background:var(--bg)">bg #eceff3</div>
+      <div class="c" style="background:var(--surface)">surface #ffffff</div>
+      <div class="c" style="background:var(--surface-2)">surface-2 #f5f7fa</div>
+      <div class="c" style="background:var(--surface-3)">surface-3 #e9edf2</div>
+      <div class="c" style="background:var(--border-strong)">border #c6cfda</div>
+    </div>
+    <div class="sw" style="margin-top:8px">
+      <div class="c on" style="background:var(--accent)">accent #2f6fe0</div>
+      <div class="c on" style="background:var(--ok);color:#052">ok #34c77b</div>
+      <div class="c on" style="background:var(--warn);color:#331">warn #f5b840</div>
+      <div class="c on" style="background:var(--err)">err #ff5d5d</div>
+      <div class="c on" style="background:var(--info);color:#023">info #38bdf8</div>
+    </div>
+
+    <h2>字体</h2>
+    <div class="type">
+      <div class="x"><span>标题 15 / 700</span><b style="font-size:15px">飞达 F-08 · 料带飞达</b></div>
+      <div class="x"><span>正文 13 / 400</span><span style="width:auto;font-family:var(--font);font-size:13px;color:var(--text)">把相机十字线对准第一个定位孔的中心</span></div>
+      <div class="x"><span>辅助 11.5 / 500</span><span style="width:auto;font-family:var(--font);font-size:11.5px;color:var(--muted)">上次取料 3 分钟前 · 余量 1,240</span></div>
+      <div class="x"><span>数值 mono 20 / 600</span><span class="mono" style="width:auto;font-size:20px;font-weight:600;color:var(--text)">120.450 &nbsp;-2.000 &nbsp;90.00</span></div>
+    </div>
+
+    <h2>按钮 · 圆角 6px · 高 32px</h2>
+    <div class="rowx">
+      <button class="btn primary ok"><svg class="i"><use href="#i-play"/></svg>启动</button>
+      <button class="btn primary">应用</button>
+      <button class="btn">重置</button>
+      <button class="btn ghost">取消</button>
+      <button class="btn danger"><svg class="i"><use href="#i-stop"/></svg>终止</button>
+      <button class="btn solid-danger">紧急停止</button>
+      <button class="btn icon"><svg class="i"><use href="#i-camera"/></svg></button>
+      <button class="btn disabled">禁用</button>
+      <span class="btn-group"><button class="btn sm">Top</button><button class="btn sm primary">Bottom</button></span>
+    </div>
+
+    <h2>状态标签 · 芯片 · 开关</h2>
+    <div class="rowx">
+      <span class="status ok">已贴装</span><span class="status run">正在贴装</span><span class="status pending">待贴装</span><span class="status warn">余量不足</span><span class="status err">错误</span><span class="status skip">跳过</span>
+      <span class="chip ok"><span class="led"></span>已启用 · 已归位</span><span class="chip warn"><span class="led"></span>未归位</span><span class="chip neutral"><span class="led"></span>已断开</span>
+      <span class="toggle on"></span><span class="toggle"></span><span class="check on"></span><span class="check"></span>
+    </div>
+
+    <h2>输入 · 分段选择 · 滑条</h2>
+    <div class="two">
+      <div class="form">
+        <label>X / Y</label><div class="inp-row"><div class="inp mono"><span class="pre">X</span>120.450</div><div class="inp mono"><span class="pre">Y</span>85.210</div></div>
+        <label>元件</label><div class="inp"><b>R0603-10K</b><svg class="i sm caret"><use href="#i-chevdown"/></svg></div>
+        <label>只读</label><div class="inp ro">R0603 <span class="u">高 0.45 mm</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="seg"><span class="s">0.01</span><span class="s">0.1</span><span class="s active">1</span><span class="s">10</span><span class="s">100</span></div>
+        <div class="row"><span class="muted" style="font-size:11px">速度</span><div class="slider"><i style="width:70%"></i><b style="left:70%"></b></div><span class="mono t2" style="font-size:12px">70%</span></div>
+        <div class="search" style="width:100%"><svg class="i sm"><use href="#i-search"/></svg>搜索或输入命令…<kbd>Ctrl K</kbd></div>
+      </div>
+    </div>
+
+    <h2>导航 · 标签 · 表格行</h2>
+    <div class="rowx" style="align-items:flex-start">
+      <div class="rail" style="flex-direction:row;height:auto;padding:6px;border:1px solid var(--border);border-radius:12px;gap:4px"><div class="item active"><svg class="i"><use href="#i-job"/></svg>任务</div><div class="item"><svg class="i"><use href="#i-feeder"/></svg>飞达<span class="badge warn">1</span></div><div class="item"><svg class="i"><use href="#i-alert"/></svg>问题<span class="badge">2</span></div></div>
+      <div class="dock" style="margin:0;flex:1">
+        <div class="tabs"><div class="tab"><svg class="i sm"><use href="#i-board"/></svg>单板 <span class="n">2</span></div><div class="tab active"><svg class="i sm"><use href="#i-parts"/></svg>贴片位 <span class="n">48</span></div></div>
+        <table class="grid"><thead><tr><th>ID</th><th>元件</th><th class="r">X</th><th>状态</th></tr></thead><tbody>
+          <tr><td><b>R11</b></td><td>R0603-10K</td><td class="num r">118.200</td><td><span class="status ok">已贴装</span></td></tr>
+          <tr class="sel"><td><b>R12</b></td><td>R0603-10K</td><td class="num r">120.450</td><td><span class="status run">正在贴装</span></td></tr>
+        </tbody></table>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
