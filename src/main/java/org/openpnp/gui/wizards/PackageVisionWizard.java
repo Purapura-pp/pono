@@ -248,7 +248,10 @@ public class PackageVisionWizard extends AbstractConfigurationWizard {
         toolBar.add(toggleMarkAction);
 
         JScrollPane tableScrollPane = new JScrollPane(table);
-        tableScrollPane.setPreferredSize(new Dimension(454, 240));
+        // As wide as the column gives it, not a fixed 454: the pads were cut off at the right in
+        // the properties column, and a wide one left them a strip at the left.
+        tableScrollPane.setPreferredSize(new Dimension(200, 240));
+        tableScrollPane.setMinimumSize(new Dimension(120, 120));
         tablePanel.add(tableScrollPane);
 
         showReticle();
