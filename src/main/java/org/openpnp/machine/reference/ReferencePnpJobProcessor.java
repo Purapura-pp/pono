@@ -42,6 +42,7 @@ import org.openpnp.machine.reference.ReferenceFeeder;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
+import org.openpnp.model.JobRun;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
@@ -188,6 +189,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             throw new Exception("Can't initialize with a null Job.");
         }
         this.job = job;
+        job.getRun().start();
         currentStep = new PreFlight();
         this.fireJobState(getMachine().getSignalers(), AbstractJobProcessor.State.STOPPED);
     }
@@ -244,6 +246,9 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             Logger.error(e);
         }
         this.fireJobState(getMachine().getSignalers(), AbstractJobProcessor.State.STOPPED);
+        if (job != null) {
+            job.getRun().stopped();
+        }
         currentStep = null;
     }
 
@@ -308,6 +313,9 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                     }
                     
                     if (!placement.isEnabled()) {
+                        if (placement.getSide() == boardLocation.getGlobalSide()) {
+                            job.getRun().skipped(JobRun.key(boardLocation, placement.getId()), placement.getId());
+                        }
                         continue;
                     }
                     
@@ -540,12 +548,17 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                     .map(l -> {return l.getPlacementsHolderLocation(); })
                     .collect(Collectors.toList());
             
+            String checked = locationsToProcess.stream()
+                    .map(PlacementsHolderLocation::getUniqueId)
+                    .collect(Collectors.joining(", ")); //$NON-NLS-1$
             try {
                 locator.locateAllPlacementsHolder(locationsToProcess, null);
             }
             catch (Exception e) {
+                job.getRun().fiducials(checked, e.getMessage() == null ? e.toString() : e.getMessage());
                 throw new JobProcessorException(locationsToProcess, e);
             }
+            job.getRun().fiducials(checked, null);
 
             // increment pass to process next layer on next pass and add processed to completed
             level++;
@@ -650,6 +663,8 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             for (PlannedPlacement plannedPlacement : plannedPlacements) {
                 Logger.debug("Placement {} has rank {}", plannedPlacement, plannedPlacement.jobPlacement.getRank());
                 plannedPlacement.jobPlacement.setStatus(Status.Processing);
+                job.getRun().placing(runKey(plannedPlacement.jobPlacement),
+                        plannedPlacement.jobPlacement.getPlacement().getId(), plannedPlacement.nozzle.getName());
             }
             
             Logger.debug("Planned placements {}", plannedPlacements);
@@ -1370,6 +1385,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                     feed(feeder, nozzle);
                 }
                 catch (Feeder.FeederEmptyException e) {
+                    job.getRun().waitingForFeeder(runKey(jobPlacement), placement.getId(), feeder.getName());
                     if (tryLimit==1) {
                         // We are configured to not allow any retries of failed feeds, but
                         // the FeederEmptyException is different because this is an expected
@@ -1400,6 +1416,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                 }
                 catch (JobProcessorException jpe) {
                     lastException = jpe;
+                    job.getRun().pickFailed(runKey(jobPlacement), placement.getId(), feeder.getName());
                     discard(nozzle);
                     continue;
                 }
@@ -1476,6 +1493,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                     pick(nozzle, feeder, jobPlacement, part);
                     postPick(feeder, nozzle);
                     checkPartOn(nozzle);
+                    feeder.recordPick();
                     return;
                 }
                 catch (Exception e) {
@@ -1648,6 +1666,10 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                             boardLocation,
                             placement, nozzle);
                     Logger.debug("Align {} with {}, offsets {}", part, nozzle, plannedPlacement.alignmentOffsets);
+                    if (plannedPlacement.alignmentOffsets != null) {
+                        job.getRun().aligned(runKey(jobPlacement), placement.getId(),
+                                plannedPlacement.alignmentOffsets.getLocation());
+                    }
                     return;
                 }
                 catch (Exception e) {
@@ -1775,6 +1797,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
 
             // Mark the placement as finished
             jobPlacement.setStatus(Status.Complete);
+            job.getRun().placed(runKey(jobPlacement), placement.getId());
             
             // Mark the placement as "placed"
 //            boardLocation.setPlaced(jobPlacement.getPlacement().getId(), true);
@@ -1977,6 +2000,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                     })
                     .collect(Collectors.toList());
 
+            job.getRun().finished(totalPartsPlaced);
             Logger.info("Job finished {} parts in {} sec. This is {} CPH", totalPartsPlaced,
                     df.format(dtSec), df.format(totalPartsPlaced / (dtSec / 3600.0)));
 
@@ -2565,6 +2589,8 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
             catch (JobProcessorException e) {
                 switch (plannedPlacement.jobPlacement.getPlacement().getEffectiveErrorHandling(job)) {
                     case Alert:
+                        job.getRun().failed(runKey(plannedPlacement.jobPlacement),
+                                plannedPlacement.jobPlacement.getPlacement().getId(), e.getMessage());
                         throw e;
                     case Defer:
                         if (e.isInterrupting()) {
@@ -2582,6 +2608,8 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                             plannedPlacement.jobPlacement.setStatus(Status.Pending);
                         } else {
                             plannedPlacement.jobPlacement.setError(e);
+                            job.getRun().failed(runKey(plannedPlacement.jobPlacement),
+                                    plannedPlacement.jobPlacement.getPlacement().getId(), e.getMessage());
                         }
                         return this;
                     default:
@@ -2589,6 +2617,11 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                 }
             }
         }
+    }
+
+    /** The key the run keeps a placement under: its board or panel instance and its id. */
+    private static String runKey(JobPlacement jobPlacement) {
+        return JobRun.key(jobPlacement.getBoardLocation(), jobPlacement.getPlacement().getId());
     }
 
     private void scriptFeederFault(Feeder feeder,Exception e1) throws JobProcessorException {

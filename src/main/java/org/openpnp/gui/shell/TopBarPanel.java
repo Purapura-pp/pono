@@ -84,6 +84,121 @@ public class TopBarPanel extends JPanel {
     private final Chip configurationDirty = new Chip(
             Translations.getString("TopBar.ConfigurationDirty"), Chip.Tone.Warn, Chip.Shape.Chip); //$NON-NLS-1$
 
+    /** The bell, with how many things want attention in a badge on it. */
+    private final BadgeIcon bellIcon = new BadgeIcon(Ui.icon("bell")); //$NON-NLS-1$
+
+    /**
+     * The count on the bell: the issues still open, and the calibration steps they call for, each
+     * counted once however many of its issues there are. It was a bell that only opened the issues
+     * page, saying nothing about whether there was anything there.
+     */
+    private void followNotifications(JButton bell) {
+        configuration.addListener(new org.openpnp.ConfigurationListener.Adapter() {
+            @Override
+            public void configurationComplete(Configuration configuration) throws Exception {
+                if (!(configuration.getMachine() instanceof org.openpnp.machine.reference.ReferenceMachine)) {
+                    return;
+                }
+                org.openpnp.model.Solutions solutions =
+                        ((org.openpnp.machine.reference.ReferenceMachine) configuration.getMachine()).getSolutions();
+                java.beans.PropertyChangeListener recount = e -> javax.swing.SwingUtilities.invokeLater(() -> {
+                    int[] counts = countNotifications(solutions.getIssues());
+                    bellIcon.setCount(counts[0] + counts[1], counts[2] > 0);
+                    bell.setToolTipText(counts[0] + counts[1] == 0
+                            ? Translations.getString("TopBar.Notifications.toolTipText") //$NON-NLS-1$
+                            : String.format(Translations.getString("TopBar.Notifications.Count"), //$NON-NLS-1$
+                                    counts[0], counts[1]));
+                    bell.repaint();
+                });
+                solutions.addPropertyChangeListener("issues", recount); //$NON-NLS-1$
+                solutions.addPropertyChangeListener("issue", recount); //$NON-NLS-1$
+            }
+        });
+    }
+
+    /**
+     * @return The open issues that are not about calibrating, the calibration steps the others
+     *         call for, and how many of the first are warnings or worse.
+     */
+    static int[] countNotifications(java.util.List<org.openpnp.model.Solutions.Issue> issues) {
+        java.util.Set<String> steps = new java.util.HashSet<>();
+        int others = 0;
+        int severe = 0;
+        for (org.openpnp.model.Solutions.Issue issue : issues) {
+            if (issue.getState() != org.openpnp.model.Solutions.State.Open) {
+                continue;
+            }
+            if (issue.getCalibrationStep() != null) {
+                steps.add(issue.getCalibrationStep() + "@" + System.identityHashCode(issue.getCalibrationSubject())); //$NON-NLS-1$
+            }
+            else {
+                others++;
+                if (issue.getSeverity().ordinal() >= org.openpnp.model.Solutions.Severity.Warning.ordinal()) {
+                    severe++;
+                }
+            }
+        }
+        return new int[] { others, steps.size(), severe };
+    }
+
+    /** An icon with a count in a small capsule at its top right, red when something is serious. */
+    static final class BadgeIcon implements javax.swing.Icon {
+        private final javax.swing.Icon icon;
+        private int count;
+        private boolean severe;
+
+        BadgeIcon(javax.swing.Icon icon) {
+            this.icon = icon;
+        }
+
+        void setCount(int count, boolean severe) {
+            this.count = count;
+            this.severe = severe;
+        }
+
+        int getCount() {
+            return count;
+        }
+
+        @Override
+        public void paintIcon(Component c, java.awt.Graphics g, int x, int y) {
+            icon.paintIcon(c, g, x, y);
+            if (count <= 0) {
+                return;
+            }
+            java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                        java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                String text = count > 99 ? "99+" : String.valueOf(count); //$NON-NLS-1$
+                g2.setFont(Ui.font(9f, java.awt.Font.BOLD));
+                java.awt.FontMetrics fm = g2.getFontMetrics();
+                int h = 13;
+                int w = Math.max(h, fm.stringWidth(text) + 6);
+                int bx = x + icon.getIconWidth() - w / 2 - 1;
+                int by = y - 5;
+                g2.setColor(severe ? Ui.err() : Ui.accent());
+                g2.fillRoundRect(bx, by, w, h, h, h);
+                g2.setColor(java.awt.Color.WHITE);
+                g2.drawString(text, bx + (w - fm.stringWidth(text)) / 2, by + (h + fm.getAscent() - fm.getDescent()) / 2);
+            }
+            finally {
+                g2.dispose();
+            }
+        }
+
+        @Override
+        public int getIconWidth() {
+            return icon.getIconWidth();
+        }
+
+        @Override
+        public int getIconHeight() {
+            return icon.getIconHeight();
+        }
+    }
+
     public TopBarPanel(Configuration configuration, JobPanel jobPanel,
             MachineControlsPanel machineControls, JMenuBar menuBar, Runnable openIssues,
             Runnable openCommands, Action stopMachine, Runnable saveConfiguration) {
@@ -98,12 +213,13 @@ public class TopBarPanel extends JPanel {
         setOpaque(true);
 
         add(brand());
-        add(Box.createHorizontalStrut(14));
+        add(Box.createHorizontalStrut(12));
         add(menus(menuBar));
-        add(Box.createHorizontalStrut(14));
+        add(Box.createHorizontalStrut(12));
         add(Ui.divider(24));
-        add(Box.createHorizontalStrut(14));
-        add(jobName());
+        add(Box.createHorizontalStrut(12));
+        jobPill = jobName();
+        add(jobPill);
         add(Box.createHorizontalStrut(8));
         configurationDirty.setToolTipText(Translations.getString("TopBar.ConfigurationDirty.toolTipText")); //$NON-NLS-1$
         configurationDirty.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
@@ -137,40 +253,86 @@ public class TopBarPanel extends JPanel {
         add(connectGap);
         add(connect);
         followState.run();
-        add(Box.createHorizontalStrut(14));
+        add(Box.createHorizontalStrut(12));
         add(Ui.divider(24));
-        add(Box.createHorizontalStrut(14));
+        add(Box.createHorizontalStrut(12));
         add(jobControls());
         add(Box.createHorizontalStrut(8));
         // Always there and always red: stopping the machine must not depend on a job running,
         // which is the only time the job's own Stop is enabled.
-        JButton stopMachineButton = Ui.button(stopMachine, Ui.Size.Md, Ui.Variant.SolidDanger);
+        // The red power button without its words, which are on hover: with them the bar was
+        // wider than the mockups' 1600 pixel window, and the job's name was cut short there.
+        JButton stopMachineButton = Ui.iconButton(stopMachine, Ui.Size.Md, Ui.Variant.SolidDanger);
         stopMachineButton.setIcon(Ui.icon("power")); //$NON-NLS-1$
-        // It never gives way: a button's minimum is its preferred size, so on a narrow window the
-        // job's name and the search box give up their width before this does.
-        add(stopMachineButton);
-        add(Box.createHorizontalStrut(14));
-        add(progress());
-        add(Box.createHorizontalStrut(14));
+        Object description = stopMachine.getValue(Action.SHORT_DESCRIPTION);
+        stopMachineButton.setToolTipText(description != null ? String.valueOf(description)
+                : String.valueOf(stopMachine.getValue(Action.NAME)));
+        // It never gives way: on a narrow window the job's name and the search box give up their
+        // width before this does.
+        add(neverNarrower(stopMachineButton));
+        add(Box.createHorizontalStrut(12));
+        progressRow = progress();
+        add(progressRow);
+        add(Box.createHorizontalStrut(12));
         add(Ui.divider(24));
-        add(Box.createHorizontalStrut(14));
-        add(search(openCommands));
+        add(Box.createHorizontalStrut(12));
+        searchBox = search(openCommands);
+        add(searchBox);
         add(Box.createHorizontalStrut(6));
-        JButton bell = Ui.iconButton(Ui.icon("bell"), Ui.Size.Md, Ui.Variant.Ghost, //$NON-NLS-1$
+        JButton bell = Ui.iconButton(bellIcon, Ui.Size.Md, Ui.Variant.Ghost,
                 Translations.getString("TopBar.Notifications.toolTipText")); //$NON-NLS-1$
         bell.addActionListener(e -> openIssues.run());
-        add(bell);
+        add(neverNarrower(bell));
+        followNotifications(bell);
         add(Box.createHorizontalStrut(6));
         themeButton = Ui.iconButton(Ui.icon(FlatLaf.isLafDark() ? "moon" : "sun"), Ui.Size.Md, //$NON-NLS-1$ //$NON-NLS-2$
                 Ui.Variant.Ghost, Translations.getString("TopBar.Theme.toolTipText")); //$NON-NLS-1$
         themeButton.addActionListener(e -> toggleTheme());
-        add(themeButton);
+        add(neverNarrower(themeButton));
 
         for (Component c : getComponents()) {
             if (c instanceof JComponent) {
                 ((JComponent) c).setAlignmentY(CENTER_ALIGNMENT);
             }
         }
+    }
+
+    private JComponent jobPill;
+    private JComponent progressRow;
+    private JComponent searchBox;
+    private static final int PROGRESS_MIN = 90;
+    private static final int SEARCH_MIN = 34;
+    private static final int JOB_NAME_MIN = 120;
+
+    private static <C extends JComponent> C neverNarrower(C c) {
+        c.setMinimumSize(c.getPreferredSize());
+        return c;
+    }
+
+    /**
+     * Who gives way on a narrow bar, in turn: the progress bar, then the search box's words,
+     * then the job's name. A box layout takes the same share from everything that can shrink,
+     * which cut the job's name short at the mockups' own 1600 pixels while the bar and the search
+     * box still had room to give.
+     */
+    @Override
+    public void doLayout() {
+        if (jobPill != null && getWidth() > 0) {
+            int deficit = getPreferredSize().width - getWidth();
+            int progressGives = progressRow.getPreferredSize().width - PROGRESS_MIN;
+            int searchGives = searchBox.getPreferredSize().width - SEARCH_MIN;
+            minimumWidth(progressRow, PROGRESS_MIN);
+            minimumWidth(searchBox, deficit > progressGives ? SEARCH_MIN : searchBox.getPreferredSize().width);
+            minimumWidth(jobPill, deficit > progressGives + searchGives ? JOB_NAME_MIN
+                    : jobPill.getPreferredSize().width);
+            // The layout keeps what it read of the sizes until it is told they changed.
+            ((BoxLayout) getLayout()).invalidateLayout(this);
+        }
+        super.doLayout();
+    }
+
+    private static void minimumWidth(JComponent c, int width) {
+        c.setMinimumSize(new Dimension(Math.min(width, c.getPreferredSize().width), c.getMinimumSize().height));
     }
 
     /** The logo tile, the name and the version, as {@code .brand}. */
@@ -392,7 +554,8 @@ public class TopBarPanel extends JPanel {
         box.add(Box.createHorizontalGlue());
         JLabel key = Ui.kbd("Ctrl K"); //$NON-NLS-1$
         box.add(key);
-        Dimension size = new Dimension(150, 32);
+        // Wide enough for the words and the keycap: at 150 the words were painted cut short.
+        Dimension size = new Dimension(164, 32);
         box.setPreferredSize(size);
         // On a narrow window the box gives up its placeholder before anything else loses a button.
         box.setMinimumSize(new Dimension(34, 32));
@@ -402,7 +565,8 @@ public class TopBarPanel extends JPanel {
         box.addComponentListener(new java.awt.event.ComponentAdapter() {
             @Override
             public void componentResized(java.awt.event.ComponentEvent e) {
-                boolean wide = box.getWidth() >= 110;
+                // The words whole or not at all: at 110 pixels they were painted "搜...".
+                boolean wide = box.getWidth() >= box.getPreferredSize().width;
                 if (placeholder.isVisible() != wide) {
                     placeholder.setVisible(wide);
                     key.setVisible(wide);

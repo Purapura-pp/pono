@@ -119,6 +119,29 @@ public class LocationButtonsPanel extends JPanel {
         return baseLocation;
     }
 
+    /** Fills the fields from where the camera is. */
+    public javax.swing.Action getCaptureCameraAction() {
+        return captureCameraCoordinatesAction;
+    }
+
+    /** Fills the fields from where the selected tool is. */
+    public javax.swing.Action getCaptureToolAction() {
+        return captureToolCoordinatesAction;
+    }
+
+    /** Moves the camera to what the fields say. */
+    public javax.swing.Action getPositionCameraAction() {
+        return positionCameraAction;
+    }
+
+    /**
+     * Probes the height at what the fields say with the selected contact probe nozzle, and puts
+     * the height found in the Z field.
+     */
+    public javax.swing.Action getContactProbeAction() {
+        return contactProbeNozzleAction;
+    }
+
     public void setBaseLocation(Location baseLocation) {
         this.baseLocation = baseLocation;
     }

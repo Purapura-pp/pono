@@ -60,6 +60,24 @@ public class StatusPillRenderer extends DefaultTableCellRenderer {
             Color color = UIManager.getColor(colorKey);
             return color != null ? color : fallback;
         }
+
+        /**
+         * The colour of the words: the tone itself on a dark theme, darkened on a light one,
+         * where green and amber on their own tint come to about 2:1.
+         */
+        Color textColor() {
+            if (this == Muted) {
+                // text-2: the muted grey on its own grey tint is under 3:1.
+                return org.openpnp.gui.shell.Ui.text2();
+            }
+            if (text == null) {
+                text = new org.openpnp.gui.shell.ThemeColor(colorKey, fallback.getRGB()).asText();
+            }
+            return text;
+        }
+
+        /** It follows the theme by itself, so one is enough. */
+        private Color text;
     }
 
     /** How much of the tone is left in the pill's fill. */
@@ -87,7 +105,7 @@ public class StatusPillRenderer extends DefaultTableCellRenderer {
         setText(value == null ? "" : textOf.apply(value)); //$NON-NLS-1$
         // Opaque only when selected, so the table's selection fill is what shows through.
         setOpaque(isSelected);
-        setForeground(isSelected ? table.getSelectionForeground() : tone.color());
+        setForeground(isSelected ? table.getSelectionForeground() : tone.textColor());
         return this;
     }
 

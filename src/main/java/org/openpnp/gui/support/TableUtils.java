@@ -505,7 +505,25 @@ public class TableUtils {
                 : header.getDefaultRenderer();
         Component component = renderer.getTableCellRendererComponent(table,
                 column.getHeaderValue(), false, false, -1, viewColumn);
+        measuredWhereItIsPainted(header, component);
         return component.getPreferredSize().width + SLACK;
+    }
+
+    /**
+     * Puts a renderer's component where it is painted before it is measured: a cell's margins are
+     * the table's style, which the cell border finds through the table. Measured on its own it got
+     * the look and feel's 3 pixel margins, so a column came out 14 pixels too narrow for the 10
+     * the style paints with, and "FID1" was painted "FI...".
+     */
+    private static void measuredWhereItIsPainted(java.awt.Container owner, Component component) {
+        for (Component child : owner.getComponents()) {
+            if (child instanceof javax.swing.CellRendererPane) {
+                if (component.getParent() != child) {
+                    ((javax.swing.CellRendererPane) child).add(component);
+                }
+                return;
+            }
+        }
     }
 
     private static int contentWidth(JTable table, int viewColumn) {
@@ -519,6 +537,7 @@ public class TableUtils {
             try {
                 Component component = table.prepareRenderer(table.getCellRenderer(row, viewColumn),
                         row, viewColumn);
+                measuredWhereItIsPainted(table, component);
                 widest = Math.max(widest, component.getPreferredSize().width);
             }
             catch (RuntimeException e) {
@@ -602,8 +621,22 @@ public class TableUtils {
         columns.moveColumn(columns.getColumnCount() - 1, to);
     }
 
+    /**
+     * A table model's columns that are hidden until the column settings show them: there for
+     * whoever needs them, and out of the way of everyone else.
+     */
+    public interface DefaultHidden {
+        int[] getDefaultHiddenColumns();
+    }
+
     private static void restoreHidden(JTable table, Preferences prefs, String key) {
         Set<Integer> hidden = hiddenColumns(prefs, key);
+        if (prefs.get(key + "hidden", null) == null && table.getModel() instanceof DefaultHidden) { //$NON-NLS-1$
+            // Nothing chosen for this table yet.
+            for (int column : ((DefaultHidden) table.getModel()).getDefaultHiddenColumns()) {
+                hidden.add(column);
+            }
+        }
         TableColumnModel columns = table.getColumnModel();
         for (int i = columns.getColumnCount() - 1; i >= 0; i--) {
             TableColumn column = columns.getColumn(i);

@@ -39,6 +39,8 @@ import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.TableUtils;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.Configuration;
+import org.openpnp.model.Job;
+import org.openpnp.model.JobRun;
 import org.openpnp.model.Length;
 import org.openpnp.model.Location;
 import org.openpnp.model.Panel;
@@ -55,7 +57,16 @@ import com.google.common.eventbus.Subscribe;
 
 @SuppressWarnings("serial")
 public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableModel 
-        implements ColumnAlignable, ColumnWidthSaveable, TableUtils.ColumnKinds {
+        implements ColumnAlignable, ColumnWidthSaveable, TableUtils.ColumnKinds, TableUtils.DefaultHidden {
+    /**
+     * Placed and rank: the status says whether a placement is placed, and the rank is for the few
+     * jobs that order their placements by hand. The mockups' table has neither.
+     */
+    @Override
+    public int[] getDefaultHiddenColumns() {
+        return new int[] { 8, 11 };
+    }
+
     private PlacementsHolder<?> placementsHolder = null;
 
     private String[] columnNames =
@@ -92,7 +103,7 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
     @SuppressWarnings("rawtypes")
     private Class[] columnTypes = new Class[] {Boolean.class, PartCellValue.class, Part.class, 
             Side.class, LengthCellValue.class, LengthCellValue.class, RotationCellValue.class, 
-            Type.class, Boolean.class, Status.class, ErrorHandling.class, Integer.class, String.class};
+            Type.class, Boolean.class, PlacementStatus.class, ErrorHandling.class, Integer.class, String.class};
     
     // Numbers right, everything else left, as the stylesheet's table.grid: centred columns made
     // the coordinates hard to compare down the column.
@@ -427,10 +438,13 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
                 // TODO: It would be better for this to be pushed in by a listener than pulled
                 // during rendering, but it is only a map lookup now, so it is no longer a cost
                 // worth restructuring the panel for.
-                return MainFrame.get().getJobTab().getJob()
-                        .retrievePlacedStatus(placementsHolderLocation, placement.getId());
-            case 9:
-                return getPlacementStatus(placement);
+                return job() != null && job().retrievePlacedStatus(placementsHolderLocation, placement.getId());
+            case 9: {
+                Job job = job();
+                return new PlacementStatus(placement.getType(), getPlacementStatus(placement),
+                        job == null ? null : job.getRun().get(JobRun.key(placementsHolderLocation, placement.getId())),
+                        job != null && job.retrievePlacedStatus(placementsHolderLocation, placement.getId()));
+            }
             case 10:
                 return placement.getErrorHandling();
             case 11:
@@ -439,6 +453,151 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
                 return placement.getComments();
             default:
                 return null;
+        }
+    }
+
+    /** The job the page shows, or null before there is a window. */
+    private static Job job() {
+        MainFrame frame = MainFrame.get();
+        return frame == null || frame.getJobTab() == null ? null : frame.getJobTab().getJob();
+    }
+
+    /**
+     * What the status column shows: the current run's state of the placement where the run has
+     * reached it, whether it is placed, and otherwise whether it is ready to be. The mockups' pills
+     * - placed, placing on N1, waiting for a refill of F-08, skipped, pick failed three times -
+     * where the column only ever said whether the part and its feeder were there. Its text is
+     * what the table shows, so that the filter finds what is read in the column.
+     */
+    public static final class PlacementStatus implements Comparable<PlacementStatus> {
+        private final Type type;
+        private final Status readiness;
+        private final JobRun.PlacementRun run;
+        private final boolean placed;
+
+        public PlacementStatus(Type type, Status readiness, JobRun.PlacementRun run, boolean placed) {
+            this.type = type;
+            this.readiness = readiness;
+            this.run = run;
+            this.placed = placed;
+        }
+
+        public Status getReadiness() {
+            return readiness;
+        }
+
+        /** The run's record of the placement, or null if the run has not reached it. */
+        public JobRun.PlacementRun getRun() {
+            return run;
+        }
+
+        public boolean isPlaced() {
+            return placed;
+        }
+
+        /** The run's state where there is one, placed when placed before the run, null otherwise. */
+        public JobRun.State getState() {
+            if (run != null && run.getState() != null) {
+                return run.getState();
+            }
+            return placed ? JobRun.State.Placed : null;
+        }
+
+        /** A fiducial is located, not placed: it has no status of its own. */
+        public boolean isFiducial() {
+            return type == Type.Fiducial;
+        }
+
+        public String getText() {
+            if (isFiducial()) {
+                return "\u2014"; //$NON-NLS-1$
+            }
+            JobRun.State state = getState();
+            if (state != null) {
+                switch (state) {
+                    case Placed:
+                        return Translations.getString("JobPlacementsPanel.Status.Placed"); //$NON-NLS-1$
+                    case Placing:
+                        return String.format(Translations.getString("JobPlacementsPanel.Status.Placing"), //$NON-NLS-1$
+                                run.getNozzle());
+                    case WaitingForFeeder:
+                        return String.format(Translations.getString("JobPlacementsPanel.Status.WaitingForFeeder"), //$NON-NLS-1$
+                                run.getFeeder());
+                    case Skipped:
+                        return Translations.getString("JobPlacementsPanel.Status.Skipped"); //$NON-NLS-1$
+                    case Error:
+                        if (run.getPickFailures() > 0) {
+                            return String.format(Translations.getString("JobPlacementsPanel.Status.PickFailed"), //$NON-NLS-1$
+                                    run.getPickFailures());
+                        }
+                        return String.format(Translations.getString("JobPlacementsPanel.Status.Error"), //$NON-NLS-1$
+                                shorten(org.openpnp.gui.shell.ErrorMessages.explain(null, run.getError()).what));
+                    default:
+                        break;
+                }
+            }
+            switch (readiness) {
+                case Ready:
+                    return Translations.getString("JobPlacementsPanel.Status.Pending"); //$NON-NLS-1$
+                case MissingFeeder:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingFeeder"); //$NON-NLS-1$
+                case ZeroPartHeight:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusPartHeight"); //$NON-NLS-1$
+                case MissingPart:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingPart"); //$NON-NLS-1$
+                case Disabled:
+                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusDisabled"); //$NON-NLS-1$
+                default:
+                    return readiness.toString();
+            }
+        }
+
+        /** The whole error, for the cell's tooltip, where the pill has room for the start of it. */
+        public String getDetail() {
+            return run != null && run.getState() == JobRun.State.Error ? run.getError() : null;
+        }
+
+        private static String shorten(String text) {
+            if (text == null) {
+                return ""; //$NON-NLS-1$
+            }
+            String line = text.trim().split("\n")[0]; //$NON-NLS-1$
+            return line.length() > 24 ? line.substring(0, 23) + "\u2026" : line; //$NON-NLS-1$
+        }
+
+        /** Sorted by what needs attention: errors first, then waits, work under way, and what is done last. */
+        private int order() {
+            if (isFiducial()) {
+                return 9;
+            }
+            JobRun.State state = getState();
+            if (state != null) {
+                switch (state) {
+                    case Error:
+                        return 0;
+                    case WaitingForFeeder:
+                        return 1;
+                    case Placing:
+                        return 2;
+                    case Skipped:
+                        return 7;
+                    case Placed:
+                        return 8;
+                    default:
+                        break;
+                }
+            }
+            return readiness == Status.Ready ? 6 : readiness == Status.Disabled ? 7 : 3;
+        }
+
+        @Override
+        public int compareTo(PlacementStatus other) {
+            return Integer.compare(order(), other.order());
+        }
+
+        @Override
+        public String toString() {
+            return getText();
         }
     }
 

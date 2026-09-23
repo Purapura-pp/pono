@@ -128,6 +128,20 @@ public class SampleJobTest {
         }, false, 10000);
         // camera.stopContinuousCapture(encoder);
         // encoder.finish();
+
+        // What the run recorded as it went: every placement placed, each with how long it took,
+        // and the run's own log from start to finish.
+        org.openpnp.model.JobRun run = job.getRun();
+        org.junit.jupiter.api.Assertions.assertTrue(run.getPlacedCount() > 0, "nothing recorded as placed");
+        java.util.List<org.openpnp.model.JobRun.Event> events = run.getEvents();
+        org.junit.jupiter.api.Assertions.assertEquals(org.openpnp.model.JobRun.EventKind.Started,
+                events.get(0).getKind());
+        org.openpnp.model.JobRun.Event last = events.get(events.size() - 1);
+        org.junit.jupiter.api.Assertions.assertEquals(org.openpnp.model.JobRun.EventKind.Finished, last.getKind());
+        org.junit.jupiter.api.Assertions.assertEquals(String.valueOf(run.getPlacedCount()), last.getDetail(),
+                "the run placed what the processor counted");
+        org.junit.jupiter.api.Assertions.assertTrue(run.getLastPlacedRun().getDurationMillis() > 0);
+        org.junit.jupiter.api.Assertions.assertFalse(Double.isNaN(run.getCycleSeconds()));
     }
 
     public static class MpegEncodingCameraListener implements CameraListener {

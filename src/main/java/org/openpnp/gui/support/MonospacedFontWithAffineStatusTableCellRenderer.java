@@ -19,67 +19,64 @@
 
 package org.openpnp.gui.support;
 
-import javax.swing.*;
+import java.awt.Color;
+import java.awt.Component;
+
+import javax.swing.JTable;
 import javax.swing.table.DefaultTableCellRenderer;
+
+import org.openpnp.Translations;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.tablemodel.PlacementsHolderLocationsTableModel;
 import org.openpnp.model.PlacementsHolderLocation.PlacementsTransformStatus;
 import org.pmw.tinylog.Logger;
 
-import java.awt.*;
-
 /**
- * Renders a table cell using a mono-spaced font. Useful for displaying numerical values with their
- * decimal points aligned in a column. If the table model is of type
- * {@link PlacementsHolderLocationsTableModel}, the background cell color is changed based on the 
- * status of the {@link PlacementsHolderLocation}'s placement transform.
+ * A board's coordinates in the mono face, tinted by where its position came from: the accent
+ * where its own fiducials set it, green where the panel it is on set it. The tints were a light
+ * blue and a light green fill with the text left dark, which in the dark theme made the one set
+ * of unreadable cells on the page, and nothing said what the colours meant.
  */
 @SuppressWarnings("serial")
-public class MonospacedFontWithAffineStatusTableCellRenderer extends DefaultTableCellRenderer
-{
+public class MonospacedFontWithAffineStatusTableCellRenderer extends DefaultTableCellRenderer {
+    /** How much of the colour is left in the tint. */
+    private static final int TINT_ALPHA = 46;
 
     @Override
-    public Component getTableCellRendererComponent(JTable table, Object value,
-                                                   boolean isSelected, boolean hasFocus, int row, int column) {
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+            boolean hasFocus, int row, int column) {
         super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-        Color rowColor = table.getBackground();
-        Color globalColor = new Color(157, 255, 168);
-        Color localColor = new Color(157, 188, 255);
-        Color alternateRowColor = UIManager.getColor("Table.alternateRowColor");
-        Color alternateGlobalColor = new Color(141, 230, 151);
-        Color alternateLocalColor = new Color(141, 169, 230);
-        if (alternateRowColor == null) {
-            alternateRowColor = rowColor;
-            alternateGlobalColor = globalColor;
-            alternateLocalColor = localColor;
-        }
-        Color foreground = table.getForeground();
-        Color background = row%2==0 ? rowColor : alternateRowColor;
+        setFont(Ui.mono(table.getFont().getSize2D(), java.awt.Font.PLAIN));
+        setToolTipText(null);
         if (isSelected) {
-            foreground = table.getSelectionForeground();
-            background = table.getSelectionBackground();
+            return this;
         }
+        setBackground(table.getBackground());
         try {
-            PlacementsTransformStatus transformStatus = ((PlacementsHolderLocationsTableModel) table.getModel()).getPlacementsHolderLocation(table.convertRowIndexToModel(row)).getPlacementsTransformStatus();
-            if (transformStatus == PlacementsTransformStatus.GloballySet) {
-                background = row%2==0 ? globalColor : alternateGlobalColor;
-                if (isSelected) {
-                    background = background.darker();
-                }
+            PlacementsTransformStatus transformStatus = ((PlacementsHolderLocationsTableModel) table.getModel())
+                    .getPlacementsHolderLocation(table.convertRowIndexToModel(row)).getPlacementsTransformStatus();
+            if (transformStatus == PlacementsTransformStatus.LocallySet) {
+                setBackground(tint(Ui.accent(), table.getBackground()));
+                setToolTipText(Translations.getString("JobPanel.Board.Transform.Local")); //$NON-NLS-1$
             }
-            else if (transformStatus == PlacementsTransformStatus.LocallySet) {
-                background = row%2==0 ? localColor : alternateLocalColor;
-                if (isSelected) {
-                    background = background.darker();
-                }
+            else if (transformStatus == PlacementsTransformStatus.GloballySet) {
+                setBackground(tint(Ui.ok(), table.getBackground()));
+                setToolTipText(Translations.getString("JobPanel.Board.Transform.Global")); //$NON-NLS-1$
             }
         }
         catch (Exception ex) {
-            //Rendering path, keep this quiet: the row just gets the plain background.
-            Logger.trace(ex, "Failed to determine the placements transform status of row {}.", row);
+            // Rendering path, keep this quiet: the row just gets the plain background.
+            Logger.trace(ex, "Failed to determine the placements transform status of row {}.", row); //$NON-NLS-1$
         }
-        setForeground(foreground);
-        setBackground(background);
-        setFont(new Font( "Monospaced", Font.BOLD, super.getFont().getSize()));
         return this;
+    }
+
+    /** The colour laid faintly over the background, as an opaque colour a cell can paint. */
+    private static Color tint(Color colour, Color background) {
+        float a = TINT_ALPHA / 255f;
+        return new Color(
+                Math.round(colour.getRed() * a + background.getRed() * (1 - a)),
+                Math.round(colour.getGreen() * a + background.getGreen() * (1 - a)),
+                Math.round(colour.getBlue() * a + background.getBlue() * (1 - a)));
     }
 }

@@ -188,30 +188,36 @@ public class UiFixture {
     }
 
     private void feeders(Machine machine) throws Exception {
-        strip(machine, "F-01", "R0603-10K", 8, 4, 0);
-        strip(machine, "F-02", "R0603-1K", 8, 4, 1);
-        strip(machine, "F-03", "C0402-100N", 8, 2, 2);
-        strip(machine, "F-04", "R0402-4K7", 8, 2, 3);
-        strip(machine, "F-05", "C0805-10U", 8, 4, 4);
-        strip(machine, "F-06", "SOT-23-BSS138", 8, 4, 5);
-        strip(machine, "F-07", "C0603-1U", 8, 4, 6);
-        strip(machine, "F-08", "C0603-1U", 8, 4, 7);
+        // The mockup's stock and slots: F-01 well stocked, F-03 low, F-12 out, F-08 not counted,
+        // the tray last picked from yesterday. The times are from when the fixture is written,
+        // which the ruler does just before it photographs.
+        long now = System.currentTimeMillis();
+        stock(strip(machine, "F-01", "R0603-10K", 8, 4, 0), "A1", 1250, 10, 50, now - 3 * 60_000);
+        stock(strip(machine, "F-02", "R0603-1K", 8, 4, 1), "A2", 1000, 180, 50, now - 5 * 60_000);
+        stock(strip(machine, "F-03", "C0402-100N", 8, 2, 2), "A3", 212, 200, 50, now - 10_000);
+        stock(strip(machine, "F-04", "R0402-4K7", 8, 2, 3), "A4", 2000, 400, 50, now - 8 * 60_000);
+        stock(strip(machine, "F-05", "C0805-10U", 8, 4, 4), "A5", 500, 60, 50, now - 26 * 60_000);
+        stock(strip(machine, "F-06", "SOT-23-BSS138", 8, 4, 5), "A6", 300, 12, 20, now - 40 * 60_000);
+        stock(strip(machine, "F-07", "C0603-1U", 8, 4, 6), "B1", 1000, 900, 50, now - 2 * 3_600_000);
+        strip(machine, "F-08", "C0603-1U", 8, 4, 7).setSlotName("B2");
 
         // A feeder cannot be saved without a part, so the mockup's unassigned F-09 gets one.
         ReferenceAutoFeeder auto = new ReferenceAutoFeeder();
         auto.setName("F-09");
         auto.setPart(parts.get("R0402-4K7"));
         auto.setEnabled(false);
+        auto.setSlotName("B3");
         machine.addFeeder(auto);
 
-        strip(machine, "F-10", "R0603-10K", 8, 4, 9);
-        strip(machine, "F-11", "QFN-32-STM32G0", 12, 8, 10);
-        strip(machine, "F-12", "LED-0805-RED", 8, 4, 11);
+        stock(strip(machine, "F-10", "R0603-10K", 8, 4, 9), "B4", 1000, 20, 50, now - 90 * 60_000);
+        stock(strip(machine, "F-11", "QFN-32-STM32G0", 12, 8, 10), "B5", 50, 8, 5, 0);
+        stock(strip(machine, "F-12", "LED-0805-RED", 8, 4, 11), "A7", 400, 400, 20, now - 12 * 60_000);
         String[] spares = { "R0603-1K", "C0402-100N", "C0603-1U", "C0805-10U", "R0402-4K7" };
         for (int i = 13; i <= 23; i++) {
             ReferenceStripFeeder spare = strip(machine, String.format("F-%02d", i),
                     spares[i % spares.length], 8, 4, i - 1);
             spare.setEnabled(i % 3 != 0);
+            spare.setSlotName("B" + (i - 7));
         }
 
         ReferenceTrayFeeder tray = new ReferenceTrayFeeder();
@@ -222,7 +228,18 @@ public class UiFixture {
         tray.setFeedCount(3);
         tray.setLocation(new Location(MM, 40, 250, -30, 0));
         tray.setOffsets(new Location(MM, 12, 12, 0, 0));
+        tray.setSlotName("C1");
+        tray.setLastPickMillis(now - 26 * 3_600_000L);
         machine.addFeeder(tray);
+    }
+
+    private static void stock(ReferenceStripFeeder feeder, String slot, int parts, int fed, int low,
+            long lastPick) {
+        feeder.setSlotName(slot);
+        feeder.setMaxFeedCount(parts);
+        feeder.setFeedCount(fed);
+        feeder.setLowCount(low);
+        feeder.setLastPickMillis(lastPick);
     }
 
     /**
@@ -254,6 +271,7 @@ public class UiFixture {
             int pitch, int lane) throws Exception {
         ReferenceStripFeeder feeder = new ReferenceStripFeeder();
         feeder.setName(name);
+        feeder.setEnabled(true);
         feeder.setPart(parts.get(partId));
         feeder.setTapeWidth(new Length(tapeWidth, MM));
         feeder.setPartPitch(new Length(pitch, MM));

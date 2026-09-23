@@ -85,7 +85,6 @@ import org.openpnp.gui.support.PartsComboBoxModel;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.TableUtils;
 import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel;
-import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel.Status;
 import org.openpnp.gui.viewers.PlacementsHolderLocationViewerDialog;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.Board;
@@ -262,22 +261,8 @@ public class BoardPlacementsPanel extends JPanel {
             }
         });
         
-        table.addMouseListener(new MouseAdapter() {
-            public void mouseClicked(MouseEvent mouseEvent) {
-                if (mouseEvent.getClickCount() != 2) {
-                    return;
-                }
-                int row = table.rowAtPoint(new Point(mouseEvent.getX(), mouseEvent.getY()));
-                int col = table.columnAtPoint(new Point(mouseEvent.getX(), mouseEvent.getY()));
-                if (tableModel.getColumnClass(col) == Status.class) {
-                    Status status = (Status) tableModel.getValueAt(row, col);
-                    // TODO: This is some sample code for handling the user
-                    // wishing to do something with the status. Not using it
-                    // right now but leaving it here for the future.
-                    System.out.println(status);
-                }
-            }
-        });
+        table.setDefaultRenderer(PlacementsHolderPlacementsTableModel.PlacementStatus.class,
+                new JobPlacementsPanel.StatusRenderer());
         
         table.addKeyListener(new KeyAdapter() {
             @Override

@@ -21,6 +21,7 @@ package org.openpnp.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Font;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.beans.PropertyChangeEvent;
@@ -48,11 +49,13 @@ import javax.swing.JTextField;
 import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
@@ -60,7 +63,7 @@ import org.openpnp.events.FeederSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.ClassSelectionDialog;
 import org.openpnp.gui.support.ActionGroup;
-import org.openpnp.gui.support.CustomBooleanRenderer;
+import org.openpnp.gui.support.FeederDescriptions;
 import org.openpnp.gui.support.Helpers;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.shell.DockPanel;
@@ -131,9 +134,12 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         // The stylesheet's toolbar: New feeder in the accent, the movements and the feed/pick
         // pair with words on them, the scope segments, and the filter at the right end.
         DockPanel.Toolbar toolBar = new DockPanel.Toolbar();
-        JButton btnNewFeeder = toolBar.button(newFeederAction, "plus", "Dock.Action.NewFeeder", //$NON-NLS-1$ //$NON-NLS-2$
-                Ui.Variant.Primary);
-        btnNewFeeder.setIcon(Ui.iconSm("plus")); //$NON-NLS-1$
+        // New feeder opens the list of kinds, as the mockup's caret says, rather than a dialog.
+        JButton btnNewFeeder = Ui.menuButton(Translations.getString("Dock.Action.NewFeeder"), //$NON-NLS-1$
+                Ui.iconSm("plus"), Ui.Size.Sm, Ui.Variant.Primary, this::newFeederMenu); //$NON-NLS-1$
+        btnNewFeeder.setFocusable(false);
+        btnNewFeeder.setToolTipText(String.valueOf(newFeederAction.getValue(Action.SHORT_DESCRIPTION)));
+        toolBar.add(btnNewFeeder);
         toolBar.iconButton(deleteFeederAction, "trash"); //$NON-NLS-1$
         toolBar.separator();
         toolBar.button(moveCameraToPickLocation, "camera", "Dock.Action.MoveCameraHere"); //$NON-NLS-1$ //$NON-NLS-2$
@@ -189,56 +195,34 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 		org.openpnp.gui.support.TableUtils.bindKeys(table, deleteFeederAction);
 		org.openpnp.gui.components.AutoSelectTextTable.setEmptyText(table,
 		        Translations.getString("FeedersPanel.Empty")); //$NON-NLS-1$
-		table.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer() {
-			// cells are grayed if the feeder is not used by any enabled placement.
-			@Override
-			public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
-					boolean hasFocus, int row, int column) {
-				final Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row,
-						column);
-				if (!isSelected) {
-					String partId = (String) tableModel.getValueAt(tableSorter.convertRowIndexToModel(row), 2);
-					Job job = mainFrame.getJobTab().getJob();
-					boolean bFound = false;
-
-					for (BoardLocation boardLocation : job.getBoardLocations()) {
-						// Only check enabled boards
-						if (!boardLocation.isEnabled()) {
-							continue;
-						}
-
-						for (Placement placement : boardLocation.getBoard().getPlacements()) {
-							// Ignore placements that aren't placements
-							if (placement.getType() != Placement.Type.Placement) {
-								continue;
-							}
-							if (!placement.isEnabled()) {
-								continue;
-							}
-
-							if (placement.getPart() != null && placement.getPart().getId().equals(partId)) {
-								bFound = true;
-								break;
-							}
-						}
-						if (bFound) {
-							break;
-						}
-					}
-					if (!bFound) {
-                        c.setEnabled(false);
-                    } else {
-					    c.setEnabled(true);
-                    }
-				}
-				return c;
-			}
-		});
         table.setDefaultEditor(ReferenceFeeder.FeedOptions.class, new DefaultCellEditor(feedOptionsComboBox));
         table.setDefaultEditor(ReferenceFeeder.Priority.class, new DefaultCellEditor(priorityComboBox));
 
         tableSorter = new TableRowSorter<>(tableModel);
-        table.getColumnModel().moveColumn(1,  2);
+        // The filter and the sort read what the cells show: "余量不足", not the status's name.
+        tableSorter.setStringConverter(new javax.swing.table.TableStringConverter() {
+            @Override
+            public String toString(javax.swing.table.TableModel model, int row, int column) {
+                Object value = model.getValueAt(row, column);
+                if (value instanceof FeedersTableModel.Status) {
+                    return statusText(value);
+                }
+                if (column == FeedersTableModel.LAST_PICK) {
+                    return value == null ? "" : FeederDescriptions.since((Long) value, System.currentTimeMillis()); //$NON-NLS-1$
+                }
+                return value == null ? "" : value.toString(); //$NON-NLS-1$
+            }
+        });
+        installRenderers();
+        // Its own key: the columns are not the ones the widths under the old key were saved for.
+        org.openpnp.gui.support.TableUtils.installColumnWidthSavers(table,
+                java.util.prefs.Preferences.userNodeForPackage(FeedersPanel.class), "FeedersPanel.feedersTable"); //$NON-NLS-1$
+        // "3 分钟前" becomes "4 分钟前" without anything about the feeder changing.
+        new javax.swing.Timer(30_000, e -> {
+            if (table.isShowing()) {
+                table.repaint();
+            }
+        }).start();
 
         // The property sheets of the selected feeder are shown by the window's one properties
         // column now. The table and its toolbar are one tab of the dock; a second tab shows only
@@ -249,6 +233,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         page.add(toolBar, BorderLayout.NORTH);
         page.add(DockPanel.table(table), BorderLayout.CENTER);
         dock = new DockPanel();
+        dock.setMaximize(() -> mainFrame.toggleDockMaximised());
         // Both tabs show the same table, the second one narrowed: the table moves between two
         // holders as the tabs change, since a component can only be in one place.
         JPanel allHolder = new JPanel(new BorderLayout());
@@ -277,10 +262,11 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 
         singleSelectActionGroup = new ActionGroup(deleteFeederAction, feedFeederAction,
                 pickFeederAction, moveCameraToPickLocation, moveToolToPickLocation,
-                setEnabledAction, setFeedOptionsAction);
+                setEnabledAction, setFeedOptionsAction, refillAction);
         singleSelectActionGroup.setEnabled(false);
         
-        multiSelectActionGroup = new ActionGroup(deleteFeederAction, setEnabledAction, setFeedOptionsAction);
+        multiSelectActionGroup = new ActionGroup(deleteFeederAction, setEnabledAction, setFeedOptionsAction,
+                refillAction);
         multiSelectActionGroup.setEnabled(false);
         
         table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
@@ -305,10 +291,16 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 
                 if (table.getSelectedRow() != priorRowIndex) {
                     Feeder feeder = getSelection();
+                    // "料带飞达 · ReferenceStripFeeder · 槽位 B2" under the name, as the mockup has it.
                     Result shown = mainFrame.getInspector().show(FeedersPanel.this, feeder,
                             FeedersPanel.this,
                             feeder == null ? null : feeder.getName(),
-                            feeder == null ? null : feeder.getPropertySheetHolderIcon());
+                            feeder == null ? null : FeederDescriptions.subtitle(feeder),
+                            Ui.icon("feeder", 16, Ui.accent()), //$NON-NLS-1$
+                            () -> {
+                                PropertySheet[] sheets = feeder.getPropertySheets();
+                                return sheets == null ? List.of() : java.util.Arrays.asList(sheets);
+                            });
                     if (shown == Result.Busy) {
                         // A question about the feeder selected before this one is on screen, and
                         // asking it let the event queue run us again.
@@ -349,8 +341,123 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             setFeedOptionsMenu.add(new SetFeedOptionsAction(opt));
         }
         popupMenu.add(setFeedOptionsMenu);
+        popupMenu.addSeparator();
+        popupMenu.add(refillAction);
 
         table.setComponentPopupMenu(popupMenu);
+    }
+
+    /** The kinds of feeder the machine takes, by their names, for New feeder's menu. */
+    private JPopupMenu newFeederMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        for (Class<? extends Feeder> type : configuration.getMachine().getCompatibleFeederClasses()) {
+            javax.swing.JMenuItem item = new javax.swing.JMenuItem(
+                    org.openpnp.gui.support.DisplayNames.typeName(type));
+            item.setToolTipText(type.getSimpleName());
+            item.addActionListener(e -> newFeeder(null, type));
+            menu.add(item);
+        }
+        return menu;
+    }
+
+    /**
+     * The mockup's cells: the name in bold, a feeder without a part saying so in grey, the
+     * numbers in the mono face, what is left in yellow when low and in red when empty, the status
+     * as a pill and the last pick as a time ago with the time itself in the tooltip.
+     */
+    private void installRenderers() {
+        javax.swing.table.TableColumnModel columns = table.getColumnModel();
+        columns.getColumn(FeedersTableModel.NAME).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setFont(table.getFont().deriveFont(Font.BOLD));
+                return this;
+            }
+        });
+        columns.getColumn(FeedersTableModel.PART).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table,
+                        value == null ? Translations.getString("FeedersPanel.NoPart") : value, //$NON-NLS-1$
+                        isSelected, hasFocus, row, column);
+                if (!isSelected) {
+                    setForeground(value == null ? Ui.muted() : table.getForeground());
+                }
+                return this;
+            }
+        });
+        columns.getColumn(FeedersTableModel.SLOT).setCellRenderer(mono(SwingConstants.LEFT));
+        columns.getColumn(FeedersTableModel.TAPE).setCellRenderer(mono(SwingConstants.RIGHT));
+        columns.getColumn(FeedersTableModel.LEFT).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                Integer left = (Integer) value;
+                super.getTableCellRendererComponent(table,
+                        left == null ? "\u2014" : FeederDescriptions.count(left), //$NON-NLS-1$
+                        isSelected, hasFocus, row, column);
+                setHorizontalAlignment(SwingConstants.RIGHT);
+                setFont(Ui.mono(table.getFont().getSize2D(), Font.PLAIN));
+                if (!isSelected) {
+                    Feeder feeder = tableModel.getRowObjectAt(table.convertRowIndexToModel(row));
+                    setForeground(left == null ? Ui.muted()
+                            : feeder.isEmpty() ? Ui.errText() : feeder.isLow() ? Ui.warnText() : table.getForeground());
+                }
+                return this;
+            }
+        });
+        columns.getColumn(FeedersTableModel.STATUS).setCellRenderer(
+                new org.openpnp.gui.support.StatusPillRenderer(FeedersPanel::toneOf, FeedersPanel::statusText));
+        columns.getColumn(FeedersTableModel.LAST_PICK).setCellRenderer(new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                long millis = value == null ? 0 : (Long) value;
+                super.getTableCellRendererComponent(table,
+                        FeederDescriptions.since(millis, System.currentTimeMillis()), isSelected, hasFocus, row,
+                        column);
+                if (!isSelected) {
+                    setForeground(Ui.muted());
+                }
+                setToolTipText(millis > 0 ? FeederDescriptions.when(millis) : null);
+                return this;
+            }
+        });
+    }
+
+    private static DefaultTableCellRenderer mono(int alignment) {
+        return new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setHorizontalAlignment(alignment);
+                setFont(Ui.mono(table.getFont().getSize2D(), Font.PLAIN));
+                return this;
+            }
+        };
+    }
+
+    static org.openpnp.gui.support.StatusPillRenderer.Tone toneOf(Object value) {
+        switch ((FeedersTableModel.Status) value) {
+            case Ready:
+                return org.openpnp.gui.support.StatusPillRenderer.Tone.Ok;
+            case Low:
+            case NoPart:
+                return org.openpnp.gui.support.StatusPillRenderer.Tone.Warning;
+            case Empty:
+            case Fault:
+                return org.openpnp.gui.support.StatusPillRenderer.Tone.Error;
+            default:
+                return org.openpnp.gui.support.StatusPillRenderer.Tone.Muted;
+        }
+    }
+
+    static String statusText(Object value) {
+        return Translations.getString("FeedersPanel.Status." + ((FeedersTableModel.Status) value).name()); //$NON-NLS-1$
     }
 
     @Subscribe
@@ -464,9 +571,12 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         countTabs();
     }
 
-    /** A feeder that is switched off, or has no part, is one the operator should look at. */
+    /**
+     * A feeder that is switched off, has no part, is running low or out, or failed its last pick
+     * is one the operator should look at.
+     */
     private boolean needsAttention(Feeder feeder) {
-        return !feeder.isEnabled() || feeder.getPart() == null;
+        return FeedersTableModel.statusOf(feeder) != FeedersTableModel.Status.Ready;
     }
 
     private boolean isUsedByJob(Part part) {
@@ -517,6 +627,11 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     public void wizardCancelled(Wizard wizard) {}
 
     private void newFeeder(Part part) {
+        newFeeder(part, null);
+    }
+
+    /** A new feeder of the kind given, or of the kind chosen in the dialog when none is. */
+    private void newFeeder(Part part, Class<? extends Feeder> kind) {
         // Adding a feeder moves the selection, so settle any unapplied edits first.
         if (!mainFrame.getInspector().getPresenter().settleUnappliedEdits()) {
             return;
@@ -529,23 +644,26 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             return;
         }
 
-        String title;
-        if (part == null) {
-            title = Translations.getString("FeedersPanel.SelectFeederImplementationDialog.Select.title"); //$NON-NLS-1$
-        }
-        else {
-            title = Translations.getString("FeedersPanel.SelectFeederImplementationDialog.SelectFor.title" //$NON-NLS-1$
-            ) + " " + part.getId() + "..."; //$NON-NLS-1$ //$NON-NLS-2$
-        }
-        ClassSelectionDialog<Feeder> dialog =
-                new ClassSelectionDialog<>(JOptionPane.getFrameForComponent(FeedersPanel.this),
-                        title, Translations.getString(
-                                "FeedersPanel.SelectFeederImplementationDialog.Description"), //$NON-NLS-1$
-                        configuration.getMachine().getCompatibleFeederClasses());
-        dialog.setVisible(true);
-        Class<? extends Feeder> feederClass = dialog.getSelectedClass();
+        Class<? extends Feeder> feederClass = kind;
         if (feederClass == null) {
-            return;
+            String title;
+            if (part == null) {
+                title = Translations.getString("FeedersPanel.SelectFeederImplementationDialog.Select.title"); //$NON-NLS-1$
+            }
+            else {
+                title = Translations.getString("FeedersPanel.SelectFeederImplementationDialog.SelectFor.title" //$NON-NLS-1$
+                ) + " " + part.getId() + "..."; //$NON-NLS-1$ //$NON-NLS-2$
+            }
+            ClassSelectionDialog<Feeder> dialog =
+                    new ClassSelectionDialog<>(JOptionPane.getFrameForComponent(FeedersPanel.this),
+                            title, Translations.getString(
+                                    "FeedersPanel.SelectFeederImplementationDialog.Description"), //$NON-NLS-1$
+                            configuration.getMachine().getCompatibleFeederClasses());
+            dialog.setVisible(true);
+            feederClass = dialog.getSelectedClass();
+            if (feederClass == null) {
+                return;
+            }
         }
         try {
             
@@ -730,6 +848,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             }
         }
         // The part is now on the nozzle.
+        feeder.recordPick();
         MovableUtils.fireTargetedUserAction(nozzle);
         if (MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getFeedersTab() 
                 && configuration.getTablesLinked() == TablesLinked.Linked) {
@@ -856,6 +975,26 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         }
     };
     
+    /**
+     * The selected feeders have been refilled: a strip or a tray starts again from its first part,
+     * any other from the count it was told it holds.
+     */
+    public final Action refillAction = new AbstractAction() {
+        {
+            putValue(NAME, Translations.getString("FeedersPanel.Action.Refill")); //$NON-NLS-1$
+            putValue(SHORT_DESCRIPTION, Translations.getString("FeedersPanel.Action.Refill.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent arg0) {
+            for (Feeder f : getSelections()) {
+                f.refill(null);
+            }
+            configuration.setDirty(true);
+            table.repaint();
+        }
+    };
+
     public final Action setEnabledAction = new AbstractAction() {
         {
             putValue(NAME, Translations.getString("FeedersPanel.Action.SetEnabled")); //$NON-NLS-1$

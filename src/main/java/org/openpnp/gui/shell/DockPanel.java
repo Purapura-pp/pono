@@ -197,7 +197,8 @@ public class DockPanel extends RoundedPanel {
         private void paintCount() {
             boolean on = selected == this;
             button.setFont(Ui.weighted(Tokens.FS_BODY, on ? Tokens.FW_SECTION : Tokens.FW_BUTTON));
-            count.setForeground(on ? Ui.accent() : Ui.muted());
+            // text-2, not muted: muted on surface-3 is 3:1, too faint for a number that matters.
+            count.setForeground(on ? Ui.accent() : Ui.text2());
             count.putClientProperty("fill", on ? Ui.accentSoft() : Ui.surface3()); //$NON-NLS-1$
             count.repaint();
         }
@@ -322,12 +323,95 @@ public class DockPanel extends RoundedPanel {
      * hairline under the row, and the filter box at the right.
      */
     public static final class Toolbar extends JPanel {
+        /** The buttons with words on them, in the order they were added, and their words. */
+        private final java.util.Map<JButton, String> words = new java.util.LinkedHashMap<>();
+        private boolean fitting;
+
         public Toolbar() {
             setOpaque(false);
             setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
             setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
                     new EmptyBorder(8, 10, 8, 10)));
+        }
+
+        /**
+         * On a row too narrow for its buttons' words, the buttons at its end show their icons
+         * alone, the words on hover, the last group first. At 1366 pixels the feeders toolbar
+         * pushed its filter box off its end.
+         */
+        @Override
+        public void doLayout() {
+            fitWords();
+            super.doLayout();
+        }
+
+        private void fitWords() {
+            if (words.isEmpty() || getWidth() <= 0) {
+                return;
+            }
+            java.awt.Insets insets = getInsets();
+            int available = getWidth() - insets.left - insets.right;
+            // What the row needs with every word shown, whatever is shown now.
+            int need = 0;
+            for (Component c : getComponents()) {
+                if (c.isVisible()) {
+                    need += c.getMinimumSize().width;
+                }
+            }
+            java.util.Map<JButton, Integer> wordWidth = new java.util.HashMap<>();
+            for (java.util.Map.Entry<JButton, String> entry : words.entrySet()) {
+                JButton button = entry.getKey();
+                int width = button.getFontMetrics(button.getFont()).stringWidth(entry.getValue())
+                        + button.getIconTextGap();
+                wordWidth.put(button, width);
+                if (button.isVisible() && (button.getText() == null || button.getText().isEmpty())) {
+                    need += width;
+                }
+            }
+            java.util.List<JButton> order = new java.util.ArrayList<>(words.keySet());
+            java.util.Set<JButton> iconsOnly = new java.util.HashSet<>();
+            for (int i = order.size() - 1; i >= 0 && need > available; i--) {
+                if (order.get(i).isVisible()) {
+                    iconsOnly.add(order.get(i));
+                    need -= wordWidth.get(order.get(i));
+                }
+            }
+            fitting = true;
+            boolean changed = false;
+            try {
+                for (JButton button : order) {
+                    String text = iconsOnly.contains(button) ? null : words.get(button);
+                    if (!java.util.Objects.equals(button.getText(), text)) {
+                        button.setText(text);
+                        changed = true;
+                    }
+                }
+            }
+            finally {
+                fitting = false;
+            }
+            if (changed) {
+                // The layout keeps the sizes it read until it is told they changed.
+                ((BoxLayout) getLayout()).invalidateLayout(this);
+            }
+        }
+
+        /** Keeps the button's words, to be taken off and put back as the row's width asks. */
+        private void worded(JButton button) {
+            if (button.getText() == null || button.getText().isEmpty() || button.getIcon() == null) {
+                return;
+            }
+            words.put(button, button.getText());
+            if (button.getClientProperty(JComponent.TOOL_TIP_TEXT_KEY) == null) {
+                button.setToolTipText(button.getText());
+            }
+            button.addPropertyChangeListener("text", e -> { //$NON-NLS-1$
+                // The action renamed it, as Start becomes Resume: those are the words now.
+                if (!fitting && e.getNewValue() != null && !String.valueOf(e.getNewValue()).isEmpty()) {
+                    words.put(button, String.valueOf(e.getNewValue()));
+                }
+            });
         }
 
         private void gap() {
@@ -367,6 +451,7 @@ public class DockPanel extends RoundedPanel {
             }
             button.setPreferredSize(null);
             add(button);
+            worded(button);
             return button;
         }
 
@@ -387,6 +472,7 @@ public class DockPanel extends RoundedPanel {
             button.setToolTipText(action.getValue(Action.SHORT_DESCRIPTION) != null
                     ? String.valueOf(action.getValue(Action.SHORT_DESCRIPTION)) : sentence);
             button.setPreferredSize(null);
+            words.put(button, button.getText());
             return button;
         }
 
@@ -399,6 +485,30 @@ public class DockPanel extends RoundedPanel {
             JButton button = Ui.iconButton(action, Ui.Size.Sm, Ui.Variant.Ghost);
             button.setFocusable(false);
             button.setIcon(Ui.iconSm(icon));
+            add(button);
+            return button;
+        }
+
+        /**
+         * The "..." at the end of a group: the actions that are used less, each with its name and
+         * its icon, greyed when it cannot be used, where they used to be a row of icons of their
+         * own that the toolbar did not have room to name.
+         */
+        public JButton more(Action... actions) {
+            JButton button = Ui.menuButton(null, Ui.iconSm("more"), Ui.Size.Sm, Ui.Variant.Ghost, () -> { //$NON-NLS-1$
+                javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+                for (Action action : actions) {
+                    if (action == null) {
+                        menu.addSeparator();
+                    }
+                    else {
+                        menu.add(new javax.swing.JMenuItem(action));
+                    }
+                }
+                return menu;
+            });
+            button.setFocusable(false);
+            button.setToolTipText(Translations.getString("Dock.More")); //$NON-NLS-1$
             add(button);
             return button;
         }

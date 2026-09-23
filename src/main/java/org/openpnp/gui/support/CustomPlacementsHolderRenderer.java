@@ -19,95 +19,45 @@
 
 package org.openpnp.gui.support;
 
-import javax.swing.*;
-import javax.swing.border.Border;
-import javax.swing.border.EmptyBorder;
-import javax.swing.plaf.UIResource;
-import javax.swing.table.TableCellRenderer;
+import java.awt.Component;
 
+import javax.swing.JTable;
+import javax.swing.border.EmptyBorder;
+import javax.swing.table.DefaultTableCellRenderer;
+
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.tablemodel.PlacementsHolderLocationsTableModel;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.PlacementsHolderLocation;
-import java.awt.*;
-import java.util.Arrays;
 
 /**
- * A renderer for PlacementsHolderLocation Table cells that displays an icon showing the type of 
- * PlacementsHolderLocation the row of the table contains
+ * A board or panel instance's id, indented by how deep in the panels it sits, after the icon of
+ * what it is. The icons were the old coloured ones, and the rows filled their own alternate colour
+ * where the tables have none; this is drawn in the table's own colours.
  */
 @SuppressWarnings("serial")
-public class CustomPlacementsHolderRenderer extends JLabel implements TableCellRenderer, UIResource
-{
-    private static final Border noFocusBorder = new EmptyBorder(1, 1, 1, 1);
-    private final JLabel left;
-    private final JLabel right;
-    
-    public CustomPlacementsHolderRenderer() {
-        super();
-        setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
-        setOpaque(true);
-        left = new JLabel();
-        left.setHorizontalTextPosition(LEFT);
-        left.setHorizontalAlignment(LEFT);
-        right = new JLabel();
-        right.setHorizontalTextPosition(RIGHT);
-        right.setHorizontalAlignment(LEFT);
-        this.add(left);
-        this.add(right);
-        setHorizontalAlignment(LEFT);
-    }
+public class CustomPlacementsHolderRenderer extends DefaultTableCellRenderer {
+    /** How far a nesting level indents. */
+    private static final int INDENT = 14;
 
-    public Component getTableCellRendererComponent(JTable table, Object value,
-                                                   boolean isSelected, boolean hasFocus, int row, int column) {
-        if (table == null) {
-            return this;
-        }
-        
-        Color alternateRowColor = UIManager.getColor("Table.alternateRowColor");
-        if (isSelected) {
-            setForeground(table.getSelectionForeground());
-            setBackground(table.getSelectionBackground());
-            left.setForeground(table.getSelectionForeground());
-            left.setBackground(table.getSelectionBackground());
-            right.setForeground(table.getSelectionForeground());
-            right.setBackground(table.getSelectionBackground());
-        }
-        else {
-            setForeground(table.getForeground());
-            setBackground(row%2==0 ? table.getBackground() : alternateRowColor);
-            left.setForeground(table.getForeground());
-            left.setBackground(row%2==0 ? table.getBackground() : alternateRowColor);
-            right.setForeground(table.getForeground());
-            right.setBackground(row%2==0 ? table.getBackground() : alternateRowColor);
-        }
-        
-        String uniqueId = value == null ? "" : (String) value;
-        String id = uniqueId.substring(uniqueId.lastIndexOf(PlacementsHolderLocation.ID_DELIMITTER)+1);
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+            boolean hasFocus, int row, int column) {
+        String uniqueId = value == null ? "" : value.toString(); //$NON-NLS-1$
+        String id = uniqueId.substring(uniqueId.lastIndexOf(PlacementsHolderLocation.ID_DELIMITTER) + 1);
+        super.getTableCellRendererComponent(table, id, isSelected, hasFocus, row, column);
         int depth = 0;
-        int idx = -1;
-        while ((idx = uniqueId.indexOf(PlacementsHolderLocation.ID_DELIMITTER, idx+1)) >= 0) {
-            depth += 4;
+        int at = -1;
+        while ((at = uniqueId.indexOf(PlacementsHolderLocation.ID_DELIMITTER, at + 1)) >= 0) {
+            depth++;
         }
-        
-        char[] charArray = new char[depth];
-        Arrays.fill(charArray, ' ');
-        left.setText(new String(charArray));
-        right.setText(id);
-            
-        if (((PlacementsHolderLocationsTableModel) table.getModel()).
-                getPlacementsHolderLocation(table.convertRowIndexToModel(row)) instanceof BoardLocation) {
-            right.setIcon(Icons.board);
-        }
-        else {
-            right.setIcon(Icons.panel);
-        }
-
-        if (hasFocus) {
-            setBorder(UIManager.getBorder("Table.focusCellHighlightBorder"));
-        } else {
-            setBorder(noFocusBorder);
-        }
-
+        setBorder(new EmptyBorder(0, 8 + depth * INDENT, 0, 8));
+        boolean board = table.getModel() instanceof PlacementsHolderLocationsTableModel
+                && ((PlacementsHolderLocationsTableModel) table.getModel())
+                        .getPlacementsHolderLocation(table.convertRowIndexToModel(row)) instanceof BoardLocation;
+        setIcon(Ui.icon(board ? "board" : "panel", 14, isSelected ? getForeground() : Ui.text2())); //$NON-NLS-1$ //$NON-NLS-2$
+        setIconTextGap(6);
+        setFont(table.getFont().deriveFont(java.awt.Font.BOLD));
         return this;
     }
 }

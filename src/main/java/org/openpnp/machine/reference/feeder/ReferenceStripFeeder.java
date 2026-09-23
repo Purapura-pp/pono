@@ -29,7 +29,7 @@ import org.apache.commons.io.IOUtils;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceStripFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.StripFeederForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -650,9 +650,11 @@ public class ReferenceStripFeeder extends ReferenceFeeder {
     }
 
     public void setFeedCount(int feedCount) {
+        Integer oldLeft = getPartsLeft();
         int oldValue = this.feedCount;
         this.feedCount = feedCount;
         firePropertyChange("feedCount", oldValue, feedCount);
+        firePartsLeft(oldLeft);
 
         if (feedCount==0) {
             // Feeder has been reset, so restart vision from the configured starting points
@@ -665,8 +667,23 @@ public class ReferenceStripFeeder extends ReferenceFeeder {
 	}
 
 	public void setMaxFeedCount(int count) {
+        Integer oldLeft = getPartsLeft();
+        int oldValue = maxFeedCount;
 		maxFeedCount = count;
+        firePropertyChange("maxFeedCount", oldValue, count);
+        firePartsLeft(oldLeft);
 	}
+
+    @Override
+    public Integer getPartsLeft() {
+        return maxFeedCount > 0 ? Integer.valueOf(Math.max(0, maxFeedCount - feedCount)) : super.getPartsLeft();
+    }
+
+    @Override
+    public void refill(Integer partsLoaded) {
+        setFeedCount(0);
+        super.refill(partsLoaded);
+    }
 
     public Length getReferenceHoleToPartLinear() {
         return referenceHoleToPartLinear;
@@ -716,7 +733,19 @@ public class ReferenceStripFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceStripFeederConfigurationWizard(this);
+        return StripFeederForm.build(this);
+    }
+
+    /** One sheet: the form has what the other feeders' stock sheet has, in its feeding section. */
+    @Override
+    public PropertySheet[] getPropertySheets() {
+        return new PropertySheet[] {new org.openpnp.gui.support.PropertySheetWizardAdapter(getConfigurationWizard(),
+                org.openpnp.Translations.getString("AbstractFeeder.ConfigurationWizard.title"))}; //$NON-NLS-1$
+    }
+
+    @Override
+    public boolean isCountedFromGeometry() {
+        return maxFeedCount > 0;
     }
 
     @Override

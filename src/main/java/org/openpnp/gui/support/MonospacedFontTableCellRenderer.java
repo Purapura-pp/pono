@@ -26,6 +26,10 @@ import java.awt.*;
 /**
  * Renders a table cell using a mono-spaced font. Useful for displaying numerical values with their
  * decimal points aligned in a column
+ * <p>
+ * The stylesheet's mono face at the table's size and weight, and the value without the spaces
+ * the aligned formats pad it with: the columns are right aligned, and bold Courier with the
+ * padding made each coordinate column half as wide again as its numbers.
  */
 @SuppressWarnings("serial")
 public class MonospacedFontTableCellRenderer extends DefaultTableCellRenderer
@@ -34,7 +38,8 @@ public class MonospacedFontTableCellRenderer extends DefaultTableCellRenderer
     @Override
     public Component getTableCellRendererComponent(JTable table, Object value,
                                                    boolean isSelected, boolean hasFocus, int row, int column) {
-        super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+        super.getTableCellRendererComponent(table, value == null ? null : value.toString().trim(), isSelected,
+                hasFocus, row, column);
         Color alternateRowColor = UIManager.getColor("Table.alternateRowColor");
         if (isSelected) {
             setForeground(table.getSelectionForeground());
@@ -44,7 +49,7 @@ public class MonospacedFontTableCellRenderer extends DefaultTableCellRenderer
             setForeground(table.getForeground());
             setBackground(row%2==0 ? table.getBackground() : alternateRowColor);
         }
-        setFont(new Font( "Monospaced", Font.BOLD, super.getFont().getSize()));
+        setFont(org.openpnp.gui.shell.Ui.mono(table.getFont().getSize2D(), Font.PLAIN));
         return this;
     }
 }

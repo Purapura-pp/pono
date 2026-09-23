@@ -157,10 +157,28 @@ public class ReferenceTrayFeeder extends ReferenceFeeder {
     }
 
     public void setFeedCount(int feedCount) {
+        Integer oldLeft = getPartsLeft();
         int oldValue = this.feedCount;
         this.feedCount = feedCount;
         firePropertyChange("feedCount", oldValue, feedCount);
+        firePartsLeft(oldLeft);
         Logger.debug("{}.setFeedCount(): feedCount {}, pickLocation {}", getName(), feedCount, getPickLocation());
+    }
+
+    @Override
+    public Integer getPartsLeft() {
+        return Math.max(0, getEffectiveTrayCountX() * getEffectiveTrayCountY() - feedCount);
+    }
+
+    @Override
+    public boolean isCountedFromGeometry() {
+        return true;
+    }
+
+    @Override
+    public void refill(Integer partsLoaded) {
+        setFeedCount(0);
+        super.refill(partsLoaded);
     }
 
     @Override

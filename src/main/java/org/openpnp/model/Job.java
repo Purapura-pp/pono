@@ -87,6 +87,13 @@ public class Job extends AbstractModelObject implements PropertyChangeListener {
 
     @Element(required = false)
     private ErrorHandling errorHandling = ErrorHandling.Alert;
+
+    /** What the current run is doing, for the job page and the status bar; never saved. */
+    private final transient JobRun run = new JobRun();
+
+    public JobRun getRun() {
+        return run;
+    }
     
     public Job() {
         rootPanelLocation = new PanelLocation(rootPanel);

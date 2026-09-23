@@ -87,7 +87,8 @@ import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.StatusPillRenderer;
 import org.openpnp.gui.support.TableUtils;
 import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel;
-import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel.Status;
+import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel.PlacementStatus;
+import org.openpnp.model.JobRun;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
@@ -193,9 +194,17 @@ public class JobPlacementsPanel extends JPanel {
         table = new AutoSelectTextTable(tableModel) {
             @Override
             public String getToolTipText(MouseEvent evt) {
-                int column = convertColumnIndexToModel(columnAtPoint(evt.getPoint()));
+                int viewColumn = columnAtPoint(evt.getPoint());
+                int viewRow = rowAtPoint(evt.getPoint());
+                int column = viewColumn < 0 ? -1 : convertColumnIndexToModel(viewColumn);
                 if(column==11) { return Translations.getString("BoardsPanel.BoardPlacements.Placements.Rank.toolTip"); } //$NON-NLS-1$
-                return null;
+                if (column == 9 && viewRow >= 0 && getValueAt(viewRow, viewColumn) instanceof PlacementStatus) {
+                    // The pill has room for the start of an error; the whole of it is here.
+                    PlacementStatus status = (PlacementStatus) getValueAt(viewRow, viewColumn);
+                    return status.getDetail() != null ? status.getDetail() : status.getText();
+                }
+                // What the table shows cut short, in full, as every other table does.
+                return super.getToolTipText(evt);
             }
         };
         // Enter edits the cell, Delete removes the selected placements, which asks first.
@@ -210,11 +219,33 @@ public class JobPlacementsPanel extends JPanel {
         table.setDefaultEditor(Type.class, new DefaultCellEditor(typesComboBox));
         table.setDefaultEditor(ErrorHandling.class, new DefaultCellEditor(errorHandlingComboBox));
         table.setDefaultRenderer(Part.class, new IdentifiableTableCellRenderer<Part>());
-        table.setDefaultRenderer(PlacementsHolderPlacementsTableModel.Status.class, new StatusRenderer());
+        table.setDefaultRenderer(PlacementStatus.class, new StatusRenderer());
         table.setDefaultRenderer(Placement.Type.class, new TypeRenderer());
         table.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer());
         table.setDefaultRenderer(LengthCellValue.class, new MonospacedFontTableCellRenderer());
         table.setDefaultRenderer(RotationCellValue.class, new MonospacedFontTableCellRenderer());
+        // The mockup's placements: the reference designator in bold, what a row is, and the
+        // comments in grey, what it says about itself.
+        table.setDefaultRenderer(org.openpnp.gui.support.PartCellValue.class, new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setFont(table.getFont().deriveFont(java.awt.Font.BOLD));
+                return this;
+            }
+        });
+        table.setDefaultRenderer(String.class, new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                if (!isSelected) {
+                    setForeground(org.openpnp.gui.shell.Ui.text2());
+                }
+                return this;
+            }
+        });
         table.setAutoResizeMode(JTable.AUTO_RESIZE_NEXT_COLUMN);
         
         TableUtils.setColumnAlignment(tableModel, table);
@@ -272,24 +303,12 @@ public class JobPlacementsPanel extends JPanel {
         });
         table.addMouseListener(new MouseAdapter() {
             public void mouseClicked(MouseEvent mouseEvent) {
-                int row = table.rowAtPoint(new Point(mouseEvent.getX(), mouseEvent.getY()));
                 int col = table.columnAtPoint(new Point(mouseEvent.getX(), mouseEvent.getY()));
-
-                // if enabled column is clicked, refresh the row to update status immediately
-                if (col == 0) {
+                // If the enabled column is clicked, refresh the row to update the status at once.
+                // The model's column: the view's moves when columns are hidden or reordered.
+                if (col >= 0 && table.convertColumnIndexToModel(col) == 0) {
                     refreshSelectedRow();
                     updateActivePlacements();
-                }
-
-                if (mouseEvent.getClickCount() != 2) {
-                    return;
-                }
-                if (tableModel.getColumnClass(col) == Status.class) {
-                    Status status = (Status) tableModel.getValueAt(row, col);
-                    // TODO: This is some sample code for handling the user
-                    // wishing to do something with the status. Not using it
-                    // right now but leaving it here for the future.
-                    System.out.println(status);
                 }
             }
         });
@@ -351,15 +370,16 @@ public class JobPlacementsPanel extends JPanel {
         toolbar.button(newAction, "plus", "Dock.Action.New"); //$NON-NLS-1$ //$NON-NLS-2$
         toolbar.iconButton(removeAction, "trash"); //$NON-NLS-1$
         toolbar.separator();
+        // The mockup's toolbar: the three moves that are used on every placement, named; the
+        // next placement, the nozzle's capture and the feeder go behind "...".
         toolbar.button(moveCameraToPlacementLocation, "camera", "Dock.Action.MoveCamera"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolbar.iconButton(moveCameraToPlacementLocationNext, "chevright"); //$NON-NLS-1$
         toolbar.button(captureCameraPlacementLocation, "target", "Dock.Action.CaptureCamera"); //$NON-NLS-1$ //$NON-NLS-2$
         toolbar.button(moveToolToPlacementLocation, "nozzle", "Dock.Action.MoveTool"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolbar.iconButton(captureToolPlacementLocation, "pin"); //$NON-NLS-1$
         toolbar.separator();
         toolbar.button(new SetPlacedAction(true), "check", "Dock.Action.SetPlaced"); //$NON-NLS-1$ //$NON-NLS-2$
         toolbar.button(new SetPlacedAction(false), "refresh", "Dock.Action.Reset"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolbar.iconButton(editPlacementFeederAction, "feeder"); //$NON-NLS-1$
+        toolbar.more(moveCameraToPlacementLocationNext, captureToolPlacementLocation, null,
+                editPlacementFeederAction);
         toolbar.glue();
         searchTextField = toolbar.filter(
                 Translations.getString("JobPlacementsPanel.Filter.Placeholder")); //$NON-NLS-1$
@@ -515,7 +535,7 @@ public class JobPlacementsPanel extends JPanel {
      * sections rather than the table's one-cell-at-a-time editing. The job page owns the request,
      * since this panel is a tab inside it.
      */
-    private void inspectSelection() {
+    void inspectSelection() {
         MainFrame mainFrame = MainFrame.get();
         if (mainFrame == null || mainFrame.getInspector() == null) {
             return;
@@ -526,11 +546,14 @@ public class JobPlacementsPanel extends JPanel {
             mainFrame.getInspector().show(jobPanel, null);
             return;
         }
+        boolean editable = editDefinition;
         Result shown = mainFrame.getInspector().show(jobPanel, placement, inspectorContainer,
                 placement.getId(), PlacementInspector.subtitle(location),
                 org.openpnp.gui.shell.Ui.icon("parts", 16, org.openpnp.gui.shell.Ui.accent()), //$NON-NLS-1$
-                () -> java.util.List.of(new PropertySheetWizardAdapter(
-                        new PlacementInspector(configuration, this, location, placement))));
+                () -> {
+                    inspected = PlacementInspector.build(configuration, this, location, placement, editable);
+                    return java.util.List.of(new PropertySheetWizardAdapter(inspected.getWizard()));
+                });
         if (shown == Result.Cancelled) {
             // The user kept unapplied edits on the previous placement: put the selection back.
             javax.swing.SwingUtilities.invokeLater(() -> {
@@ -539,6 +562,16 @@ public class JobPlacementsPanel extends JPanel {
                     Helpers.selectObjectTableRow(table, previous);
                 }
             });
+        }
+    }
+
+    /** The form of the placement last put in the properties column. */
+    private PlacementInspector.Built inspected;
+
+    /** What the run did with the placement in the properties column, brought up to date. */
+    public void refreshInspectedRun() {
+        if (inspected != null) {
+            inspected.refreshRun();
         }
     }
 
@@ -1009,40 +1042,45 @@ public class JobPlacementsPanel extends JPanel {
         }
     }
 
+    /** The status column's pills: the run's state in its colour, the readiness where there is none. */
     static class StatusRenderer extends StatusPillRenderer {
         StatusRenderer() {
             super(StatusRenderer::toneOf, StatusRenderer::textOf);
         }
 
-        private static Tone toneOf(Object value) {
-            switch ((Status) value) {
+        static Tone toneOf(Object value) {
+            PlacementStatus status = (PlacementStatus) value;
+            if (status.isFiducial()) {
+                return Tone.Muted;
+            }
+            JobRun.State state = status.getState();
+            if (state != null) {
+                switch (state) {
+                    case Placed:
+                        return Tone.Ok;
+                    case Placing:
+                        return Tone.Info;
+                    case WaitingForFeeder:
+                        return Tone.Warning;
+                    case Error:
+                        return Tone.Error;
+                    default:
+                        return Tone.Muted;
+                }
+            }
+            switch (status.getReadiness()) {
                 case Ready:
-                    return Tone.Ok;
-                case ZeroPartHeight:
-                    return Tone.Warning;
                 case Disabled:
                     return Tone.Muted;
+                case ZeroPartHeight:
+                    return Tone.Warning;
                 default:
                     return Tone.Error;
             }
         }
 
         private static String textOf(Object value) {
-            Status status = (Status) value;
-            switch (status) {
-                case Ready:
-                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusReady"); //$NON-NLS-1$
-                case MissingFeeder:
-                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingFeeder"); //$NON-NLS-1$
-                case ZeroPartHeight:
-                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusPartHeight"); //$NON-NLS-1$
-                case MissingPart:
-                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusMissingPart"); //$NON-NLS-1$
-                case Disabled:
-                    return Translations.getString("JobPlacementsPanel.StatusRenderer.StatusDisabled"); //$NON-NLS-1$
-                default:
-                    return status.toString();
-            }
+            return ((PlacementStatus) value).getText();
         }
     }
 }

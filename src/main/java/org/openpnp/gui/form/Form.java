@@ -79,7 +79,14 @@ public final class Form {
         int width;
         boolean movesMachine;
         boolean withRotation;
+        boolean planar;
+        boolean capture;
         boolean locationButtons;
+        List<? extends Number> presets;
+        String probeLocation;
+        String buttonLabel;
+        String buttonIcon;
+        java.util.function.Consumer<FormWizard> button;
         String icon;
         Runnable action;
         Runnable reset;
@@ -134,6 +141,88 @@ public final class Form {
         }
 
         org.openpnp.model.DisplayPreferences preferences;
+        boolean modifiesConfiguration = true;
+        java.util.function.Consumer<FormWizard> onChange;
+
+        /**
+         * What the form edits belongs to the job, not to the machine's configuration: applying it
+         * does not mark the configuration unsaved. The job has its own unsaved mark.
+         */
+        public Builder ownedByJob() {
+            this.modifiesConfiguration = false;
+            return this;
+        }
+
+        /**
+         * Called whenever a value on screen changes and when the form loads, with the form, whose
+         * {@link FormWizard#value(String)} is what the field shows: for content that follows a
+         * choice before it is applied, as a part's package does.
+         */
+        public Builder onChange(java.util.function.Consumer<FormWizard> onChange) {
+            this.onChange = onChange;
+            return this;
+        }
+
+        /**
+         * The last location is a placement's: X and Y, and the angle with the capture of the
+         * camera's and the nozzle's position and the move of the camera there beside it; no Z.
+         */
+        public Builder planar() {
+            if (requireLast().kind != Kind.Location) {
+                throw new IllegalStateException("planar belongs to a location"); //$NON-NLS-1$
+            }
+            last.planar = true;
+            return this;
+        }
+
+        /**
+         * The last location is a point to take from the camera: X and Y, with one button that
+         * puts the camera's position in them. Its Z and its angle are left as they are.
+         */
+        public Builder capture() {
+            if (requireLast().kind != Kind.Location) {
+                throw new IllegalStateException("capture belongs to a location"); //$NON-NLS-1$
+            }
+            last.capture = true;
+            return this;
+        }
+
+        /**
+         * Values beside the last number that one click puts in it, a tape's standard widths say:
+         * in millimetres for a length. The one the field holds is marked.
+         */
+        public Builder presets(List<? extends Number> values) {
+            Kind kind = requireLast().kind;
+            if (kind != Kind.Length && kind != Kind.Integer && kind != Kind.Decimal) {
+                throw new IllegalStateException("presets belong to a number"); //$NON-NLS-1$
+            }
+            last.presets = values;
+            return this;
+        }
+
+        /**
+         * The last length is the height of the location named: the button beside it probes the
+         * height there with a contact probe nozzle, and takes the selected nozzle's height
+         * with any other.
+         */
+        public Builder probe(String locationProperty) {
+            if (requireLast().kind != Kind.Length) {
+                throw new IllegalStateException("probe belongs to a length"); //$NON-NLS-1$
+            }
+            last.probeLocation = locationProperty;
+            return this;
+        }
+
+        /**
+         * A button beside the last field, given the form: to work a value out and put it on
+         * screen with {@link FormWizard#setValue(String, String)}, for Apply to write.
+         */
+        public Builder button(String label, String icon, java.util.function.Consumer<FormWizard> action) {
+            requireLast().buttonLabel = resolve(label);
+            last.buttonIcon = icon;
+            last.button = action;
+            return this;
+        }
 
         /** The form's name, shown where the properties column needs one. */
         public Builder named(String name) {

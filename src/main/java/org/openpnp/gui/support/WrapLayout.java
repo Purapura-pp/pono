@@ -76,6 +76,23 @@ public class WrapLayout extends FlowLayout {
     }
 
     /**
+     * Lays the rows out, and has the parent ask again when the rows now take another height:
+     * the preferred size it was given was worked out before the container had its width, so a
+     * second row was cut off until something else happened to lay the window out again.
+     */
+    @Override
+    public void layoutContainer(Container target) {
+        Dimension size = preferredLayoutSize(target);
+        super.layoutContainer(target);
+        if (!size.equals(preferredLayoutSize)) {
+            preferredLayoutSize = size;
+            if (target instanceof javax.swing.JComponent) {
+                SwingUtilities.invokeLater(((javax.swing.JComponent) target)::revalidate);
+            }
+        }
+    }
+
+    /**
      * Returns the minimum or preferred dimension needed to layout the target container.
      *
      * @param target target to get layout size for
