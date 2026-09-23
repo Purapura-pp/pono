@@ -1044,6 +1044,8 @@ public class UiRuler {
             data(data, panel.getFile() == null || panel.getFile().getParentFile() == null ? null
                     : panel.getFile().getParentFile().getName());
         }
+        // The configuration folder, which the settings page shows where it is.
+        data(data, config.getAbsolutePath());
         File[] jobs = new File(config, "jobs").listFiles();
         for (File job : jobs == null ? new File[0] : jobs) {
             data(data, job.getName());
