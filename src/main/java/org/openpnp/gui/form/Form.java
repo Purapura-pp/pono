@@ -66,7 +66,7 @@ public final class Form {
     /** What a field edits, and so which control it gets and how its text is converted. */
     enum Kind {
         Text, TextArea, Integer, Decimal, Length, Angle, Location, Choice, Segmented, Toggle, ReadOnly,
-        Pipeline, Action, Custom
+        Checklist, Pipeline, Action, Custom
     }
 
     /** One field, as the builder collected it. */
@@ -76,12 +76,15 @@ public final class Form {
         final String label;
         String unit;
         String note;
+        String hint;
         int width;
         boolean movesMachine;
         boolean withRotation;
+        boolean withZ;
         boolean planar;
         boolean capture;
         boolean locationButtons;
+        org.openpnp.spi.HeadMountable locationTool;
         List<? extends Number> presets;
         String probeLocation;
         String buttonLabel;
@@ -112,6 +115,8 @@ public final class Form {
         final String icon;
         boolean collapsed;
         String note;
+        org.openpnp.model.CalibrationStep measuredBy;
+        Object measured;
         final List<Field> fields = new ArrayList<>();
 
         Section(String title, String icon) {
@@ -188,6 +193,18 @@ public final class Form {
         }
 
         /**
+         * The last location is a point in space without an angle: X, Y and Z, such as a
+         * calibration rig's fiducial. Its angle is left as it is.
+         */
+        public Builder withZ() {
+            if (requireLast().kind != Kind.Location || last.withRotation) {
+                throw new IllegalStateException("Z belongs to a location without an angle"); //$NON-NLS-1$
+            }
+            last.withZ = true;
+            return this;
+        }
+
+        /**
          * Values beside the last number that one click puts in it, a tape's standard widths say:
          * in millimetres for a length. The one the field holds is marked.
          */
@@ -254,17 +271,46 @@ public final class Form {
         }
 
         /**
-         * A note: at the right of the section's heading when no field has been added yet, beside
-         * the last field otherwise.
+         * The section's values are what a step of the calibration page measures, for this
+         * subject: its heading says so at the right, and a click there opens the step.
+         */
+        public Builder measuredBy(org.openpnp.model.CalibrationStep step, Object subject) {
+            current().measuredBy = step;
+            current().measured = subject;
+            return this;
+        }
+
+        /**
+         * A note: at the right of the section's heading when no field has been added yet; the
+         * words beside a switch; beside a short text or number when it is a few words, a unit
+         * of its own say, and under any other field, where it wraps.
          */
         public Builder note(String text) {
+            String note = resolve(text);
             if (last == null) {
-                current().note = resolve(text);
+                current().note = note;
+            }
+            else if (last.kind == Kind.Toggle
+                    || (isTyped(last.kind) && note.length() <= SHORT_NOTE)) {
+                last.note = note;
             }
             else {
-                last.note = resolve(text);
+                last.hint = note;
             }
             return this;
+        }
+
+        /** A few words on the last field under it, where they wrap: what it does, where it comes from. */
+        public Builder hint(String text) {
+            requireLast().hint = resolve(text);
+            return this;
+        }
+
+        private static final int SHORT_NOTE = 10;
+
+        private static boolean isTyped(Kind kind) {
+            return kind == Kind.Text || kind == Kind.Integer || kind == Kind.Decimal
+                    || kind == Kind.Length || kind == Kind.Angle;
         }
 
         public Builder text(String property, String label) {
@@ -352,6 +398,28 @@ public final class Form {
         }
 
         /**
+         * The last location gets the buttons, the tool's working on one tool and not the one
+         * selected: a nozzle's own tip change location.
+         */
+        public Builder locationButtons(org.openpnp.spi.HeadMountable tool) {
+            locationButtons();
+            last.locationTool = tool;
+            return this;
+        }
+
+        /**
+         * Some of a list, each with a switch: a set property, whose new set Apply writes, such as
+         * the nozzle tips a nozzle can take. The note is grey after an item's name.
+         */
+        @SuppressWarnings("unchecked")
+        public <T> Builder checklist(String property, String label, List<T> items, Function<T, String> note) {
+            add(Kind.Checklist, property, label);
+            last.items = items;
+            last.itemNote = note == null ? null : v -> note.apply((T) v);
+            return this;
+        }
+
+        /**
          * A vision pipeline: its stages, read again whenever the form reloads, and the buttons that
          * edit it and put it back to the default.
          */
@@ -412,7 +480,7 @@ public final class Form {
         }
 
         public Builder unit(String unit) {
-            requireLast().unit = unit;
+            requireLast().unit = resolve(unit);
             return this;
         }
 

@@ -421,8 +421,61 @@ public class UiRuler {
             String label = rail.getLabel(page);
             scenes.add(new Scene(id, label, page));
             sceneLabels.put(id, label);
+            if (id.equals("machine")) {
+                // The machine page shows one element's sheets at a time: the core ones of P9 W1
+                // each get a photograph of their own.
+                for (String[] extra : MACHINE_SCENES) {
+                    String extraLabel = label + " \u00b7 " + extra[1];
+                    scenes.add(new Scene(extra[0], extraLabel, page));
+                    sceneLabels.put(extra[0], extraLabel);
+                }
+            }
         }
         return scenes;
+    }
+
+    /** The machine page's elements photographed besides the camera: id, what, row, inspector tab. */
+    private static final String[][] MACHINE_SCENES = {
+            { "machine-root", "\u673a\u5668", "#machine", null },
+            { "machine-jobs", "\u4f5c\u4e1a\u5904\u7406\u5668", "#jobs", null },
+            { "machine-head", "\u8d34\u88c5\u5934 H1", "H1", null },
+            { "machine-nozzle", "\u5438\u5634 N1", "N1", null },
+            { "nozzletip", "\u5438\u5634\u5934 NT1 \u6821\u51c6", "NT1", "\u6821\u51c6" },
+            { "nozzletip-background", "\u5438\u5634\u5934 NT1 \u80cc\u666f", "NT1", "\u80cc\u666f" },
+            { "nozzletip-detect", "\u5438\u5634\u5934 NT1 \u5143\u4ef6\u68c0\u6d4b", "NT1", "\u5143\u4ef6\u68c0\u6d4b" },
+            { "nozzletip-changer", "\u5438\u5634\u5934 NT1 \u6362\u5634", "NT1", "\u6362\u5634" },
+    };
+
+    private static String[] machineScene(String id) {
+        for (String[] extra : MACHINE_SCENES) {
+            if (extra[0].equals(id)) {
+                return extra;
+            }
+        }
+        return null;
+    }
+
+    /** The inspector tab a scene shows, chosen once its sheets are there. */
+    private List<String> selectTabs(Scene scene) {
+        List<String> missed = new ArrayList<>();
+        String[] extra = machineScene(scene.id);
+        if (extra != null && extra[3] != null) {
+            expect(missed, selectTab(frame.getInspector(), extra[3]), "\u300c" + extra[3] + "\u300d\u9875\u7b7e");
+        }
+        return missed;
+    }
+
+    private static boolean selectTab(Component root, String title) {
+        for (javax.swing.JTabbedPane tabs : showing(root, javax.swing.JTabbedPane.class)) {
+            for (int i = 0; i < tabs.getTabCount(); i++) {
+                String text = tabs.getTitleAt(i);
+                if (text != null && text.trim().startsWith(title)) {
+                    tabs.setSelectedIndex(i);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** What each page shows in the mockups: the row they have selected. */
@@ -459,8 +512,18 @@ public class UiRuler {
                 expect(missed, selectTreeNode(page, "Top") || selectRow(page, s -> s.endsWith(" Top")),
                         "\u76f8\u673a Top");
                 break;
-            default:
+            default: {
+                String[] extra = machineScene(scene.id);
+                if (extra != null) {
+                    // By its name: a group's note lists the names of what is under it.
+                    String name = extra[2];
+                    expect(missed, name.startsWith("#") ? selectHolder(page, name)
+                            : selectTreeNode(page, name)
+                                    || selectNamedRow(page, s -> s.equals(name) || s.endsWith(" " + name))
+                                    || selectHolder(page, name), extra[1]);
+                }
                 break;
+            }
         }
         return missed;
     }
@@ -483,6 +546,14 @@ public class UiRuler {
                     scene.label + "\u9875", "\u6ca1\u627e\u5230" + what));
         }
         settle(1800);
+        List<String> tabs = edtGet(() -> selectTabs(scene));
+        for (String what : tabs) {
+            findings.add(new UiAudit.Finding(UiAudit.Check.SceneSetup, scene.label, label,
+                    scene.label + "\u9875", "\u6ca1\u627e\u5230" + what));
+        }
+        if (machineScene(scene.id) != null && machineScene(scene.id)[3] != null) {
+            settle(1000);
+        }
         closeStrayDialogs(scene.label);
 
         BufferedImage shot = edtGet(() -> paint(frame.getRootPane(), scale));
@@ -816,6 +887,50 @@ public class UiRuler {
                         select(table, row);
                         return true;
                     }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A head, nozzle or nozzle tip of that name on the machine page, its group opened: the nozzle
+     * tips are under a group that starts closed.
+     */
+    private boolean selectHolder(Component page, String name) {
+        if (!(page instanceof org.openpnp.gui.MachineSetupPanel)) {
+            return false;
+        }
+        org.openpnp.spi.Machine machine = configuration.getMachine();
+        org.openpnp.gui.MachineSetupPanel setup = (org.openpnp.gui.MachineSetupPanel) page;
+        if (name.equals("#machine")) {
+            return setup.selectPropertySheetHolder(machine);
+        }
+        if (name.equals("#jobs")) {
+            return setup.selectPropertySheetHolder(machine.getPnpJobProcessor());
+        }
+        java.util.List<org.openpnp.spi.PropertySheetHolder> holders = new ArrayList<>();
+        for (org.openpnp.spi.Head head : machine.getHeads()) {
+            holders.add(head);
+            holders.addAll(head.getNozzles());
+        }
+        holders.addAll(machine.getNozzleTips());
+        for (org.openpnp.spi.PropertySheetHolder holder : holders) {
+            if (holder instanceof org.openpnp.model.Named && name.equals(((org.openpnp.model.Named) holder).getName())) {
+                return ((org.openpnp.gui.MachineSetupPanel) page).selectPropertySheetHolder(holder);
+            }
+        }
+        return false;
+    }
+
+    /** The first row whose first column, the name, matches. */
+    private static boolean selectNamedRow(Component root, Predicate<String> match) {
+        for (JTable table : showing(root, JTable.class)) {
+            for (int row = 0; row < table.getRowCount(); row++) {
+                Object value = table.getValueAt(row, 0);
+                if (value != null && match.test(value.toString())) {
+                    select(table, row);
+                    return true;
                 }
             }
         }

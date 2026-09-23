@@ -53,8 +53,8 @@ public class PackageFormsTest {
     public void theSettingsFormWritesTheVacuumLevels() {
         Package pkg = new Package("SOT-23");
         FormWizard form = contained(PackageForm.build(configuration, pkg));
-        assertEquals(List.of("id", "description", "tapeSpecification", "pickVacuumLevel", "placeBlowOffLevel"),
-                Form.properties(form));
+        assertEquals(List.of("id", "description", "tapeSpecification", "pickVacuumLevel", "placeBlowOffLevel",
+                "compatibleNozzleTips"), Form.properties(form));
         form.setValue("description", "small outline");
         form.setValue("pickVacuumLevel", "42.5");
         form.apply();

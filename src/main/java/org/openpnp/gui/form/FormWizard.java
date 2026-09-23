@@ -71,6 +71,9 @@ public class FormWizard extends AbstractConfigurationWizard {
     /** The label and the row of each field, shown and hidden together. */
     private final Map<Field, JComponent[]> rows = new LinkedHashMap<>();
     private final Map<Field, JLabel> errors = new LinkedHashMap<>();
+    /** Beyond this many characters the words beside a switch wrap. */
+    private static final int LONG_TOGGLE_WORDS = 18;
+
     private final Map<Field, MutableLocationProxy> locations = new LinkedHashMap<>();
     private final Map<Field, JPanel> pipelines = new LinkedHashMap<>();
 
@@ -79,7 +82,10 @@ public class FormWizard extends AbstractConfigurationWizard {
         contentPanel.setLayout(new BoxLayout(contentPanel, BoxLayout.Y_AXIS));
         for (Form.Section s : spec.sections) {
             Forms.Section section = new Forms.Section(s.icon, s.title);
-            if (s.note != null) {
+            if (s.measuredBy != null) {
+                section.withRight(calibrationLink(s.measuredBy, s.measured));
+            }
+            else if (s.note != null) {
                 section.withRight(s.note);
             }
             JPanel grid = new JPanel(new GridBagLayout());
@@ -97,12 +103,38 @@ public class FormWizard extends AbstractConfigurationWizard {
         // Held at the column's width, where the fields give way down to their minimum and a
         // pipeline's stages wrap, rather than scrolling sideways in a narrow column.
         getScrollPane().setViewportView(new LegacyWizardAdapter.WidthTracking(contentPanel));
+        // Opened at its top: a tab shown later had scrolled down to its first field, hiding the
+        // heading and the words above it.
+        contentPanel.addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0
+                    && contentPanel.isShowing() && !shownOnce) {
+                shownOnce = true;
+                SwingUtilities.invokeLater(() -> SwingUtilities.invokeLater(
+                        () -> getScrollPane().getViewport().setViewPosition(new java.awt.Point(0, 0))));
+            }
+        });
         refresh();
     }
+
+    private boolean shownOnce;
 
     @Override
     public String getWizardName() {
         return spec.name;
+    }
+
+    /** "Calibration · the step", at the right of a heading, opening the step on the calibration page. */
+    private static JComponent calibrationLink(org.openpnp.model.CalibrationStep step, Object subject) {
+        JButton link = Ui.button(String.format(org.openpnp.Translations.getString("Form.MeasuredBy"), //$NON-NLS-1$
+                step.getName()), Ui.iconSm("target"), Ui.Size.Xs, Ui.Variant.Ghost); //$NON-NLS-1$
+        link.setToolTipText(org.openpnp.Translations.getString("Form.MeasuredBy.ToolTip")); //$NON-NLS-1$
+        link.addActionListener(e -> {
+            org.openpnp.gui.MainFrame frame = org.openpnp.gui.MainFrame.get();
+            if (frame != null) {
+                frame.showCalibrationStep(step, subject);
+            }
+        });
+        return link;
     }
 
     @Override
@@ -126,7 +158,79 @@ public class FormWizard extends AbstractConfigurationWizard {
         if (control instanceof Forms.Segmented) {
             return ((Forms.Segmented) control).getSelectedItem();
         }
+        if (control instanceof Checklist) {
+            return ((Checklist) control).getSelection();
+        }
         return null;
+    }
+
+    /**
+     * A checklist field's switches, one to an item. Its selection, the items switched on, is a
+     * bound property as a combo box's selected item is, so Apply writes it and Reset reads it.
+     */
+    public static final class Checklist extends JPanel {
+        private final List<?> items;
+        private final List<Forms.Toggle> toggles = new ArrayList<>();
+
+        Checklist(List<?> items, java.util.function.Function<Object, String> note, Runnable edited) {
+            this.items = items;
+            setOpaque(false);
+            setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+            for (Object item : items) {
+                Forms.Toggle toggle = new Forms.Toggle();
+                toggle.onChange(() -> {
+                    firePropertyChange("selection", null, getSelection()); //$NON-NLS-1$
+                    edited.run();
+                });
+                toggles.add(toggle);
+                JPanel row = new JPanel();
+                row.setOpaque(false);
+                row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+                row.setAlignmentX(Component.LEFT_ALIGNMENT);
+                toggle.setAlignmentY(Component.CENTER_ALIGNMENT);
+                row.add(toggle);
+                row.add(Box.createHorizontalStrut(8));
+                JLabel name = new JLabel(DisplayNames.of(item));
+                name.setFont(Ui.font(Tokens.FS_BODY));
+                row.add(name);
+                String text = note == null ? null : note.apply(item);
+                if (text != null && !text.isEmpty()) {
+                    row.add(Box.createHorizontalStrut(8));
+                    row.add(Ui.muted(text));
+                }
+                row.add(Box.createHorizontalGlue());
+                if (getComponentCount() > 0) {
+                    add(Box.createVerticalStrut(6));
+                }
+                add(row);
+            }
+        }
+
+        public java.util.Set<Object> getSelection() {
+            java.util.Set<Object> selection = new java.util.LinkedHashSet<>();
+            for (int i = 0; i < items.size(); i++) {
+                if (toggles.get(i).isSelected()) {
+                    selection.add(items.get(i));
+                }
+            }
+            return selection;
+        }
+
+        public void setSelection(java.util.Set<?> selection) {
+            java.util.Set<Object> was = getSelection();
+            for (int i = 0; i < items.size(); i++) {
+                toggles.get(i).setSelected(selection != null && selection.contains(items.get(i)));
+            }
+            firePropertyChange("selection", was, getSelection()); //$NON-NLS-1$
+        }
+
+        @Override
+        public void setEnabled(boolean enabled) {
+            super.setEnabled(enabled);
+            for (Forms.Toggle toggle : toggles) {
+                toggle.setEnabled(enabled);
+            }
+        }
     }
 
     // ---- building -----------------------------------------------------------------------------
@@ -152,19 +256,73 @@ public class FormWizard extends AbstractConfigurationWizard {
         gc.fill = field.width > 0 ? GridBagConstraints.NONE : GridBagConstraints.HORIZONTAL;
         gc.insets = new Insets(row == 0 ? 0 : 8, 0, 0, 0);
         grid.add(content, gc);
+        JComponent hint = null;
+        if (field.hint != null && !field.hint.isEmpty()) {
+            hint = hint(field.hint);
+            GridBagConstraints gh = new GridBagConstraints();
+            gh.gridy = row + 1;
+            gh.gridx = fullWidth ? 0 : 1;
+            gh.gridwidth = fullWidth ? 2 : 1;
+            gh.weightx = 1;
+            gh.fill = GridBagConstraints.HORIZONTAL;
+            gh.anchor = GridBagConstraints.WEST;
+            gh.insets = new Insets(4, 0, 0, 0);
+            grid.add(hint, gh);
+        }
         JLabel error = new JLabel();
         error.setForeground(Ui.err());
         error.setFont(Ui.font(Tokens.FS_AUX));
         error.setVisible(false);
         GridBagConstraints ge = new GridBagConstraints();
-        ge.gridy = row + 1;
+        ge.gridy = row + 2;
         ge.gridx = 1;
         ge.anchor = GridBagConstraints.WEST;
         ge.insets = new Insets(2, 0, 0, 0);
         grid.add(error, ge);
         errors.put(field, error);
-        rows.put(field, new JComponent[] { label, content, error });
-        return row + 2;
+        rows.put(field, new JComponent[] { label, content, error, hint });
+        return row + 3;
+    }
+
+    /**
+     * The grey words under a field, wrapped at the column's width. Asking for little width, so
+     * that a long one does not make the grid wider than the column and squeeze every field.
+     */
+    @SuppressWarnings("serial")
+    static javax.swing.JTextArea hint(String text) {
+        javax.swing.JTextArea area = new javax.swing.JTextArea(text) {
+            private int laidOutWidth = -1;
+
+            @Override
+            public void setBounds(int x, int y, int width, int height) {
+                boolean widthChanged = width != laidOutWidth;
+                laidOutWidth = width;
+                super.setBounds(x, y, width, height);
+                if (widthChanged && width > 0 && getPreferredSize().height != height) {
+                    SwingUtilities.invokeLater(this::revalidate);
+                }
+            }
+
+            @Override
+            public java.awt.Dimension getPreferredSize() {
+                java.awt.Dimension size = super.getPreferredSize();
+                return new java.awt.Dimension(Math.min(size.width, 120), size.height);
+            }
+
+            @Override
+            public java.awt.Dimension getMinimumSize() {
+                return new java.awt.Dimension(40, super.getMinimumSize().height);
+            }
+        };
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setOpaque(false);
+        area.setBorder(null);
+        area.setFont(Ui.font(Tokens.FS_AUX));
+        area.setForeground(Ui.text2());
+        return area;
     }
 
     private JComponent control(Field field) {
@@ -225,13 +383,41 @@ public class FormWizard extends AbstractConfigurationWizard {
                 Forms.Toggle toggle = new Forms.Toggle();
                 toggle.onChange(this::edited);
                 controls.put(field, toggle);
-                return Forms.toggleRow(toggle, field.note == null ? "" : field.note); //$NON-NLS-1$
+                String words = field.note == null ? "" : field.note; //$NON-NLS-1$
+                if (words.length() <= LONG_TOGGLE_WORDS) {
+                    return Forms.toggleRow(toggle, words);
+                }
+                // Longer words wrap beside the switch rather than being cut at the column's edge.
+                JPanel row = new JPanel(new java.awt.BorderLayout(8, 0));
+                row.setOpaque(false);
+                JPanel top = new JPanel();
+                top.setOpaque(false);
+                top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+                top.add(toggle);
+                row.add(top, java.awt.BorderLayout.WEST);
+                javax.swing.JTextArea text = hint(words);
+                text.setFont(Ui.t2("").getFont()); //$NON-NLS-1$
+                row.add(text, java.awt.BorderLayout.CENTER);
+                return row;
             }
             case ReadOnly: {
-                JLabel value = new JLabel();
+                // Nothing to show is a dash: a binding sets a null value's text to null, past
+                // the converter that would have said so.
+                @SuppressWarnings("serial")
+                JLabel value = new JLabel() {
+                    @Override
+                    public void setText(String text) {
+                        super.setText(text == null || text.isEmpty() ? "\u2014" : text); //$NON-NLS-1$
+                    }
+                };
                 value.setFont(Ui.font(Tokens.FS_BODY));
                 controls.put(field, value);
                 return Forms.readOnly(value);
+            }
+            case Checklist: {
+                Checklist list = new Checklist(field.items, field.itemNote, this::edited);
+                controls.put(field, list);
+                return list;
             }
             case Action: {
                 JButton button = Ui.button(field.label, field.icon == null ? null : Ui.iconSm(field.icon),
@@ -401,6 +587,92 @@ public class FormWizard extends AbstractConfigurationWizard {
         }
     }
 
+    /**
+     * Puts a value on screen as if chosen, for Apply to write: the text of a field, the item of
+     * a choice or of segments, the state of a switch, the set of a checklist.
+     */
+    public void set(String property, Object value) {
+        Field field = byProperty.get(property);
+        JComponent control = field == null ? null : controls.get(field);
+        if (control instanceof JTextField) {
+            ((JTextField) control).setText(value == null ? "" : String.valueOf(value)); //$NON-NLS-1$
+        }
+        else if (control instanceof JComboBox) {
+            ((JComboBox<?>) control).setSelectedItem(value);
+        }
+        else if (control instanceof Forms.Toggle) {
+            ((Forms.Toggle) control).setSelected(Boolean.TRUE.equals(value));
+        }
+        else if (control instanceof Forms.Segmented) {
+            ((Forms.Segmented) control).setSelectedItem(value);
+        }
+        else if (control instanceof Checklist) {
+            ((Checklist) control).setSelection((java.util.Set<?>) value);
+        }
+        else {
+            throw new IllegalArgumentException("no field for " + property); //$NON-NLS-1$
+        }
+        edited();
+    }
+
+    /** Puts a location on screen as if typed into its axes, for Apply to write. */
+    @SuppressWarnings("unchecked")
+    public void setLocation(String property, org.openpnp.model.Location location) {
+        Field field = byProperty.get(property);
+        JComponent control = field == null ? null : controls.get(field);
+        if (control == null || location == null) {
+            return;
+        }
+        LengthConverter length = new LengthConverter(getDisplayPreferences());
+        DoubleConverter decimal = new DoubleConverter(getDisplayPreferences().getLengthDisplayFormat());
+        for (JTextField input : (List<JTextField>) control.getClientProperty("Pono.form.fields")) { //$NON-NLS-1$
+            switch ((String) input.getClientProperty("Pono.form.axis")) { //$NON-NLS-1$
+                case "X": //$NON-NLS-1$
+                    input.setText(length.convertForward(location.getLengthX()));
+                    break;
+                case "Y": //$NON-NLS-1$
+                    input.setText(length.convertForward(location.getLengthY()));
+                    break;
+                case "Z": //$NON-NLS-1$
+                    input.setText(length.convertForward(location.getLengthZ()));
+                    break;
+                default:
+                    input.setText(decimal.convertForward(location.getRotation()));
+                    break;
+            }
+        }
+    }
+
+    /**
+     * The location a location field shows now, before it is applied: its axes as typed, the
+     * ones it does not show as the object holds them.
+     */
+    @SuppressWarnings("unchecked")
+    public org.openpnp.model.Location location(String property) {
+        Field field = byProperty.get(property);
+        JComponent control = field == null ? null : controls.get(field);
+        if (control == null) {
+            return null;
+        }
+        Object held = org.jdesktop.beansbinding.BeanProperty.create(property).getValue(spec.bean);
+        org.openpnp.model.Location location = held instanceof org.openpnp.model.Location
+                ? (org.openpnp.model.Location) held : new org.openpnp.model.Location(LengthUnit.Millimeters);
+        LengthConverter length = new LengthConverter(getDisplayPreferences());
+        for (JTextField input : (List<JTextField>) control.getClientProperty("Pono.form.fields")) { //$NON-NLS-1$
+            String axis = (String) input.getClientProperty("Pono.form.axis"); //$NON-NLS-1$
+            if (axis.equals("C")) { //$NON-NLS-1$
+                location = location.derive(null, null, null, Double.parseDouble(input.getText().trim()));
+            }
+            else {
+                Length value = length.convertReverse(input.getText()).convertToUnits(location.getUnits());
+                location = location.derive(axis.equals("X") ? value.getValue() : null, //$NON-NLS-1$
+                        axis.equals("Y") ? value.getValue() : null, //$NON-NLS-1$
+                        axis.equals("Z") ? value.getValue() : null, null); //$NON-NLS-1$
+            }
+        }
+        return location;
+    }
+
     /** Shows what the object holds now, after something other than the form changed it. */
     public void reload() {
         loadFromModel();
@@ -409,7 +681,8 @@ public class FormWizard extends AbstractConfigurationWizard {
     private JComponent location(Field field) {
         List<JComponent> fields = new ArrayList<>();
         String[] axes = field.planar ? new String[] { "X", "Y", "C" } //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                : field.withRotation ? new String[] { "X", "Y", "Z", "C" } : new String[] { "X", "Y" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+                : field.withRotation ? new String[] { "X", "Y", "Z", "C" } //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                : field.withZ ? new String[] { "X", "Y", "Z" } : new String[] { "X", "Y" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
         for (String axis : axes) {
             JTextField input = Forms.input(new JTextField(), true, axis);
             input.getDocument().addDocumentListener(new DocumentListener() {
@@ -467,17 +740,45 @@ public class FormWizard extends AbstractConfigurationWizard {
             panel.add(Box.createVerticalStrut(6));
             panel.add(Forms.row(fields.get(2), fields.get(3)));
         }
+        else if (field.withZ) {
+            // Z alone under X, as wide as it: two equal columns with the second one empty.
+            JPanel row = new JPanel(new java.awt.GridLayout(1, 2, 6, 0));
+            row.setOpaque(false);
+            row.add(fields.get(2));
+            row.add(Box.createGlue());
+            row.setMaximumSize(new java.awt.Dimension(Integer.MAX_VALUE, fields.get(2).getPreferredSize().height));
+            panel.add(Box.createVerticalStrut(6));
+            panel.add(row);
+        }
+        if (field.button != null) {
+            JButton button = Ui.button(field.buttonLabel,
+                    field.buttonIcon == null ? null : Ui.iconSm(field.buttonIcon), Ui.Size.Sm, Ui.Variant.Default);
+            button.addActionListener(e -> field.button.accept(this));
+            JPanel row = Forms.row(button);
+            row.add(Box.createHorizontalGlue());
+            panel.add(Box.createVerticalStrut(6));
+            panel.add(row);
+        }
         if (field.locationButtons) {
             org.openpnp.gui.components.LocationButtonsPanel buttons =
                     new org.openpnp.gui.components.LocationButtonsPanel((JTextField) fields.get(0),
                             (JTextField) fields.get(1),
-                            field.withRotation ? (JTextField) fields.get(2) : null,
+                            field.withRotation || field.withZ ? (JTextField) fields.get(2) : null,
                             field.withRotation ? (JTextField) fields.get(3) : null);
+            if (field.locationTool != null) {
+                buttons.setTool(field.locationTool);
+            }
             buttons.setOpaque(false);
             buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
             ((java.awt.FlowLayout) buttons.getLayout()).setAlignment(java.awt.FlowLayout.LEFT);
             panel.add(Box.createVerticalStrut(6));
             panel.add(buttons);
+        }
+        // One edge for all rows: the buttons, aligned left, sat on the centre line of the fields.
+        for (Component child : panel.getComponents()) {
+            if (child instanceof JComponent) {
+                ((JComponent) child).setAlignmentX(Component.LEFT_ALIGNMENT);
+            }
         }
         panel.putClientProperty("Pono.form.fields", fields); //$NON-NLS-1$
         controls.put(field, panel);
@@ -524,11 +825,15 @@ public class FormWizard extends AbstractConfigurationWizard {
 
     private JComponent choice(Field field) {
         JComboBox combo = Forms.dropdown(new JComboBox(field.items.toArray()));
+        // A null among the items is the choice of none, an actuator not used say.
+        java.util.function.Function<Object, String> name = field.items.contains(null)
+                ? v -> v == null ? org.openpnp.Translations.getString("Form.None") : DisplayNames.of(v) //$NON-NLS-1$
+                : DisplayNames::of;
         if (field.itemNote != null) {
-            combo.setRenderer(Forms.described(DisplayNames::of, field.itemNote));
+            combo.setRenderer(Forms.described(name, v -> v == null ? null : field.itemNote.apply(v)));
         }
         else {
-            combo.setRenderer(Forms.described(DisplayNames::of, v -> null));
+            combo.setRenderer(Forms.described(name, v -> null));
         }
         combo.addActionListener(e -> edited());
         // As wide as the row, not as the longest item: a part list's longest name and note made
@@ -593,6 +898,9 @@ public class FormWizard extends AbstractConfigurationWizard {
                 case Toggle:
                     addWrappedBinding(spec.bean, field.property, control, "selected"); //$NON-NLS-1$
                     break;
+                case Checklist:
+                    addWrappedBinding(spec.bean, field.property, control, "selection"); //$NON-NLS-1$
+                    break;
                 case ReadOnly:
                     bind(UpdateStrategy.READ, spec.bean, field.property, control, "text", TO_TEXT); //$NON-NLS-1$
                     break;
@@ -606,6 +914,11 @@ public class FormWizard extends AbstractConfigurationWizard {
     private static final Converter<Object, String> TO_TEXT = new Converter<Object, String>() {
         @Override
         public String convertForward(Object value) {
+            if (value instanceof Length) {
+                Length length = (Length) value;
+                return String.format(java.util.Locale.US, "%.3f %s", length.getValue(), //$NON-NLS-1$
+                        length.getUnits().getShortName());
+            }
             return value == null ? "\u2014" : DisplayNames.of(value); //$NON-NLS-1$
         }
 
@@ -664,6 +977,9 @@ public class FormWizard extends AbstractConfigurationWizard {
             parts[0].setVisible(visible);
             parts[1].setVisible(visible);
             parts[2].setVisible(message != null);
+            if (parts[3] != null) {
+                parts[3].setVisible(visible);
+            }
             ((JLabel) parts[2]).setText(message == null ? "" : message); //$NON-NLS-1$
             if (parts[1] instanceof JTextField) {
                 ((JTextField) parts[1]).putClientProperty(FlatClientProperties.OUTLINE,

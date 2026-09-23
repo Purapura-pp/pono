@@ -453,7 +453,7 @@ public class SimpleGraphView extends JComponent implements MouseMotionListener, 
         }
         else {
             g2d.setColor(gridColor);
-            String text = "no data";
+            String text = org.openpnp.Translations.getString("SimpleGraphView.NoData"); //$NON-NLS-1$
             Rectangle2D bounds = dfm.getStringBounds(text, 0, text.length(), g2d);
             g2d.drawString(text, (int)(bounds.getHeight()*2), (int)(h/2));
         }

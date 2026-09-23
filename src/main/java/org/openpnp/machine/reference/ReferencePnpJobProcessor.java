@@ -37,7 +37,6 @@ import org.openpnp.gui.JobPanel;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.vision.AbstractPartAlignment;
-import org.openpnp.machine.reference.wizards.ReferencePnpJobProcessorConfigurationWizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
@@ -2185,7 +2184,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
     
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferencePnpJobProcessorConfigurationWizard(this);
+        return org.openpnp.machine.reference.wizards.JobProcessorForm.build(this);
     }
     
     public JobOrderHint getJobOrder() {

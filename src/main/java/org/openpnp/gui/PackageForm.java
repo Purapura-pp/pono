@@ -19,15 +19,9 @@
 
 package org.openpnp.gui;
 
-import javax.swing.BoxLayout;
-import javax.swing.JComponent;
-import javax.swing.JPanel;
-
 import org.openpnp.Translations;
 import org.openpnp.gui.form.Form;
 import org.openpnp.gui.form.FormWizard;
-import org.openpnp.gui.shell.Forms;
-import org.openpnp.gui.shell.Ui;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Package;
@@ -35,8 +29,9 @@ import org.openpnp.spi.NozzleTip;
 
 /**
  * A package's settings: what it is, the vacuum it is picked and placed with, and the nozzle tips
- * that can pick it. The two were separate sheets - two fields in a titled border, and a table of
- * nozzle tips with a check box each.
+ * that can pick it, written as the rest is when Apply is pressed. The two were separate sheets -
+ * two fields in a titled border, and a table of nozzle tips with a check box each written as it
+ * was clicked.
  */
 public final class PackageForm {
     private PackageForm() {
@@ -84,10 +79,29 @@ public final class PackageForm {
         public void setPlaceBlowOffLevel(double level) {
             packag.setPlaceBlowOffLevel(level);
         }
+
+        /** The nozzle tips that can pick it: Apply adds the ones switched on and removes the others. */
+        public java.util.Set<NozzleTip> getCompatibleNozzleTips() {
+            return new java.util.LinkedHashSet<>(packag.getCompatibleNozzleTips());
+        }
+
+        public void setCompatibleNozzleTips(java.util.Set<NozzleTip> tips) {
+            for (NozzleTip tip : new java.util.ArrayList<>(packag.getCompatibleNozzleTips())) {
+                if (!tips.contains(tip)) {
+                    packag.removeCompatibleNozzleTip(tip);
+                }
+            }
+            for (NozzleTip tip : tips) {
+                if (!packag.getCompatibleNozzleTips().contains(tip)) {
+                    packag.addCompatibleNozzleTip(tip);
+                }
+            }
+        }
     }
 
     public static FormWizard build(Configuration configuration, Package packag) {
-        return Form.of(new Bean(packag)).named(packag.getId())
+        java.util.List<NozzleTip> tips = new java.util.ArrayList<>(configuration.getMachine().getNozzleTips());
+        Form.Builder form = Form.of(new Bean(packag)).named(packag.getId())
                 .section("PackageForm.Basics", "info") //$NON-NLS-1$ //$NON-NLS-2$
                 .readOnly("id", "PackageForm.Id") //$NON-NLS-1$ //$NON-NLS-2$
                 .text("description", "PackageForm.Description") //$NON-NLS-1$ //$NON-NLS-2$
@@ -97,37 +111,10 @@ public final class PackageForm {
                 .decimal("placeBlowOffLevel", "PackageForm.PlaceBlowOff").width(100) //$NON-NLS-1$ //$NON-NLS-2$
                 .section("PackageForm.NozzleTips", "nozzle") //$NON-NLS-1$ //$NON-NLS-2$
                 .note(Translations.getString("PackageForm.NozzleTips.Note")) //$NON-NLS-1$
-                .custom("", nozzleTips(configuration, packag)) //$NON-NLS-1$
-                .build();
-    }
-
-    /**
-     * A switch for each nozzle tip, written as it is flipped, as the check boxes were: whether a
-     * tip can pick a package is not something to hold back until Apply.
-     */
-    private static JComponent nozzleTips(Configuration configuration, Package packag) {
-        JPanel list = new JPanel();
-        list.setOpaque(false);
-        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
-        if (configuration.getMachine().getNozzleTips().isEmpty()) {
-            list.add(Ui.muted(Translations.getString("PackageForm.NoNozzleTips"))); //$NON-NLS-1$
+                .checklist("compatibleNozzleTips", "NozzleForm.Compatible.Label", tips, null); //$NON-NLS-1$ //$NON-NLS-2$
+        if (tips.isEmpty()) {
+            form.hint("PackageForm.NoNozzleTips"); //$NON-NLS-1$
         }
-        for (NozzleTip tip : configuration.getMachine().getNozzleTips()) {
-            Forms.Toggle toggle = new Forms.Toggle();
-            toggle.setSelected(packag.getCompatibleNozzleTips().contains(tip));
-            toggle.onChange(() -> {
-                if (toggle.isSelected()) {
-                    packag.addCompatibleNozzleTip(tip);
-                }
-                else {
-                    packag.removeCompatibleNozzleTip(tip);
-                }
-                configuration.setDirty(true);
-            });
-            JPanel row = Forms.toggleRow(toggle, tip.getName());
-            row.setAlignmentX(0);
-            list.add(row);
-        }
-        return list;
+        return form.build();
     }
 }

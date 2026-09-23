@@ -19,11 +19,6 @@ import org.openpnp.machine.reference.ReferenceNozzleTip.VacuumMeasurementMethod;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.solutions.ActuatorSolutions;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleCameraOffsetWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleCompatibleNozzleTipsWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleConfigurationWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleToolChangerWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleVacuumWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -864,7 +859,7 @@ public class ReferenceNozzle extends AbstractNozzle implements HeadMountable {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceNozzleConfigurationWizard(getMachine(), this);
+        return org.openpnp.machine.reference.wizards.NozzleForm.settings(this);
     }
 
     @Override
@@ -881,14 +876,10 @@ public class ReferenceNozzle extends AbstractNozzle implements HeadMountable {
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
                 new PropertySheetWizardAdapter(getConfigurationWizard()),
-                new PropertySheetWizardAdapter(new ReferenceNozzleCompatibleNozzleTipsWizard(this),
-                        Translations.getString("ReferenceNozzle.PropertySheetHolder.NozzleTips.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new ReferenceNozzleVacuumWizard(this),
-                        Translations.getString("ReferenceNozzle.PropertySheetHolder.Vacuum.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new ReferenceNozzleToolChangerWizard(this),
-                        Translations.getString("ReferenceNozzle.PropertySheetHolder.ToolChanger.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new ReferenceNozzleCameraOffsetWizard(this),
-                        Translations.getString("ReferenceNozzle.PropertySheetHolder.OffsetWizard.title")), //$NON-NLS-1$
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleForm.nozzleTips(this)),
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleForm.vacuum(this)),
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleForm.changer(this)),
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleForm.offset(this)),
         };
     }
 

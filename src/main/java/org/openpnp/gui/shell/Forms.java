@@ -169,18 +169,72 @@ public final class Forms {
             setLayout(new GridBagLayout());
         }
 
-        /** A label of the column's width, on as many lines as it needs. */
+        /**
+         * A label of the column's width, on as many lines as it needs. The lines are broken here:
+         * HTML in Swing does not break a run of Chinese, and "停靠时全部升到 Safe Z" stayed on one
+         * line, cut at the column's edge without a "...".
+         */
         public static JLabel label(String text, int width) {
             JLabel l = Ui.t2(text);
             l.setFont(Ui.font(Tokens.FS_SMALL));
-            if (l.getPreferredSize().width > width) {
-                l.setText("<html><div style='width:" + width + "px'>" //$NON-NLS-1$ //$NON-NLS-2$
-                        + text.replace("&", "&amp;").replace("<", "&lt;") + "</div></html>"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+            java.awt.FontMetrics metrics = l.getFontMetrics(l.getFont());
+            if (text != null && metrics.stringWidth(text) > width) {
+                StringBuilder html = new StringBuilder("<html>"); //$NON-NLS-1$
+                java.util.List<String> lines = wrap(text, metrics, width);
+                for (int i = 0; i < lines.size(); i++) {
+                    html.append(i == 0 ? "" : "<br>") //$NON-NLS-1$ //$NON-NLS-2$
+                            .append(lines.get(i).replace("&", "&amp;").replace("<", "&lt;")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                }
+                l.setText(html.append("</html>").toString()); //$NON-NLS-1$
             }
             Dimension size = new Dimension(width, l.getPreferredSize().height);
             l.setPreferredSize(size);
             l.setMinimumSize(size);
             return l;
+        }
+
+        /**
+         * The text in lines no wider than the width: broken between Chinese characters, and
+         * at the spaces between words of other scripts, which stay whole.
+         */
+        static java.util.List<String> wrap(String text, java.awt.FontMetrics metrics, int width) {
+            java.util.List<String> tokens = new java.util.ArrayList<>();
+            StringBuilder word = new StringBuilder();
+            for (int i = 0; i < text.length(); i++) {
+                char c = text.charAt(i);
+                boolean ideograph = Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN
+                        || (c >= '\u3000' && c <= '\u303f') || (c >= '\uff00' && c <= '\uffef');
+                if (c == ' ' || ideograph) {
+                    if (word.length() > 0) {
+                        tokens.add(word.toString());
+                        word.setLength(0);
+                    }
+                    tokens.add(String.valueOf(c));
+                }
+                else {
+                    word.append(c);
+                }
+            }
+            if (word.length() > 0) {
+                tokens.add(word.toString());
+            }
+            java.util.List<String> lines = new java.util.ArrayList<>();
+            StringBuilder line = new StringBuilder();
+            for (String token : tokens) {
+                String next = line + token;
+                if (line.length() > 0 && metrics.stringWidth(next.trim()) > width) {
+                    lines.add(line.toString().trim());
+                    line.setLength(0);
+                    if (token.equals(" ")) { //$NON-NLS-1$
+                        continue;
+                    }
+                }
+                line.append(token);
+            }
+            if (line.toString().trim().length() > 0) {
+                lines.add(line.toString().trim());
+            }
+            return lines;
         }
 
         public Grid row(String label, JComponent field) {
@@ -571,7 +625,17 @@ public final class Forms {
                 JLabel label = (JLabel) delegate.getListCellRendererComponent(list, value, index,
                         isSelected, cellHasFocus);
                 if (value == null) {
-                    label.setText(" "); //$NON-NLS-1$
+                    // None, when the list offers it by a name: grey, not bold as a real choice is.
+                    String none = name.apply(null);
+                    if (none == null || none.isEmpty()) {
+                        label.setText(" "); //$NON-NLS-1$
+                    }
+                    else {
+                        label.setText(none);
+                        if (!isSelected) {
+                            label.setForeground(Ui.muted());
+                        }
+                    }
                     return label;
                 }
                 String n = name.apply(value);
