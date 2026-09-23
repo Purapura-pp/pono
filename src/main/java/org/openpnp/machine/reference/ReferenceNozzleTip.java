@@ -21,10 +21,6 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleTipCalibrationWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleTipConfigurationWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleTipPartDetectionWizard;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleTipToolChangerWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -314,7 +310,7 @@ public class ReferenceNozzleTip extends AbstractNozzleTip {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceNozzleTipConfigurationWizard(this);
+        return org.openpnp.machine.reference.wizards.NozzleTipForm.settings(this);
     }
 
     @Override
@@ -336,12 +332,10 @@ public class ReferenceNozzleTip extends AbstractNozzleTip {
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
                 new PropertySheetWizardAdapter(getConfigurationWizard()),
-                new PropertySheetWizardAdapter(new ReferenceNozzleTipPartDetectionWizard(this),
-                        Translations.getString("ReferenceNozzleTip.PartDetection.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new ReferenceNozzleTipToolChangerWizard(this),
-                        Translations.getString("ReferenceNozzleTip.ToolChanger.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new ReferenceNozzleTipCalibrationWizard(this),
-                        Translations.getString("ReferenceNozzleTip.Calibration.tab.title")) //$NON-NLS-1$
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleTipForm.calibration(this)),
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleTipForm.background(this)),
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleTipForm.partDetection(this)),
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.NozzleTipForm.changer(this)),
                 };
     }
 

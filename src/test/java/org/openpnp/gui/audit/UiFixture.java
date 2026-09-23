@@ -104,6 +104,7 @@ public class UiFixture {
         packagesAndParts();
         feeders(machine);
         camera(machine);
+        nozzleTip(machine);
 
         Board board = demoBoard();
         Board cell = demoCell();
@@ -407,6 +408,23 @@ public class UiFixture {
         placement.setSide(side);
         board.addPlacement(placement);
         return placement;
+    }
+
+    /**
+     * NT1 with what mockup 23 shows switched on - runout calibration, the colour-keyed
+     * background, vacuum checks - so that its sheets show the fields that depend on them.
+     */
+    private static void nozzleTip(Machine machine) {
+        for (org.openpnp.spi.NozzleTip tip : machine.getNozzleTips()) {
+            if (tip instanceof org.openpnp.machine.reference.ReferenceNozzleTip && "NT1".equals(tip.getName())) {
+                org.openpnp.machine.reference.ReferenceNozzleTip nt = (org.openpnp.machine.reference.ReferenceNozzleTip) tip;
+                nt.getCalibration().setEnabled(true);
+                nt.getCalibration().setBackgroundCalibrationMethod(
+                        org.openpnp.machine.reference.ReferenceNozzleTipCalibration.BackgroundCalibrationMethod.BrightnessAndKeyColor);
+                nt.setMethodPartOn(org.openpnp.machine.reference.ReferenceNozzleTip.VacuumMeasurementMethod.Absolute);
+                nt.setMethodPartOff(org.openpnp.machine.reference.ReferenceNozzleTip.VacuumMeasurementMethod.Difference);
+            }
+        }
     }
 
     private static void empty(Path directory) throws Exception {

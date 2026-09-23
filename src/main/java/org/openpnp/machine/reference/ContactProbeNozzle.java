@@ -34,7 +34,6 @@ import org.openpnp.machine.reference.driver.GcodeAsyncDriver;
 import org.openpnp.machine.reference.driver.GcodeDriver;
 import org.openpnp.machine.reference.solutions.GcodeDriverSolutions;
 import org.openpnp.machine.reference.vision.AbstractPartAlignment;
-import org.openpnp.machine.reference.wizards.ContactProbeNozzleWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -148,7 +147,7 @@ public class ContactProbeNozzle extends ReferenceNozzle {
     @Override
     public PropertySheet[] getPropertySheets() {
         return Collect.concat(super.getPropertySheets(), new PropertySheet[] {
-                new PropertySheetWizardAdapter(new ContactProbeNozzleWizard(this), "Contact Probe") });
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.ContactProbeNozzleForm.build(this)) });
     }
 
     @Override

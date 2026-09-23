@@ -36,7 +36,7 @@ import org.openpnp.machine.reference.ReferenceNozzleTip;
 import org.openpnp.machine.reference.ReferenceNozzleTipCalibration.BackgroundCalibrationMethod;
 import org.openpnp.machine.reference.ReferenceNozzleTipCalibration.RecalibrationTrigger;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
-import org.openpnp.machine.reference.wizards.ReferenceNozzleTipCalibrationWizard;
+import org.openpnp.machine.reference.wizards.NozzleTipForm;
 import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -369,7 +369,7 @@ public class NozzleTipSolutions implements Solutions.Subject  {
                                 nozzleTip.getCalibration().calibrate((ReferenceNozzle) nozzle);
                                 UiUtils.messageBoxOnExceptionLater(() -> {
                                     super.setState(state);
-                                    ReferenceNozzleTipCalibrationWizard.showBackgroundProblems(nozzleTip, false);
+                                    NozzleTipForm.showBackgroundProblems(nozzleTip, false);
                                 });
                             });
                         }

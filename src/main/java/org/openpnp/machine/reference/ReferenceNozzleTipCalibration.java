@@ -70,6 +70,12 @@ public class ReferenceNozzleTipCalibration extends AbstractModelObject {
 
         public TableBasedRunoutCompensation() {
         }
+        /** Where the nozzle tip was seen at each angle, the table itself. */
+        public List<Location> getMeasuredLocations() {
+            return nozzleTipMeasuredLocations == null ? java.util.Collections.emptyList()
+                    : java.util.Collections.unmodifiableList(nozzleTipMeasuredLocations);
+        }
+
         public TableBasedRunoutCompensation(List<Location> nozzleTipMeasuredLocations) {
             //store data for later usage
             this.nozzleTipMeasuredLocations = nozzleTipMeasuredLocations;
@@ -413,6 +419,17 @@ public class ReferenceNozzleTipCalibration extends AbstractModelObject {
 
         public double getPhaseShift() {
             return phaseShift;
+        }
+
+        /** The radius of the circle the nozzle tip runs on, in {@link #getAxisOffset()}'s units. */
+        public double getRadius() {
+            return radius;
+        }
+
+        /** Where the nozzle tip was seen at each angle, which the model was fitted to. */
+        public List<Location> getMeasuredLocations() {
+            return nozzleTipMeasuredLocations == null ? java.util.Collections.emptyList()
+                    : java.util.Collections.unmodifiableList(nozzleTipMeasuredLocations);
         }
         
         /**
@@ -1445,7 +1462,7 @@ public class ReferenceNozzleTipCalibration extends AbstractModelObject {
         runoutCompensation = null;
     }
 
-    private RunoutCompensation getRunoutCompensation(ReferenceNozzle nozzle) {
+    public RunoutCompensation getRunoutCompensation(ReferenceNozzle nozzle) {
         // get the combined nozzle tip + nozzle runout compensation for the nozzle we are currently attached to 
         if (nozzle != null) {
             return runoutCompensationLookup.get(nozzle.getId());

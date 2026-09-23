@@ -96,7 +96,6 @@ import org.openpnp.machine.reference.solutions.ScriptingSolutions;
 import org.openpnp.machine.reference.solutions.VisionSolutions;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision;
 import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
-import org.openpnp.machine.reference.wizards.ReferenceMachineConfigurationWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -380,7 +379,7 @@ public class ReferenceMachine extends AbstractMachine {
     
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceMachineConfigurationWizard(this);
+        return org.openpnp.machine.reference.wizards.MachineForm.build(this);
     }
 
     @Override

@@ -37,7 +37,6 @@ import org.openpnp.machine.reference.driver.NullDriver;
 import org.openpnp.machine.reference.driver.ReferenceDriverCommunications;
 import org.openpnp.machine.reference.feeder.BlindsFeeder;
 import org.openpnp.machine.reference.feeder.ReferenceStripFeeder;
-import org.openpnp.machine.reference.wizards.SimulationModeMachineConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
@@ -184,7 +183,7 @@ public class SimulationModeMachine extends ReferenceMachine {
     public PropertySheet[] getPropertySheets() {
         return Collect.concat(super.getPropertySheets(),
                 new PropertySheet[] {
-                        new PropertySheetWizardAdapter(new SimulationModeMachineConfigurationWizard(this), "Simulation Mode")
+                        new PropertySheetWizardAdapter(org.openpnp.machine.reference.wizards.SimulationMachineForm.build(this))
                 });
     }
 

@@ -30,7 +30,6 @@ import org.openpnp.machine.reference.psh.ActuatorsPropertySheetHolder;
 import org.openpnp.machine.reference.psh.CamerasPropertySheetHolder;
 import org.openpnp.machine.reference.psh.NozzlesPropertySheetHolder;
 import org.openpnp.machine.reference.solutions.HeadSolutions;
-import org.openpnp.machine.reference.wizards.ReferenceHeadConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Location;
@@ -144,7 +143,7 @@ public class ReferenceHead extends AbstractHead {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceHeadConfigurationWizard(this);
+        return org.openpnp.machine.reference.wizards.HeadForm.build(this);
     }
 
     @Override
