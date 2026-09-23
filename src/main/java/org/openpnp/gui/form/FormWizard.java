@@ -243,8 +243,12 @@ public class FormWizard extends AbstractConfigurationWizard {
         GridBagConstraints gc = new GridBagConstraints();
         gc.gridy = row;
         gc.gridx = 0;
-        gc.anchor = GridBagConstraints.WEST;
-        gc.insets = new Insets(row == 0 ? 0 : 8, 0, 0, 10);
+        // Beside the first line of what is taller than a field - a location's rows, a list of
+        // switches, a chart - rather than halfway down it.
+        boolean tall = content.getPreferredSize().height > 44;
+        int firstLine = field.kind == Kind.Checklist ? 0 : 7;
+        gc.anchor = tall ? GridBagConstraints.NORTHWEST : GridBagConstraints.WEST;
+        gc.insets = new Insets((row == 0 ? 0 : 8) + (tall ? firstLine : 0), 0, 0, 10);
         JLabel label = Forms.Grid.label(field.label, Tokens.FORM_LABEL);
         boolean fullWidth = field.kind == Kind.Custom && (field.label == null || field.label.isEmpty());
         if (!fullWidth) {
