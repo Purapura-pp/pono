@@ -447,6 +447,7 @@ public class UiRuler {
                 break;
             case "boards":
                 expect(missed, selectRow(page, s -> s.contains("demo-board")), "\u5355\u677f demo-board");
+                expect(missed, selectRow(page, "R12"::equals), "\u8d34\u7247\u4f4d R12");
                 break;
             case "panels":
                 expect(missed, selectRow(page, s -> s.contains("demo-panel")), "\u62fc\u677f demo-panel");
@@ -1029,13 +1030,18 @@ public class UiRuler {
         for (NozzleTip tip : machine.getNozzleTips()) {
             data(data, tip.getName());
         }
+        // The folder a definition is in is the user's as much as its name: "jobs\demo-board.board.xml".
         for (Board board : configuration.getBoards()) {
             data(data, board.getName());
             data(data, board.getFile() == null ? null : board.getFile().getName());
+            data(data, board.getFile() == null || board.getFile().getParentFile() == null ? null
+                    : board.getFile().getParentFile().getName());
         }
         for (Panel panel : configuration.getPanels()) {
             data(data, panel.getName());
             data(data, panel.getFile() == null ? null : panel.getFile().getName());
+            data(data, panel.getFile() == null || panel.getFile().getParentFile() == null ? null
+                    : panel.getFile().getParentFile().getName());
         }
         File[] jobs = new File(config, "jobs").listFiles();
         for (File job : jobs == null ? new File[0] : jobs) {

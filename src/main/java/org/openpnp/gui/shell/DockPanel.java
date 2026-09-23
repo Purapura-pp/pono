@@ -513,6 +513,18 @@ public class DockPanel extends RoundedPanel {
             return button;
         }
 
+        /**
+         * A button with words that opens a menu, as Import with its importers; its words go on a
+         * narrow row as the other buttons' do.
+         */
+        public JButton menu(String labelKey, String icon, java.util.function.Supplier<javax.swing.JPopupMenu> menu) {
+            JButton button = Ui.menuButton(text(labelKey), Ui.iconSm(icon), Ui.Size.Sm, Ui.Variant.Default, menu);
+            button.setFocusable(false);
+            add(button);
+            worded(button);
+            return button;
+        }
+
         /** The 1 by 18 rule between groups. */
         public void separator() {
             gap();
@@ -607,6 +619,15 @@ public class DockPanel extends RoundedPanel {
         scroll.setBorder(null);
         scroll.getViewport().setBackground(Ui.surface());
         return scroll;
+    }
+
+    /** The stylesheet's {@code .dock-foot}: a line of small grey text under the content, over a rule. */
+    public static JLabel foot(String text) {
+        JLabel foot = Ui.muted(text);
+        foot.setFont(Ui.font(11.5f));
+        foot.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
+                new EmptyBorder(6, 12, 6, 12)));
+        return foot;
     }
 
     /** The "no side" label the stylesheet uses in empty muted cells. */

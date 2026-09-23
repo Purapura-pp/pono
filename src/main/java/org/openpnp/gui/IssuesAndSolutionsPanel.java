@@ -104,7 +104,7 @@ public class IssuesAndSolutionsPanel extends JPanel {
     private final JCheckBox showHandled = new JCheckBox(
             Translations.getString("IssuesAndSolutionsPanel.ShowHandled")); //$NON-NLS-1$
     private final JTextField filter;
-    private final JLabel foot = Ui.muted(""); //$NON-NLS-1$
+    private final JLabel foot = DockPanel.foot(""); //$NON-NLS-1$
     private final JButton collect;
     private boolean finding;
     private Date lastFound;
@@ -170,9 +170,6 @@ public class IssuesAndSolutionsPanel extends JPanel {
         });
         issuesPage.setOpaque(false);
         issuesPage.add(toolbar, BorderLayout.NORTH);
-        foot.setFont(Ui.font(11.5f));
-        foot.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
-                new EmptyBorder(6, 12, 6, 12)));
         issuesPage.add(foot, BorderLayout.SOUTH);
         measureHolder.setOpaque(false);
         overviewHolder.setOpaque(false);
