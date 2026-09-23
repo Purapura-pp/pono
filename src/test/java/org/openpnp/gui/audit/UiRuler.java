@@ -456,7 +456,8 @@ public class UiRuler {
                 expect(missed, selectFirstRow(page), "\u7b2c\u4e00\u4e2a\u89c6\u89c9\u914d\u7f6e");
                 break;
             case "machine":
-                expect(missed, selectTreeNode(page, "Top"), "\u76f8\u673a Top");
+                expect(missed, selectTreeNode(page, "Top") || selectRow(page, s -> s.endsWith(" Top")),
+                        "\u76f8\u673a Top");
                 break;
             default:
                 break;

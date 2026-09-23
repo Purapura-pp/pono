@@ -490,12 +490,11 @@ public class InspectorPanel extends RoundedPanel {
      * feeder, and which one it is decides what the sheets below even contain.
      */
     public static String typeOf(Object holder) {
-        // "料带飞达 · ReferenceStripFeeder": the name the user knows, and the class the
-        // configuration file and the wiki call it by.
+        // The name the user knows, "料带飞达"; the class is for the configuration file, and is
+        // shown only where there is no name for it yet.
         String simple = holder.getClass().getSimpleName();
         String display = org.openpnp.gui.support.DisplayNames.typeName(holder.getClass());
-        return display == null || display.isEmpty() || display.equals(simple) ? simple
-                : display + " \u00b7 " + simple; //$NON-NLS-1$
+        return display == null || display.isEmpty() ? simple : display;
     }
 
     /** Fired when the column goes from showing nothing to showing something, or back. */
