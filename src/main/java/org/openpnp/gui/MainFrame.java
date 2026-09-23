@@ -187,6 +187,8 @@ public class MainFrame extends JFrame {
     private VisionSettingsPanel visionSettingsPanel;
     private JDialog frameCamera;
     private Map<KeyStroke, Action> hotkeyActionMap;
+    /** The "/" that moved the focus to a filter, whose typed character is still to come. */
+    private boolean slashTaken;
     private AbstractConfigurationWizard wizardWithActiveProcess = null;
     private UndoManager undoManager = new UndoManager();
     private boolean windowStyleMultiple;
@@ -352,6 +354,16 @@ public class MainFrame extends JFrame {
             return null;
         }
         return placement.getId() + " \u00b7 " + placement.getPart().getPackage().getId(); //$NON-NLS-1$
+    }
+
+    private LogPanel logPanel;
+
+    /** The log page, where an error and what led up to it are, from the error dialog. */
+    public void showLog() {
+        if (logPanel != null) {
+            navigationRail.setSelectedComponent(logPanel);
+            toFront();
+        }
     }
 
     private DiagnosticsPanel diagnosticsPanel;
@@ -759,28 +771,15 @@ public class MainFrame extends JFrame {
         mnView.setMnemonic(KeyEvent.VK_V);
         menuBar.add(mnView);
 
-        // View -> System Units
-        ButtonGroup buttonGroup = new ButtonGroup();
-        JMenu mnUnits = new JMenu(Translations.getString("Menu.View.SystemUnits")); //$NON-NLS-1$
-        mnUnits.setMnemonic(KeyEvent.VK_S);
-        mnView.add(mnUnits);
+        // The units and the language are on the settings page now, with the theme.
+        JMenuItem settingsItem = new JMenuItem(Translations.getString("Menu.View.Settings")); //$NON-NLS-1$
+        settingsItem.addActionListener(e -> showSettings());
+        mnView.add(settingsItem);
+        mnView.addSeparator();
 
-        JMenuItem menuItem;
-        menuItem = new JCheckBoxMenuItem(inchesUnitSelected);
-        buttonGroup.add(menuItem);
-        if (configuration.getSystemUnits() == LengthUnit.Inches) {
-            menuItem.setSelected(true);
-        }
-        mnUnits.add(menuItem);
-        menuItem = new JCheckBoxMenuItem(millimetersUnitSelected);
-        buttonGroup.add(menuItem);
-        if (configuration.getSystemUnits() == LengthUnit.Millimeters) {
-            menuItem.setSelected(true);
-        }
-        mnUnits.add(menuItem);
-        
         // View -> Tables Linked
-        buttonGroup = new ButtonGroup();
+        JMenuItem menuItem;
+        ButtonGroup buttonGroup = new ButtonGroup();
         JMenu tablesLinked = new JMenu(Translations.getString("Menu.View.TablesLinked")); //$NON-NLS-1$
         mnView.add(tablesLinked);
 
@@ -797,25 +796,6 @@ public class MainFrame extends JFrame {
         }
         tablesLinked.add(menuItem);
         
-        // View -> Language
-        buttonGroup = new ButtonGroup();
-        JMenu mnLanguage = new JMenu(Translations.getString("Menu.View.Language")); //$NON-NLS-1$
-        mnView.add(mnLanguage);
-
-        // Discovered from the bundles that are present, so adding a language does not mean
-        // editing this list. See Translations.getAvailableLocales.
-        Locale selectedLocale = configuration.getLocale();
-        List<Locale> locales = new ArrayList<>(Translations.getAvailableLocales());
-        Collator collator = Collator.getInstance();
-        locales.sort((a, b) -> collator.compare(a.getDisplayName(), b.getDisplayName()));
-        for (Locale locale : locales) {
-            menuItem = new JCheckBoxMenuItem(new LanguageSelectionAction(locale));
-            buttonGroup.add(menuItem);
-            mnLanguage.add(menuItem);
-            if (locale.equals(selectedLocale)) {
-                menuItem.setSelected(true);
-            }
-        }
         
 
         // View, continued: what used to be the Window menu. The top bar has room for the
@@ -951,6 +931,50 @@ public class MainFrame extends JFrame {
                     if (Hotkeys.STOP_MACHINE.equals(ks) && stopMachineAction.isEnabled()) {
                         stopMachineAction.actionPerformed(null);
                         return;
+                    }
+                    // The command search opens from anywhere in the main window, a text field
+                    // included: Ctrl+K types nothing, so there is nothing for it to take away.
+                    if (Hotkeys.COMMAND_PALETTE.equals(ks) && ((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
+                            && KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == MainFrame.this) {
+                        SwingUtilities.invokeLater(MainFrame.this::openCommandPalette);
+                        return;
+                    }
+                    // Ctrl+1 to Ctrl+9 go to the rail's pages, in its order, wherever the focus is.
+                    if (navigationRail != null && ((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
+                            && ((KeyEvent) event).getModifiersEx() == KeyEvent.CTRL_DOWN_MASK
+                            && ((KeyEvent) event).getKeyCode() >= KeyEvent.VK_1
+                            && ((KeyEvent) event).getKeyCode() <= KeyEvent.VK_9
+                            && KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == MainFrame.this) {
+                        int index = ((KeyEvent) event).getKeyCode() - KeyEvent.VK_1;
+                        java.util.List<Component> pages = navigationRail.getPageComponents();
+                        if (index < pages.size() && pages.get(index) != settingsPanel) {
+                            showTab(pages.get(index));
+                            return;
+                        }
+                    }
+                    // "/" goes to the page's filter from anywhere but text. It is taken here, as a
+                    // table would otherwise start editing its cell with it, and the "/" typed
+                    // after it is dropped rather than landing in the filter.
+                    if (((KeyEvent) event).getID() == KeyEvent.KEY_TYPED && slashTaken) {
+                        slashTaken = false;
+                        if (((KeyEvent) event).getKeyChar() == '/') {
+                            return;
+                        }
+                    }
+                    if (((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
+                            && (((KeyEvent) event).getKeyCode() == KeyEvent.VK_SLASH
+                                    || ((KeyEvent) event).getKeyCode() == KeyEvent.VK_DIVIDE)
+                            && ((KeyEvent) event).getModifiersEx() == 0
+                            && KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == MainFrame.this
+                            && !UiUtils.isTextInputFocused()) {
+                        javax.swing.JTextField filter = org.openpnp.gui.shell.Ui.filterFor(KeyboardFocusManager
+                                .getCurrentKeyboardFocusManager().getFocusOwner(), getContentPane());
+                        if (filter != null) {
+                            filter.requestFocusInWindow();
+                            filter.selectAll();
+                            slashTaken = true;
+                            return;
+                        }
                     }
                     // Everything else moves the machine or changes the job, so it only applies
                     // where the user is looking at the machine: the main window or the camera
@@ -1196,14 +1220,19 @@ public class MainFrame extends JFrame {
         diagnosticsPanel = new DiagnosticsPanel(configuration);
         addNavigation("Diagnostics", org.openpnp.gui.shell.Ui.icon("ruler", 20), diagnosticsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         addNavigation("IssuesAndSolutions", org.openpnp.gui.shell.Ui.icon("alert", 20), issuesAndSolutionsPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        LogPanel logPanel = new LogPanel();
+        logPanel = new LogPanel();
         addNavigation("Log", org.openpnp.gui.shell.Ui.icon("log", 20), logPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        // Settings opens the appearance dialog for now; the plan is for it to gather the settings
-        // that are spread across the menus.
-        navigationRail.addAction(
+        // Settings is a page of its own at the foot of the rail: appearance, language and units,
+        // the operator, saving - which were an appearance dialog and scattered menu items.
+        settingsPanel = new SettingsPanel(configuration, this);
+        org.openpnp.gui.shell.RoundedPanel settingsCard = org.openpnp.gui.shell.RoundedPanel.card();
+        settingsCard.setLayout(new BorderLayout());
+        settingsCard.add(settingsPanel, BorderLayout.CENTER);
+        pageKeys.put(settingsPanel, "Settings"); //$NON-NLS-1$
+        navigationRail.addFootPage(
                 Translations.getString("MainFrame.Navigation.Settings"), //$NON-NLS-1$
                 Translations.getString("MainFrame.Navigation.Settings.toolTipText"), //$NON-NLS-1$
-                org.openpnp.gui.shell.Ui.icon("gear", 20), e -> ThemeDialog.showThemeDialog(MainFrame.this)); //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.icon("gear", 20), settingsPanel, settingsCard); //$NON-NLS-1$
         contentPane.add(navigationRail, BorderLayout.WEST);
 
         navigationRail.addChangeListener(new ChangeListener() {
@@ -1263,7 +1292,7 @@ public class MainFrame extends JFrame {
         configuration.addPropertyChangeListener("dirty", e -> SwingUtilities.invokeLater(() -> { //$NON-NLS-1$
             boolean dirty = configuration.isDirty();
             topBarPanel.setConfigurationDirty(dirty);
-            if (dirty) {
+            if (dirty && prefs.getBoolean(SettingsPanel.PREF_AUTOSAVE, true)) {
                 autosaveTimer.restart();
             }
             else {
@@ -1400,24 +1429,42 @@ public class MainFrame extends JFrame {
 	            scriptFileWatcher = new ScriptFileWatcher(configuration.getScripting());
 	            scriptFileWatcher.setMenu(mnScripts);
 	            
+	            // The welcome and its three steps, at every start until the user says not to.
 	            if (configuration.getMachine().getProperty("Welcome2_0_Dialog_Shown") == null) {
-	                Welcome2_0Dialog dialog = new Welcome2_0Dialog(this);
-	                dialog.setSize(750, 550);
-	                dialog.setLocationRelativeTo(null);
-	                dialog.setModal(true);
+	                Welcome2_0Dialog dialog = new Welcome2_0Dialog(this, configuration);
+	                dialog.setLocationRelativeTo(this);
 	                dialog.setVisible(true);
-	                configuration.getMachine().setProperty("Welcome2_0_Dialog_Shown", true);
+	                if (dialog.isDontShowAgain()) {
+	                    configuration.getMachine().setProperty("Welcome2_0_Dialog_Shown", true);
+	                }
 	            }
 	            configurationLoaded = true;    
 	        }
 	        catch (Exception e) {
 	            Logger.error(e, "Failed to load the configuration from {}.", //$NON-NLS-1$
 	                    configuration.getConfigurationDirectory());
-	            if (!MessageBoxes.errorBoxWithRetry(this,
-	                    Translations.getString("MainFrame.LoadConfig.Error.Title"), //$NON-NLS-1$
-	                    String.format(Translations.getString("MainFrame.LoadConfig.Error.Message"), //$NON-NLS-1$
-	                            e.getMessage(),
-	                            configuration.getConfigurationDirectory().getAbsolutePath()))) {
+	            // The directory is the machine's whole setup: the way back is the file that failed
+	            // or a backup of it, never starting over, which the message used to suggest.
+	            java.io.File directory = configuration.getConfigurationDirectory();
+	            java.io.StringWriter stack = new java.io.StringWriter();
+	            e.printStackTrace(new java.io.PrintWriter(stack));
+	            org.openpnp.gui.shell.Dialogs.Content content = new org.openpnp.gui.shell.Dialogs.Content()
+	                    .tone(org.openpnp.gui.shell.Dialogs.Tone.Err, "alert") //$NON-NLS-1$
+	                    .title(Translations.getString("MainFrame.LoadConfig.Error.Title")) //$NON-NLS-1$
+	                    .what(String.format(Translations.getString("MainFrame.LoadConfig.Error.What"), //$NON-NLS-1$
+	                            org.openpnp.gui.shell.ErrorMessages.explain(null, e.getMessage()).what))
+	                    .more(String.format(Translations.getString("MainFrame.LoadConfig.Error.More"), //$NON-NLS-1$
+	                            directory.getAbsolutePath()))
+	                    .details(stack.toString());
+	            java.util.List<org.openpnp.gui.shell.Dialogs.Choice> choices = java.util.Arrays.asList(
+	                    org.openpnp.gui.shell.Dialogs.Choice
+	                            .plain(Translations.getString("MainFrame.LoadConfig.Error.OpenFolder")) //$NON-NLS-1$
+	                            .utility(() -> UiUtils.openFolder(this, directory)),
+	                    org.openpnp.gui.shell.Dialogs.Choice
+	                            .plain(Translations.getString("MainFrame.LoadConfig.Error.Quit")), //$NON-NLS-1$
+	                    org.openpnp.gui.shell.Dialogs.Choice
+	                            .primary(Translations.getString("MainFrame.LoadConfig.Error.Retry"))); //$NON-NLS-1$
+	            if (org.openpnp.gui.shell.Dialogs.show(this, content, choices, 1, 2) != 2) {
 	            	System.exit(1);
 	            }
 	        }
@@ -1821,6 +1868,11 @@ public class MainFrame extends JFrame {
             report(Translations.getString("MainFrame.Machine.EnableFailed"), reason); //$NON-NLS-1$
         }
 
+        @Override
+        public void machineBusy(Machine machine, boolean busy) {
+            SwingUtilities.invokeLater(() -> statusBarPanel.setBusy(busy));
+        }
+
         private void report(String what, String reason) {
             if (reason == null || reason.trim().isEmpty()) {
                 return;
@@ -1889,14 +1941,12 @@ public class MainFrame extends JFrame {
         // A running job first: quitting under it used to save, ask about the job file and switch
         // the machine off in the middle of a placement, without a word about the job itself.
         if (jobPanel.isJobRunning()) {
-            int answer = JOptionPane.showOptionDialog(this,
-                    Translations.getString("MainFrame.Quit.JobRunning.Message"), //$NON-NLS-1$
+            // Stopping a job is one of the dangerous things: red, named, Cancel where the focus is.
+            boolean stop = org.openpnp.gui.shell.Dialogs.confirmDanger(this,
                     Translations.getString("MainFrame.Quit.JobRunning.Title"), //$NON-NLS-1$
-                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null,
-                    new Object[] { Translations.getString("MainFrame.Quit.JobRunning.Stop"), //$NON-NLS-1$
-                            Translations.getString("Dialog.Cancel") }, //$NON-NLS-1$
-                    Translations.getString("Dialog.Cancel")); //$NON-NLS-1$
-            if (answer != 0) {
+                    Translations.getString("MainFrame.Quit.JobRunning.Message"), null, null, //$NON-NLS-1$
+                    Translations.getString("MainFrame.Quit.JobRunning.Stop")); //$NON-NLS-1$
+            if (!stop) {
                 return false;
             }
             jobPanel.stopJobAction.actionPerformed(null);
@@ -1925,13 +1975,12 @@ public class MainFrame extends JFrame {
         catch (Exception e) {
             String message = String.format(
                     Translations.getString("MainFrame.QuitSaveConfig.Error.Message"), e.getMessage()); //$NON-NLS-1$
-            message = message.replaceAll("\n", "<br/>"); //$NON-NLS-1$ //$NON-NLS-2$
-            message = message.replaceAll("\r", ""); //$NON-NLS-1$ //$NON-NLS-2$
-            message = "<html><body width=\"400\">" + message + "</body></html>"; //$NON-NLS-1$ //$NON-NLS-2$
-            int result = JOptionPane.showConfirmDialog(this, message,
-                    Translations.getString("MainFrame.SaveConfig.Error.Title"), //$NON-NLS-1$
-                    JOptionPane.YES_NO_OPTION);
-            if (result != JOptionPane.YES_OPTION) {
+            // Quitting now loses what was not saved: the button says so.
+            int result = org.openpnp.gui.shell.Dialogs.ask(this, org.openpnp.gui.shell.Dialogs.Tone.Err, "save", //$NON-NLS-1$
+                    Translations.getString("MainFrame.SaveConfig.Error.Title"), message.replace("\r", ""), null, //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                    new org.openpnp.gui.shell.Dialogs.Choice(Translations.getString("MainFrame.QuitSaveConfig.QuitAnyway"), //$NON-NLS-1$
+                            null, org.openpnp.gui.shell.Ui.Variant.SolidDanger));
+            if (result != 0) {
                 return false;
             }
         }
@@ -2098,12 +2147,31 @@ public class MainFrame extends JFrame {
         }
     };
 
+    /** The settings page, where the appearance dialog used to open. */
     private Action editThemeAction = new AbstractAction(Translations.getString("Menu.Window.Theme")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            ThemeDialog.showThemeDialog(mainFrame);
+            showSettings();
         }
     };
+
+    private SettingsPanel settingsPanel;
+
+    public void showSettings() {
+        if (settingsPanel != null) {
+            navigationRail.setSelectedComponent(settingsPanel);
+        }
+    }
+
+    /** The keyboard shortcuts, as Help lists them; for the settings page. */
+    public void showHotkeys() {
+        hotkeysAction.actionPerformed(null);
+    }
+
+    /** What this is, as Help says it; for the settings page. */
+    public void showAbout() {
+        aboutAction.actionPerformed(null);
+    }
 
     private Action saveConfigAction = new AbstractAction(Translations.getString("Menu.File.SaveConfiguration")) { //$NON-NLS-1$
         @Override
@@ -2168,7 +2236,8 @@ public class MainFrame extends JFrame {
         }
     };
     
-    private Action userManualLinkAction = new AbstractAction(Translations.getString("Menu.Help.UserManual")) { //$NON-NLS-1$
+    /** Also the welcome window's "manual" link. */
+    public final Action userManualLinkAction = new AbstractAction(Translations.getString("Menu.Help.UserManual")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
             UiUtils.browseUri("https://github.com/openpnp/openpnp/wiki/User-Manual"); //$NON-NLS-1$

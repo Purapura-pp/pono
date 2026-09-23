@@ -138,7 +138,7 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         JLabel lblSearch = new JLabel(Translations.getString("PackagesPanel.SearchLabel.text")); //$NON-NLS-1$
         panel_1.add(lblSearch);
 
-        searchTextField = new JTextField();
+        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -167,6 +167,10 @@ public class PackagesPanel extends JPanel implements WizardContainer {
                 return null;
             }
         };
+        // Enter edits the cell, Delete deletes what is selected, which asks first.
+        org.openpnp.gui.support.TableUtils.bindKeys(table, deletePackageAction);
+        org.openpnp.gui.components.AutoSelectTextTable.setEmptyText(table,
+                Translations.getString("PackagesPanel.Empty")); //$NON-NLS-1$
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
         JComboBox<BottomVisionSettings> bottomVisionCombo = new JComboBox<>(
@@ -344,21 +348,8 @@ public class PackagesPanel extends JPanel implements WizardContainer {
             }
             
             List<String> ids = selections.stream().map(Package::getId).collect(Collectors.toList());
-            String formattedIds;
-            if (ids.size() <= 3) {
-                formattedIds = String.join(", ", ids);
-            }
-            else {
-                formattedIds = String.join(", ", ids.subList(0, 3)) + ", and " + (ids.size() - 3) + " others";
-            }
-            
-            int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                    Translations.getString("DialogMessages.ConfirmDelete.text" //$NON-NLS-1$
-                    ) + " " + formattedIds + "?", //$NON-NLS-1$ //$NON-NLS-1$
-                    Translations.getString("DialogMessages.ConfirmDelete.title" //$NON-NLS-1$
-                    ) + selections.size() + " " + Translations.getString(
-                                    "CommonWords.packages") + "?", JOptionPane.YES_NO_OPTION); //$NON-NLS-1$ //$NON-NLS-2$
-            if (ret == JOptionPane.YES_OPTION) {
+            if (org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
+                    "Dialogs.Kind.Packages", ids)) { //$NON-NLS-1$
                 for (Package pkg : selections) {
                     configuration.removePackage(pkg);
                 }

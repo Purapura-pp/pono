@@ -272,6 +272,11 @@ public final class Ui {
         }
 
         @Override
+        public String getToolTipText() {
+            return toolTip(this, super.getToolTipText());
+        }
+
+        @Override
         public void paint(Graphics g) {
             paintDimmed(this, g, super::paint);
         }
@@ -368,11 +373,79 @@ public final class Ui {
      * colour, and a tooltip saying so. Every such button carries it, and no other does.
      */
     public static <B extends javax.swing.AbstractButton> B movesMachine(B button) {
+        // Not a focus stop: the space bar pressed for something else must not move the machine.
+        // A dialog's button is the exception, where the focus is the answer being chosen.
+        if (javax.swing.SwingUtilities.getAncestorOfClass(javax.swing.JDialog.class, button) == null) {
+            button.setFocusable(false);
+        }
         button.setIcon(icon("zap", 13, warn())); //$NON-NLS-1$
         button.setHorizontalTextPosition(javax.swing.SwingConstants.LEFT);
         String tip = org.openpnp.Translations.getString("Form.MovesMachine"); //$NON-NLS-1$
         button.setToolTipText(button.getToolTipText() == null ? tip : button.getToolTipText() + " \u00b7 " + tip); //$NON-NLS-1$
         return button;
+    }
+
+    /**
+     * Client property of a control, or value of the action behind a button: why it is greyed, a
+     * String or a Supplier of one. The tooltip of a greyed control says it under what the control
+     * does, where it used to leave the user to guess.
+     */
+    public static final String WHY_DISABLED = "Pono.whyDisabled"; //$NON-NLS-1$
+
+    /** Says why the control is greyed while it is; see {@link #WHY_DISABLED}. */
+    public static <C extends JComponent> C whyDisabled(C component, java.util.function.Supplier<String> reason) {
+        component.putClientProperty(WHY_DISABLED, reason);
+        // A control with no tooltip of its own is not asked for one at all.
+        javax.swing.ToolTipManager.sharedInstance().registerComponent(component);
+        return component;
+    }
+
+    /**
+     * What the machine lacks for anything that moves it, or null when it lacks nothing.
+     * 
+     * @param machine Null before the configuration is loaded, which counts as not enabled.
+     */
+    public static String machineReason(org.openpnp.spi.Machine machine) {
+        if (machine == null || !machine.isEnabled()) {
+            return org.openpnp.Translations.getString("Ui.Disabled.MachineOff"); //$NON-NLS-1$
+        }
+        if (!machine.isHomed()) {
+            return org.openpnp.Translations.getString("Ui.Disabled.NotHomed"); //$NON-NLS-1$
+        }
+        if (machine.isBusy()) {
+            return org.openpnp.Translations.getString("Ui.Disabled.Busy"); //$NON-NLS-1$
+        }
+        return null;
+    }
+
+    /** The reason a greyed control gives, or null if it gives none. */
+    static String reasonDisabled(JComponent component) {
+        Object why = component.getClientProperty(WHY_DISABLED);
+        if (why == null && component instanceof javax.swing.AbstractButton
+                && ((javax.swing.AbstractButton) component).getAction() != null) {
+            why = ((javax.swing.AbstractButton) component).getAction().getValue(WHY_DISABLED);
+        }
+        if (why instanceof java.util.function.Supplier) {
+            why = ((java.util.function.Supplier<?>) why).get();
+        }
+        return why == null || why.toString().trim().isEmpty() ? null : why.toString();
+    }
+
+    /** The tooltip of a control, with the reason it is greyed under it while it is. */
+    static String toolTip(JComponent component, String toolTip) {
+        if (component.isEnabled()) {
+            return toolTip;
+        }
+        String reason = reasonDisabled(component);
+        if (reason == null) {
+            return toolTip;
+        }
+        String what = toolTip == null ? "" //$NON-NLS-1$
+                : toolTip.replaceAll("(?i)</?html>", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$
+        Color warn = warn();
+        return "<html>" + (what.isEmpty() ? "" : what + "<br>") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                + String.format("<span style='color:#%06x'>", warn.getRGB() & 0xffffff) //$NON-NLS-1$
+                + reason.replace("<", "&lt;") + "</span></html>"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
     /** A button of the stylesheet's shape that opens a menu. */
@@ -471,6 +544,11 @@ public final class Ui {
         }
 
         @Override
+        public String getToolTipText() {
+            return toolTip(this, super.getToolTipText());
+        }
+
+        @Override
         public void paint(Graphics g) {
             paintDimmed(this, g, super::paint);
         }
@@ -513,6 +591,48 @@ public final class Ui {
         Danger,
         /** The err red as a fill, for stopping the machine: the one button that must stand out. */
         SolidDanger
+    }
+
+    /** Client property on a page's filter field, the one "/" goes to. */
+    public static final String FILTER = "Pono.filter"; //$NON-NLS-1$
+
+    /** Makes a field the filter "/" goes to, from anywhere on its page but a text field. */
+    public static <T extends javax.swing.JTextField> T markFilter(T field) {
+        field.putClientProperty(FILTER, Boolean.TRUE);
+        return field;
+    }
+
+    /**
+     * The filter "/" goes to from the given component: the nearest showing one, looking first
+     * among what shares an ancestor with it. Null if the page has none.
+     */
+    public static javax.swing.JTextField filterFor(Component from, Component root) {
+        for (Component c = from; c != null; c = c.getParent()) {
+            javax.swing.JTextField found = findFilter(c);
+            if (found != null) {
+                return found;
+            }
+            if (c == root) {
+                break;
+            }
+        }
+        return from == null && root != null ? findFilter(root) : null;
+    }
+
+    private static javax.swing.JTextField findFilter(Component c) {
+        if (c instanceof javax.swing.JTextField && c.isShowing() && c.isEnabled()
+                && Boolean.TRUE.equals(((JComponent) c).getClientProperty(FILTER))) {
+            return (javax.swing.JTextField) c;
+        }
+        if (c instanceof java.awt.Container && c.isShowing()) {
+            for (Component child : ((java.awt.Container) c).getComponents()) {
+                javax.swing.JTextField found = findFilter(child);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     /** A button in the stylesheet's shape. The action's text and icon are kept if it has them. */
@@ -575,7 +695,11 @@ public final class Ui {
         String[] v;
         switch (variant) {
             case Ghost:
-                return borderless("$Pono.text2", "$Pono.surface3", "$Pono.text"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                // A dialog's Cancel is often its default button: still no fill, where the look
+                // and feel filled it with the accent.
+                return borderless("$Pono.text2", "$Pono.surface3", "$Pono.text") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        + "; default.background: null; default.foreground: $Pono.text2" //$NON-NLS-1$
+                        + "; default.hoverBackground: $Pono.hover; default.pressedBackground: $Pono.surface3"; //$NON-NLS-1$
             case Primary:
                 v = new String[] { "$Pono.accent", "$Pono.accent", "$Pono.onAccent", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "hoverBackground: $Pono.accentStrong; hoverBorderColor: $Pono.accentStrong; " //$NON-NLS-1$
@@ -605,12 +729,34 @@ public final class Ui {
         }
         return "background: " + v[0] + "; borderColor: " + v[1] + "; foreground: " + v[2] //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 + "; disabledBackground: " + v[0] + "; disabledBorderColor: " + v[1] //$NON-NLS-1$ //$NON-NLS-2$
-                + "; disabledText: " + v[2] + "; " + v[3]; //$NON-NLS-1$ //$NON-NLS-2$
+                + "; disabledText: " + v[2] + "; " + v[3] //$NON-NLS-1$ //$NON-NLS-2$
+                // The same as the default button of a dialog, which the look and feel otherwise
+                // paints in colours of its own: white with an accent border in the light theme,
+                // over the variant's.
+                + "; default.background: " + v[0] + "; default.focusedBackground: " + v[0] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; default.borderColor: " + v[1] + "; default.foreground: " + v[2] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; default.borderWidth: 1" + defaultStates(v[3]); //$NON-NLS-1$
+    }
+
+    private static final java.util.regex.Pattern STATE_COLOUR = java.util.regex.Pattern
+            .compile("\\b(hoverBackground|hoverBorderColor|pressedBackground):\\s*([^;]+)"); //$NON-NLS-1$
+
+    /** The hover and pressed colours of a variant again, for when it is the default button. */
+    static String defaultStates(String states) {
+        StringBuilder out = new StringBuilder();
+        java.util.regex.Matcher m = STATE_COLOUR.matcher(states);
+        while (m.find()) {
+            out.append("; default.").append(m.group(1)).append(": ").append(m.group(2).trim()); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        return out.toString();
     }
 
     private static void style(javax.swing.AbstractButton button, Size size, Variant variant,
             boolean square) {
-        button.setFocusable(false);
+        // Tab reaches a button, and its border shows the focus. The buttons that move the machine
+        // or run the job are made unfocusable where they are built, so that a space bar meant
+        // for a table cannot press one.
+        button.setFocusable(true);
         button.setIconTextGap(7);
         button.setFont(weighted(size.fontSize, Tokens.FW_BUTTON));
         StringBuilder style = new StringBuilder();

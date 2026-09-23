@@ -21,13 +21,17 @@ public class CvPipelineEditorDialog extends JDialog {
             @Override
             public void windowClosing(WindowEvent e) {
                 if (editor.isDirty()) {
-                    int selection = JOptionPane.showConfirmDialog(owner,
-                            Translations.getString("CvPipelineEditorDialog.Closing.Message"), //$NON-NLS-1$
+                    int chosen = org.openpnp.gui.shell.Dialogs.ask(CvPipelineEditorDialog.this,
+                            org.openpnp.gui.shell.Dialogs.Tone.Info, "info", //$NON-NLS-1$
                             Translations.getString("CvPipelineEditorDialog.Closing.Title"), //$NON-NLS-1$
-                            JOptionPane.YES_NO_CANCEL_OPTION,
-                            JOptionPane.QUESTION_MESSAGE,
-                            null
-                            );
+                            Translations.getString("CvPipelineEditorDialog.Closing.What"), //$NON-NLS-1$
+                            null,
+                            org.openpnp.gui.shell.Dialogs.Choice.plain(
+                                    Translations.getString("CvPipelineEditorDialog.Closing.Discard")), //$NON-NLS-1$
+                            org.openpnp.gui.shell.Dialogs.Choice.primary(
+                                    Translations.getString("CvPipelineEditorDialog.Closing.Save"))); //$NON-NLS-1$
+                    int selection = chosen == 1 ? JOptionPane.YES_OPTION
+                            : chosen == 0 ? JOptionPane.NO_OPTION : JOptionPane.CANCEL_OPTION;
                     switch (selection) {
                         case JOptionPane.YES_OPTION:
                             super.windowClosing(e);

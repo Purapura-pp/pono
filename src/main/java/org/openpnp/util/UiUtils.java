@@ -271,35 +271,38 @@ public class UiUtils {
                 actionThrunnable.thrun();
             }
             else if (Configuration.get().getMachine().isEnabled()) {
-                // We need to move there, ask the user to confirm.
+                // We need to move there, ask the user to confirm. The buttons say what they do:
+                // this used to be Yes, No and Cancel, where No meant "do it without moving".
+                org.openpnp.gui.shell.Dialogs.Choice move = org.openpnp.gui.shell.Dialogs.Choice.primary(
+                        Translations.getString(allowWithoutMove ? "UiUtils.ConfirmMove.MoveAndGo" //$NON-NLS-1$
+                                : "UiUtils.ConfirmMove.Move")) //$NON-NLS-1$
+                        .movesMachine();
+                String title = String.format(Translations.getString(allowWithoutMove
+                        ? "UiUtils.ConfirmMove.Question" : "UiUtils.ConfirmMove.Proceed"), //$NON-NLS-1$ //$NON-NLS-2$
+                        moveBeforeActionDescription).replace("\n", " ").trim(); //$NON-NLS-1$ //$NON-NLS-2$
                 int result;
                 if (allowWithoutMove) {
-                    if (moveBeforeActionDescription != null) {
-                        result = JOptionPane.showConfirmDialog(parentComponent,
-                                String.format(Translations.getString( //$NON-NLS-1$
-                                        "UiUtils.ConfirmMove.Question"),
-                                        moveBeforeActionDescription),
-                                null, JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
-                    }
-                    else {
-                        result = JOptionPane.NO_OPTION;
-                    }
+                    result = org.openpnp.gui.shell.Dialogs.ask(parentComponent,
+                            org.openpnp.gui.shell.Dialogs.Tone.Warn, "move", title, //$NON-NLS-1$
+                            Translations.getString("UiUtils.ConfirmMove.What"), null, //$NON-NLS-1$
+                            org.openpnp.gui.shell.Dialogs.Choice.plain(
+                                    Translations.getString("UiUtils.ConfirmMove.GoWithoutMove")), //$NON-NLS-1$
+                            move);
+                    // 1 is the move, 0 going on where it stands.
                 }
                 else {
-                    result = JOptionPane.showConfirmDialog(parentComponent,
-                            String.format(Translations.getString( //$NON-NLS-1$
-                                    "UiUtils.ConfirmMove.Proceed"),
-                                    moveBeforeActionDescription),
-                                    null, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    result = org.openpnp.gui.shell.Dialogs.ask(parentComponent,
+                            org.openpnp.gui.shell.Dialogs.Tone.Warn, "move", title, //$NON-NLS-1$
+                            Translations.getString("UiUtils.ConfirmMove.What"), null, move) == 0 ? 1 : -1; //$NON-NLS-1$
                 }
-                if (result == JOptionPane.YES_OPTION) {
+                if (result == 1) {
                     // Move wanted.
                     UiUtils.submitUiMachineTask(() -> {
                         motionThrunnable.thrun();
                         UiUtils.messageBoxOnExceptionLater(actionThrunnable);
                     });
                 }
-                else if (result == JOptionPane.NO_OPTION && allowWithoutMove) {
+                else if (result == 0 && allowWithoutMove) {
                     // No move wanted.
                     actionThrunnable.thrun();
                 }
@@ -314,12 +317,14 @@ public class UiUtils {
                 }
                 else {
                     // Ask the user if it is OK to proceed without moving. 
-                    int result = JOptionPane.showConfirmDialog(parentComponent,
-                            String.format(Translations.getString( //$NON-NLS-1$
-                                    "UiUtils.MachineNotEnabled.ProceedAnyway"),
+                    int result = org.openpnp.gui.shell.Dialogs.ask(parentComponent,
+                            org.openpnp.gui.shell.Dialogs.Tone.Warn, "power", //$NON-NLS-1$
+                            String.format(Translations.getString("UiUtils.MachineNotEnabled"), //$NON-NLS-1$
                                     moveBeforeActionDescription),
-                                    null, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                    if (result == JOptionPane.YES_OPTION) {
+                            Translations.getString("UiUtils.MachineNotEnabled.What"), null, //$NON-NLS-1$
+                            org.openpnp.gui.shell.Dialogs.Choice.primary(
+                                    Translations.getString("UiUtils.ConfirmMove.GoWithoutMove"))); //$NON-NLS-1$
+                    if (result == 0) {
                         actionThrunnable.thrun();
                     }
                 }
@@ -332,6 +337,16 @@ public class UiUtils {
      * 
      * @param uri
      */
+    /** Shows a folder in the system's file manager, and says so when it cannot. */
+    public static void openFolder(java.awt.Component parent, java.io.File folder) {
+        try {
+            Desktop.getDesktop().open(folder);
+        }
+        catch (Exception e) {
+            MessageBoxes.errorBox(parent, Translations.getString("UiUtils.OpenFolder.Failed"), e); //$NON-NLS-1$
+        }
+    }
+
     public static void browseUri(String uri) {
         UiUtils.messageBoxOnException(() -> {
             Logger.trace("Browse to "+uri);
@@ -365,16 +380,12 @@ public class UiUtils {
                     Toolkit.getDefaultToolkit().getSystemClipboard()
                     .setContents(new StringSelection(uri), null);
                     // And tell the user.
-                    MessageBoxes.infoBox("Open Web Browser", 
-                            "<html>"
-                                    + "<p>This platform does not support direct web browsing.</p><br/>"
-                                    + "<p>However, the URI was copied to the clipboard, please paste into your favorite browser's address line.</p><br/>"
-                                    + "<p><a href=\""+uri+"\">"+uri+"</a></p>"
-                                    + "</html>");
+                    MessageBoxes.infoBox(Translations.getString("UiUtils.Browse.Title"), //$NON-NLS-1$
+                            String.format(Translations.getString("UiUtils.Browse.Copied"), uri)); //$NON-NLS-1$
                 }
                 catch (Exception e1) {
                     // Even that failed, nothing left but to lament.
-                    throw new Exception("No system support for URI browsing found. See the log. "+uri, e1);
+                    throw new Exception(String.format(Translations.getString("UiUtils.Browse.Failed"), uri), e1); //$NON-NLS-1$
                 }
             }
         });

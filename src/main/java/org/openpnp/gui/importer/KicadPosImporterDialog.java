@@ -150,14 +150,9 @@ class KicadPosImporterDialog extends JDialog {
         }
 
         public void actionPerformed(ActionEvent e) {
-            FileDialog fileDialog = new FileDialog(KicadPosImporterDialog.this);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".pos"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setVisible(true);
+            FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(KicadPosImporterDialog.this),
+                    Translations.getString("FileDialogs.Import.Title"), ".pos"); //$NON-NLS-1$
+                fileDialog.setVisible(true);
             if (fileDialog.getFile() == null) {
                 return;
             }
@@ -173,14 +168,9 @@ class KicadPosImporterDialog extends JDialog {
         }
 
         public void actionPerformed(ActionEvent e) {
-            FileDialog fileDialog = new FileDialog(KicadPosImporterDialog.this);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".pos"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setVisible(true);
+            FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(KicadPosImporterDialog.this),
+                    Translations.getString("FileDialogs.Import.Title"), ".pos"); //$NON-NLS-1$
+                fileDialog.setVisible(true);
             if (fileDialog.getFile() == null) {
                 return;
             }

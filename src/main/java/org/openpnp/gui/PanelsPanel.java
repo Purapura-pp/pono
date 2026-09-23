@@ -416,14 +416,8 @@ public class PanelsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            FileDialog fileDialog = new FileDialog(frame);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".panel.xml"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setFile("*.panel.xml"); //$NON-NLS-1$
+            FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(frame),
+                    Translations.getString("PanelsPanel.AddPanel.FileDialog.Title"), ".panel.xml"); //$NON-NLS-1$ //$NON-NLS-2$
             fileDialog.setVisible(true);
             try {
                 if (fileDialog.getFile() == null) {

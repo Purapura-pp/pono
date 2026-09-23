@@ -156,13 +156,8 @@ public class KicadModImporter {
 
     public KicadModImporter() throws Exception {
         try {
-            FileDialog fileDialog = new FileDialog(MainFrame.get());
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".kicad_mod"); //$NON-NLS-1$
-                }
-            });
+            FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(MainFrame.get()),
+                    org.openpnp.Translations.getString("FileDialogs.Import.Title"), ".kicad_mod"); //$NON-NLS-1$ //$NON-NLS-2$
             fileDialog.setVisible(true);
             if (fileDialog.getFile() == null) {
                 return;

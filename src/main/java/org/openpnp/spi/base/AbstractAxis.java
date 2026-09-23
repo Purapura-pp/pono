@@ -172,12 +172,10 @@ public abstract class AbstractAxis extends AbstractMachineElement implements Axi
                 message = String.format(
                         Translations.getString("DialogMessages.ConfirmDeleteName"), getName()); //$NON-NLS-1$
             }
-            int ret = JOptionPane.showConfirmDialog(MainFrame.get(),
-                    message,
+            if (org.openpnp.gui.shell.Dialogs.confirmDeleteElement(MainFrame.get(), "Dialogs.Kind.Axes", //$NON-NLS-1$
                     String.format(Translations.getString("AbstractAxis.Delete.Title"), //$NON-NLS-1$
                             getName()),
-                    JOptionPane.YES_NO_OPTION);
-            if (ret == JOptionPane.YES_OPTION) {
+                    message)) {
                 getMachine().removeAxis(AbstractAxis.this);
             }
         }

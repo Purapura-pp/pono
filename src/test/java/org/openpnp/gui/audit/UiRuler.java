@@ -177,6 +177,14 @@ public class UiRuler {
     private MainFrame frame;
     private Configuration configuration;
     private UiAudit.Rules rules;
+    /**
+     * Whether the window is put on the screen. Off it, the ruler runs behind whatever the user is
+     * doing: every photograph is painted from the components, not read off the screen, and the
+     * dialogs are laid out and painted without being shown at all.
+     */
+    private final boolean onscreen;
+    /** Left of every screen a desk is likely to have, and within what Windows keeps coordinates in. */
+    private static final int OFFSCREEN_X = -20000;
     private Map<Component, String> landmarks;
 
     private UiRuler(Map<String, String> options) throws IOException {
@@ -187,6 +195,7 @@ public class UiRuler {
         out = new File(options.getOrDefault("out", "E:/pono-env/ui-ruler/" + stamp));
         roundFilter = split(options.get("rounds"));
         sceneFilter = split(options.get("scenes"));
+        onscreen = Boolean.parseBoolean(options.getOrDefault("onscreen", "false"));
         new File(out, "shots").mkdirs();
         new File(out, "pairs").mkdirs();
         log = new PrintWriter(Files.newBufferedWriter(new File(out, "ruler.log").toPath(),
@@ -199,6 +208,10 @@ public class UiRuler {
         // Before anything asks for a preference: see MemoryPreferencesFactory.
         System.setProperty("java.util.prefs.PreferencesFactory",
                 MemoryPreferencesFactory.class.getName());
+        // A window size on record, so that this is not a first start, which fills the screen.
+        java.util.prefs.Preferences windowPrefs = java.util.prefs.Preferences.userNodeForPackage(MainFrame.class);
+        windowPrefs.putInt("MainFrame.windowWidth", 1600); //$NON-NLS-1$
+        windowPrefs.putInt("MainFrame.windowHeight", 1000); //$NON-NLS-1$
         Map<String, String> options = new LinkedHashMap<>();
         for (int i = 0; i + 1 < args.length; i += 2) {
             options.put(args[i].replaceFirst("^--", ""), args[i + 1]);
@@ -252,6 +265,12 @@ public class UiRuler {
                 if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("gallery"))) {
                     gallery.put(theme, photographGallery(round, theme));
                 }
+                if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("dialogs"))) {
+                    photographDialogs(round, theme);
+                }
+                if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("welcome"))) {
+                    photographWelcome(round, theme);
+                }
             }
             if (gallery.size() == 2) {
                 pairGallery(round, gallery.get("dark"), gallery.get("light"));
@@ -295,14 +314,47 @@ public class UiRuler {
     }
 
     private MainFrame waitForFrame() throws Exception {
-        for (int i = 0; i < 180; i++) {
+        boolean placed = onscreen;
+        for (int i = 0; i < 9000; i++) {
             MainFrame frame = MainFrame.get();
+            // The frame is known from the first line of its constructor, seconds before it is shown.
+            if (frame != null && !placed) {
+                placeOffScreen(frame);
+                placed = true;
+            }
             if (frame != null && frame.isShowing()) {
                 return frame;
             }
-            Thread.sleep(500);
+            Thread.sleep(20);
         }
         throw new IllegalStateException("the main window did not come up");
+    }
+
+    /**
+     * Off every screen before it is first shown: the native window is made, hidden, just before
+     * it is shown, and moved as it is made, so that it never appears in front of the user's work.
+     */
+    private static void placeOffScreen(MainFrame frame) {
+        Runnable away = () -> {
+            if ((frame.getExtendedState() & Frame.MAXIMIZED_BOTH) != 0) {
+                frame.setExtendedState(Frame.NORMAL);
+            }
+            frame.setLocation(OFFSCREEN_X, 0);
+        };
+        frame.addHierarchyListener(new java.awt.event.HierarchyListener() {
+            @Override
+            public void hierarchyChanged(java.awt.event.HierarchyEvent e) {
+                if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.DISPLAYABILITY_CHANGED) != 0
+                        && frame.isDisplayable()) {
+                    frame.removeHierarchyListener(this);
+                    away.run();
+                }
+            }
+        });
+        if (frame.isDisplayable()) {
+            // Made already: moved as soon as the event thread gets to it.
+            SwingUtilities.invokeLater(away);
+        }
     }
 
     private void prepareMachine() throws Exception {
@@ -331,7 +383,7 @@ public class UiRuler {
         edt(() -> {
             frame.setExtendedState(Frame.NORMAL);
             Insets insets = frame.getInsets();
-            frame.setBounds(0, 0, round.width + insets.left + insets.right,
+            frame.setBounds(onscreen ? 0 : OFFSCREEN_X, 0, round.width + insets.left + insets.right,
                     round.height + insets.top + insets.bottom);
             frame.validate();
         });
@@ -342,7 +394,8 @@ public class UiRuler {
                     "\u7a97\u53e3", "\u8981 " + round.width + "\u00d7" + round.height + "\uff0c\u5b9e\u9645 "
                             + pane.getWidth() + "\u00d7" + pane.getHeight()));
         }
-        say("window " + pane.getWidth() + "x" + pane.getHeight() + " for " + round.id);
+        say("window " + pane.getWidth() + "x" + pane.getHeight() + " at " + frame.getX() + "," + frame.getY()
+                + " for " + round.id);
     }
 
     private void applyTheme(String theme) throws Exception {
@@ -488,6 +541,174 @@ public class UiRuler {
                 layoutAll(child);
             }
         }
+    }
+
+    /**
+     * The three kinds of dialog as 19-dialogs has them, over the job page: an error with its
+     * details open, a question whose button moves the machine, a delete. They are the dialogs the
+     * program builds, handed over instead of shown, and audited like a page.
+     */
+    private void photographDialogs(Round round, String theme) throws Exception {
+        String label = round.label(theme);
+        showJobPage();
+        List<javax.swing.JDialog> shown = new ArrayList<>();
+        // Laid out, and never shown: a dialog shown anywhere is moved onto the screen, in front
+        // of whatever the user is doing, by the fit every dialog gets when it opens.
+        org.openpnp.gui.shell.Dialogs.setPresenter(dialog -> {
+            shown.add(dialog);
+            return -1;
+        });
+        List<BufferedImage> images = new ArrayList<>();
+        try {
+            // The same error within five seconds is counted rather than shown again, and the
+            // other theme's has just been.
+            Thread.sleep(5200);
+            edt(() -> {
+                org.openpnp.gui.shell.Dialogs.error(frame,
+                        "\u6ca1\u80fd\u79fb\u52a8\u5230\u8d34\u88c5\u4f4d\u7f6e", //$NON-NLS-1$
+                        new Exception("Can't move y to 350.120000mm, higher than soft limit 350.000000mm."), //$NON-NLS-1$
+                        null, false);
+                org.openpnp.util.UiUtils.confirmMoveToLocationAndAct(frame,
+                        "\u5148\u628a\u76f8\u673a\u79fb\u5230 F-08 \u518d\u81ea\u52a8\u8bbe\u7f6e", true, //$NON-NLS-1$
+                        () -> {
+                        }, () -> {
+                        });
+                org.openpnp.gui.shell.Dialogs.confirmDelete(frame, "Dialogs.Kind.Feeders", //$NON-NLS-1$
+                        Arrays.asList("F-13 \u00b7 C0402-100N", "F-14 \u00b7 C0603-1U", //$NON-NLS-1$ //$NON-NLS-2$
+                                "F-15 \u00b7 C0805-10U")); //$NON-NLS-1$
+            });
+            settle(1200);
+            // The mockup has the error's details open.
+            edt(() -> {
+                if (!shown.isEmpty()) {
+                    openDetails(shown.get(0).getRootPane());
+                }
+            });
+            settle(800);
+            edt(() -> {
+                for (javax.swing.JDialog dialog : shown) {
+                    JRootPane pane = dialog.getRootPane();
+                    layoutAll(pane);
+                    BufferedImage image = paint(pane, scale);
+                    images.add(image);
+                    findings.addAll(new UiAudit(rules, new IdentityHashMap<>(), pane, image, scale,
+                            "\u5bf9\u8bdd\u6846", label).run());
+                }
+            });
+        }
+        finally {
+            org.openpnp.gui.shell.Dialogs.setPresenter(null);
+            edt(() -> shown.forEach(Window::dispose));
+        }
+        if (images.size() != 3) {
+            findings.add(new UiAudit.Finding(UiAudit.Check.SceneSetup, "\u5bf9\u8bdd\u6846", label,
+                    "\u5bf9\u8bdd\u6846", "\u53ea\u62cd\u5230 " + images.size() + " \u4e2a\u5bf9\u8bdd\u6846"));
+        }
+        // Where 19-dialogs puts them: the error at the left, the question and the delete at the right.
+        double[][] at = { { 0.075, 0.12 }, { 0.54, 0.15 }, { 0.54, 0.47 } };
+        BufferedImage shot = overPage(images, at);
+        writeComposed(round, theme, "dialogs", "\u5bf9\u8bdd\u6846", shot);
+    }
+
+    /** The welcome window, 20-welcome, over the job page. */
+    private void photographWelcome(Round round, String theme) throws Exception {
+        String label = round.label(theme);
+        showJobPage();
+        // Laid out and never shown, as the dialogs are.
+        org.openpnp.gui.Welcome2_0Dialog welcome = edtGet(() -> {
+            org.openpnp.gui.Welcome2_0Dialog d = new org.openpnp.gui.Welcome2_0Dialog(frame, configuration);
+            d.pack();
+            return d;
+        });
+        settle(1200);
+        List<BufferedImage> images = new ArrayList<>();
+        try {
+            edt(() -> {
+                JRootPane pane = welcome.getRootPane();
+                layoutAll(pane);
+                BufferedImage image = paint(pane, scale);
+                images.add(image);
+                findings.addAll(new UiAudit(rules, new IdentityHashMap<>(), pane, image, scale,
+                        "\u6b22\u8fce\u7a97\u53e3", label).run());
+            });
+        }
+        finally {
+            edt(welcome::dispose);
+        }
+        BufferedImage shot = overPage(images, new double[][] { centred(images.get(0)) });
+        writeComposed(round, theme, "welcome", "\u6b22\u8fce\u7a97\u53e3", shot);
+    }
+
+    private void showJobPage() throws Exception {
+        for (Scene scene : edtGet(this::scenes)) {
+            if (scene.id.equals("job")) {
+                edt(() -> frame.showTab(scene.page));
+                settle(800);
+                return;
+            }
+        }
+    }
+
+    /** Clicks the "Details" heading of an error dialog open. */
+    private static void openDetails(Component c) {
+        if (c instanceof JLabel && org.openpnp.Translations.getString("Dialogs.Details") //$NON-NLS-1$
+                .equals(((JLabel) c).getText())) {
+            for (java.awt.event.MouseListener listener : c.getMouseListeners()) {
+                listener.mouseClicked(new java.awt.event.MouseEvent(c, java.awt.event.MouseEvent.MOUSE_CLICKED,
+                        System.currentTimeMillis(), 0, 1, 1, 1, false));
+            }
+            return;
+        }
+        if (c instanceof Container) {
+            for (Component child : ((Container) c).getComponents()) {
+                openDetails(child);
+            }
+        }
+    }
+
+    /** Where a window of the given photograph sits centred on the main window's, as fractions. */
+    private double[] centred(BufferedImage window) throws Exception {
+        JRootPane pane = frame.getRootPane();
+        double width = pane.getWidth() * scale;
+        double height = pane.getHeight() * scale;
+        return new double[] { Math.max(0, (width - window.getWidth()) / 2 / width),
+                Math.max(0, (height - window.getHeight()) / 2 / height) };
+    }
+
+    /** The windows over the main window, dimmed as a modal dialog dims it. */
+    private BufferedImage overPage(List<BufferedImage> windows, double[][] at) throws Exception {
+        BufferedImage page = edtGet(() -> paint(frame.getRootPane(), scale));
+        Graphics2D g = page.createGraphics();
+        g.setColor(new Color(0, 0, 0, 110));
+        g.fillRect(0, 0, page.getWidth(), page.getHeight());
+        for (int i = 0; i < windows.size() && i < at.length; i++) {
+            int x = (int) Math.round(at[i][0] * page.getWidth());
+            int y = (int) Math.round(at[i][1] * page.getHeight());
+            BufferedImage window = windows.get(i);
+            g.setColor(new Color(0, 0, 0, 90));
+            g.fillRoundRect(x + 2, y + 6, window.getWidth(), window.getHeight(), 24, 24);
+            g.drawImage(window, x, y, null);
+        }
+        g.dispose();
+        return page;
+    }
+
+    private void writeComposed(Round round, String theme, String id, String sceneLabel, BufferedImage shot)
+            throws IOException {
+        String label = round.label(theme);
+        String name = round.id + "-" + theme + "-" + id;
+        ImageIO.write(shot, "png", new File(out, "shots/" + name + ".png"));
+        String pair = null;
+        File mockup = mockup(id, theme);
+        if (mockup != null) {
+            ImageIO.write(pair(ImageIO.read(mockup), shot, "\u6548\u679c\u56fe " + mockup.getName(),
+                    "\u5f53\u524d \u00b7 " + label, scale), "png", new File(out, "pairs/" + name + ".png"));
+            pair = "pairs/" + name + ".png";
+        }
+        photographs.computeIfAbsent(round.id + "-" + theme, k -> new LinkedHashMap<>())
+                .put(id, new String[] { "shots/" + name + ".png", pair, label });
+        sceneLabels.put(id, sceneLabel);
+        say(name + " photographed" + (pair == null ? "" : ", paired"));
     }
 
     /** Both halves side by side, as the mockup draws them, beside the mockup. */

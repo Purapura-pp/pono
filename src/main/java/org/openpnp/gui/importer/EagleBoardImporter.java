@@ -760,14 +760,8 @@ public class EagleBoardImporter implements BoardImporter {
             }
 
             public void actionPerformed(ActionEvent e) {
-                FileDialog fileDialog = new FileDialog(Dlg.this);
-                fileDialog.setFilenameFilter(new FilenameFilter() {
-                    @Override
-                    public boolean accept(File dir, String name) {
-                        return name.toLowerCase()
-                                   .endsWith(".brd"); //$NON-NLS-1$
-                    }
-                });
+                FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(Dlg.this),
+                    Translations.getString("FileDialogs.Import.Title"), ".brd"); //$NON-NLS-1$
                 fileDialog.setVisible(true);
                 if (fileDialog.getFile() == null) {
                     return;

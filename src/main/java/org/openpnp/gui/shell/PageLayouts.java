@@ -67,9 +67,12 @@ public final class PageLayouts {
         this.prefs = prefs;
     }
 
+    /** Pages with no use for the camera at all. */
+    private static final Set<String> NO_CAMERA = Set.of("Settings"); //$NON-NLS-1$
+
     /** What a page starts with before the user has changed anything. */
     public static Camera defaultCamera(String page) {
-        return LARGE.contains(page) ? Camera.Large : Camera.Small;
+        return LARGE.contains(page) ? Camera.Large : NO_CAMERA.contains(page) ? Camera.Hidden : Camera.Small;
     }
 
     public Camera camera(String page) {
@@ -138,7 +141,7 @@ public final class PageLayouts {
     }
 
     /** Pages with nothing of their own to show in the column. */
-    private static final Set<String> NO_PROPERTIES = Set.of("Log", "Diagnostics"); //$NON-NLS-1$ //$NON-NLS-2$
+    private static final Set<String> NO_PROPERTIES = Set.of("Log", "Diagnostics", "Settings"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
     /**
      * Whether the column shows on a page, given whether there is anything in it. Left to itself

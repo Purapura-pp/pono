@@ -139,7 +139,7 @@ public class PartsPanel extends JPanel implements WizardContainer {
         JLabel lblSearch = new JLabel(Translations.getString("PartsPanel.SearchLabel.text")); //$NON-NLS-1$
         panel_1.add(lblSearch);
 
-        searchTextField = new JTextField();
+        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -172,6 +172,10 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 return null;
             }
         };
+        // Enter edits the cell, Delete deletes what is selected, which asks first.
+        org.openpnp.gui.support.TableUtils.bindKeys(table, deletePartAction);
+        org.openpnp.gui.components.AutoSelectTextTable.setEmptyText(table,
+                Translations.getString("PartsPanel.Empty")); //$NON-NLS-1$
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         table.setDefaultEditor(org.openpnp.model.Package.class,
                 new DefaultCellEditor(packagesCombo));
@@ -337,19 +341,8 @@ public class PartsPanel extends JPanel implements WizardContainer {
         public void actionPerformed(ActionEvent arg0) {
             List<Part> selections = getSelections();
             List<String> ids = selections.stream().map(Part::getId).collect(Collectors.toList());
-            String formattedIds;
-            if (ids.size() <= 3) {
-                formattedIds = String.join(", ", ids);
-            }
-            else {
-                formattedIds = String.join(", ", ids.subList(0, 3)) + ", and " + (ids.size() - 3) + " others";
-            }
-            
-            int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                    Translations.getString("DialogMessages.ConfirmDelete.text") + " " + formattedIds + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    Translations.getString("DialogMessages.ConfirmDelete.title") + " " + selections.size() + " " + Translations.getString( //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                                    "CommonWords.parts") + "?", JOptionPane.YES_NO_OPTION); //$NON-NLS-1$ //$NON-NLS-2$
-            if (ret == JOptionPane.YES_OPTION) {
+            if (org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
+                    "Dialogs.Kind.Parts", ids)) { //$NON-NLS-1$
                 for (Part part : selections) {
                     configuration.removePart(part);
                 }

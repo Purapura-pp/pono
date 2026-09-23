@@ -1,0 +1,41 @@
+# The error messages users meet most often, in Chinese: a pattern on the English message, what it
+# means, and what to do. Tab separated; $1, $2 ... are the pattern's groups. First match wins.
+^Machine has not been started\.?$	机器还没有启用。	先点顶栏的机器状态芯片，或按 Ctrl+E 启用机器，再做这一步。
+^Machine not homed\. Jogging only allowed	机器还没有归位，现在不能点动。	先点点动卡片上的「归位」（或 机器 › 归位）。
+^Machine not homed\. Motion only allowed	机器还没有归位，现在不能移动。	先点点动卡片上的「归位」（或 机器 › 归位）。
+^Machine not homed	机器还没有归位。	先点点动卡片上的「归位」（或 机器 › 归位）。
+Can't move (.+?) to (.+?), lower than soft limit (.+)\.$	$1 轴要去 $2，低于软限位 $3。	检查目标位置是否正确；如果软限位设错了，在机器页对应的轴里调整。没有移动。
+Can't move (.+?) to (.+?), higher than soft limit (.+)\.$	$1 轴要去 $2，高于软限位 $3。	检查目标位置是否正确；如果软限位设错了，在机器页对应的轴里调整。没有移动。
+outside of the soft limit	目标位置超出了软限位。	检查目标位置是否正确；如果软限位设错了，在机器页对应的轴里调整。没有移动。
+^Subject not found\.?$	相机画面里没有找到要找的东西。	检查相机是否对准、补光是否合适；在视觉页打开管线编辑器，可以看每一步的结果。
+^Machine still busy after timeout expired, task rejected\.?$	机器一直在忙，这个操作被放弃了。	等当前的动作做完再试。
+^Feeder (.+?) has no part\.?$	飞达 $1 还没有指定元件。	在飞达页选中它，在属性栏里选元件。
+^Feeder (.+?) part (.+?) empty\.?$	飞达 $1 的元件 $2 用完了。	补料后在飞达页重新启用它。
+^Feeder (.+?): No parts found\.?$	飞达 $1 里没有找到元件。	检查料带是否装好、飞达位置是否正确。
+^Feeder (.+?): No tape holes found\.?$	飞达 $1 找不到料带孔。	检查料带位置和补光，必要时在飞达页重新运行「自动设置」。
+^Feeder (.+?): Machine not yet homed\.?$	机器还没有归位，飞达 $1 不能工作。	先点点动卡片上的「归位」。
+^Unable to locate reference hole\. End of strip\?	找不到料带的参考孔，可能料带已经用完。	检查料带和飞达位置，必要时在飞达页重新运行「自动设置」。
+^Vision failed on feeder (.+?)\.?$	飞达 $1 的视觉定位失败。	在飞达页检查它的视觉设置和料带位置。
+^Feed failed\. Unable to find an actuator named (.+?)\.?$	送料失败：找不到名为 $1 的执行器。	检查飞达设置里填写的执行器名称，是否和机器页里的执行器一致。
+^Post pick failed\. Unable to find an actuator named (.+?)\.?$	取料后动作失败：找不到名为 $1 的执行器。	检查飞达设置里填写的执行器名称，是否和机器页里的执行器一致。
+^Failed, unable to find an actuator named (.+?)\.?$	找不到名为 $1 的执行器。	检查设置里填写的执行器名称，是否和机器页里的执行器一致。
+^No feeder loaded in slot\.?$	这个槽位没有装飞达。	在飞达页检查槽位设置。
+^Nozzle (.+?) has no nozzle tip loaded\.?$	吸嘴 $1 上没有装吸嘴头。	先换上合适的吸嘴头（机器页 › 吸嘴头），再做这一步。
+^Nozzle (.+?) does not have a nozzle tip loaded\.?$	吸嘴 $1 上没有装吸嘴头。	先换上合适的吸嘴头（机器页 › 吸嘴头），再做这一步。
+^The nozzle (.+?) has no nozzle tip loaded\.?$	吸嘴 $1 上没有装吸嘴头。	先换上合适的吸嘴头（机器页 › 吸嘴头），再做这一步。
+^The nozzle tip (.+?) is not loaded on nozzle (.+?)\.?$	吸嘴头 $1 没有装在吸嘴 $2 上。	先把 $1 换到 $2 上，再做这一步。
+^The nozzle tip (.+?) is already loaded on nozzle (.+?)\.?$	吸嘴头 $1 已经装在吸嘴 $2 上了。	不需要再换。
+^Nozzle (.+?) still has a part loaded\. Please discard first\.?$	吸嘴 $1 上还吸着元件。	先点点动卡片上的「抛料」，再做这一步。
+^No Part on the current nozzle!?$	当前吸嘴上没有元件。	先取料，再做这一步。
+^The head (.+?) primary fiducial location X and Y must be set first\.?$	头 $1 的主基准点 X、Y 还没有设置。	在机器页选中头 $1，在属性栏里设置主基准点位置。
+^The head (.+?) primary fiducial location Z must be set first\.?$	头 $1 的主基准点 Z 还没有设置。	在机器页选中头 $1，在属性栏里设置主基准点的 Z。
+^No vision capable camera found on head\.?$	头上没有能做视觉的相机。	在机器页给头加一个向下看的相机。
+^No Camera set on pipeline\.?$	视觉管线没有指定相机。	在管线编辑器里选好相机。
+^Diagnostics are already running\.?$	诊断测量已经在进行中。	等它做完，或先停止它。
+^Measurement aborted\.?$	测量已中止。	
+^Location is required\.?$	需要先设置位置。	在属性栏里填写或用「捕获」按钮取当前位置。
+(?:java\.util\.concurrent\.)?TimeoutException|[Tt]imed? ?out	等待控制器回应超时。	检查控制器是否连接、串口或网络设置是否正确，必要时重新启用机器。
+Connection refused	连不上控制器：连接被拒绝。	检查控制器是否开机、地址和端口是否正确。
+Port busy|port is busy|Port .+ not found|SerialPortException	打不开控制器的串口。	检查串口号是否正确、有没有被别的程序占用，拔插一次 USB 线后重试。
+(?:java\.io\.)?FileNotFoundException:? ?(.+)	找不到文件：$1	检查文件是否还在原来的位置。
+^(?:java\.lang\.)?InterruptedException	操作被中断了。	

@@ -60,7 +60,8 @@ public class MachineStateChip extends JLabel {
     private static final int BORDER_ALPHA = 89;
 
     private enum State {
-        Disconnected("TopBar.MachineState.Disconnected", "Pono.textMuted", Color.GRAY), //$NON-NLS-1$ //$NON-NLS-2$
+        // Red, as the stylesheet's chip.err: a disconnected machine is the thing to fix first.
+        Disconnected("TopBar.MachineState.Disconnected", "Pono.err", new Color(0xff5d5d)), //$NON-NLS-1$ //$NON-NLS-2$
         NotHomed("TopBar.MachineState.NotHomed", "Pono.statusWarn", new Color(0xf5b840)), //$NON-NLS-1$ //$NON-NLS-2$
         Ready("TopBar.MachineState.Ready", "Pono.statusOk", new Color(0x34c77b)), //$NON-NLS-1$ //$NON-NLS-2$
         Running("TopBar.MachineState.Running", "Pono.statusRun", new Color(0x38bdf8)); //$NON-NLS-1$ //$NON-NLS-2$
@@ -160,8 +161,20 @@ public class MachineStateChip extends JLabel {
         SwingUtilities.invokeLater(this::refresh);
     }
 
+    /** Fired when the machine goes from connected to not, or back. */
+    public static final String PROPERTY_DISCONNECTED = "disconnected"; //$NON-NLS-1$
+
+    private boolean disconnected = true;
+
+    public boolean isDisconnected() {
+        return disconnected;
+    }
+
     private void refresh() {
         State state = state();
+        boolean was = disconnected;
+        disconnected = state == State.Disconnected;
+        firePropertyChange(PROPERTY_DISCONNECTED, was, disconnected);
         setText(Translations.getString(state.textKey));
         setForeground(state.color());
         String toolTip = Translations.getString("TopBar.MachineState.toolTipText"); //$NON-NLS-1$

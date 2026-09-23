@@ -20,56 +20,36 @@
 package org.openpnp.gui.support;
 
 import java.awt.Component;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 
-import javax.swing.JOptionPane;
-
+import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
-import org.pmw.tinylog.Logger;
+import org.openpnp.gui.shell.Dialogs;
 
+/**
+ * The program's message boxes, which are {@link Dialogs} now: an error has a title in the user's
+ * language, a reason and advice where the message is a known one, and the original with its stack
+ * under "Details"; the same error is not stacked on top of itself.
+ */
 public class MessageBoxes {
 
-    // prepare message for use in a message box
+    /** A message some callers wrote as HTML, as plain text: the dialog lays its own paragraphs out. */
     static String prepareMessage(String message) {
         if (message == null) {
-            message = "";
+            return ""; //$NON-NLS-1$
         }
-        message = message.replaceAll("\n", "<br/>");
-        message = message.replaceAll("\r", "");
-        message = "<html><body width=\"400\">" + message + "</body></html>";
-        return message;
-    }    
+        if (message.contains("<html") || message.contains("<br")) { //$NON-NLS-1$ //$NON-NLS-2$
+            message = message.replaceAll("(?i)<br\\s*/?>", "\n") //$NON-NLS-1$ //$NON-NLS-2$
+                    .replaceAll("(?i)</p>", "\n") //$NON-NLS-1$ //$NON-NLS-2$
+                    .replaceAll("<[^>]+>", "") //$NON-NLS-1$ //$NON-NLS-2$
+                    .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+                    .replace("&nbsp;", " "); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        return message.replace("\r", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$
+    }
 
     public static boolean errorBox(Component parent, String title, Throwable cause, boolean withContinuation) {
-        String message = null;
-        boolean ret = false;
-        if (cause != null) {
-            message = cause.getMessage();
-            if (message == null || message.trim().isEmpty()) {
-                StringWriter stringWriter = new StringWriter();
-                PrintWriter writer = new PrintWriter(stringWriter);
-                cause.printStackTrace(writer);
-                writer.close();
-                message = stringWriter.toString();
-            }
-        }
-        if (message == null) {
-            message = "No message supplied.";
-        }
-        Logger.debug("{}: {}", title, cause);
-        message = message.replaceAll("<", "&lt;");
-        message = message.replaceAll(">", "&gt;");
-        message = prepareMessage(message);
-
-        // if this errorBox shall ask for Continuation, show a ConfirmDialog and return if the user selected YES
-        if (withContinuation) {
-            ret = JOptionPane.showConfirmDialog(parent, message, title, JOptionPane.OK_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE) == JOptionPane.OK_OPTION;
-        } else {
-            JOptionPane.showMessageDialog(parent, message, title, JOptionPane.ERROR_MESSAGE);
-        }
-        
-        return ret;
+        String message = cause == null || cause.getMessage() == null ? null : prepareMessage(cause.getMessage());
+        return Dialogs.error(parent, title, cause, message, withContinuation);
     }
 
     public static void errorBox(Component parent, String title, Throwable cause) {
@@ -77,32 +57,21 @@ public class MessageBoxes {
     }
 
     public static void errorBox(Component parent, String title, String message) {
-        if (message == null) {
-            message = "";
-        }
-        Logger.debug("{}: {}", title, message);
-        message = prepareMessage(message);
-        JOptionPane.showMessageDialog(parent, message, title, JOptionPane.ERROR_MESSAGE);
+        Dialogs.error(parent, title, null, prepareMessage(message), false);
     }
 
+    /** An error that can be tried again: "Try again" or "Cancel". */
     public static boolean errorBoxWithRetry(Component parent, String title, String message) {
-        if (message == null) {
-            message = "";
-        }
-        Logger.debug("{}: {}", title, message);
-        message = prepareMessage(message);
-        return JOptionPane.showConfirmDialog(parent, message, title, JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION;
+        return Dialogs.ask(parent, Dialogs.Tone.Err, "alert", title, prepareMessage(message), null, //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("Dialogs.Retry"))) == 0; //$NON-NLS-1$
     }
 
     public static void infoBox(String title, String message) {
-        if (message == null) {
-            message = "";
-        }
-        message = prepareMessage(message);
-        JOptionPane.showMessageDialog(MainFrame.get(), message, title, JOptionPane.INFORMATION_MESSAGE);
+        Dialogs.info(MainFrame.get(), title, prepareMessage(message));
     }
 
     public static void notYetImplemented(Component parent) {
-        errorBox(parent, "Not Yet Implemented", "This function is not yet implemented.");
+        errorBox(parent, Translations.getString("Dialogs.NotYetImplemented.Title"), //$NON-NLS-1$
+                Translations.getString("Dialogs.NotYetImplemented.Message")); //$NON-NLS-1$
     }
 }

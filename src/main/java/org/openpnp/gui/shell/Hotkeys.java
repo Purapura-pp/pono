@@ -138,6 +138,11 @@ public final class Hotkeys {
         }
         entries.add(new Entry(TOGGLE_JOG_CARD, "Hotkeys.ToggleJogCard")); //$NON-NLS-1$
         entries.add(new Entry(COMMAND_PALETTE, "Hotkeys.CommandPalette")); //$NON-NLS-1$
+        // Ctrl+1 to Ctrl+9: the rail's pages in order, handled by the window itself.
+        entries.add(new Entry(KeyStroke.getKeyStroke(KeyEvent.VK_1, CTRL), "Hotkeys.Pages")); //$NON-NLS-1$
+        entries.add(new Entry(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, 0), "Hotkeys.Filter")); //$NON-NLS-1$
+        entries.add(new Entry(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "Hotkeys.TableEdit")); //$NON-NLS-1$
+        entries.add(new Entry(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "Hotkeys.TableDelete")); //$NON-NLS-1$
         return entries;
     }
 

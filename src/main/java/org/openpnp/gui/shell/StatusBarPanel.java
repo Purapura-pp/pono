@@ -78,6 +78,9 @@ public class StatusBarPanel extends JPanel {
         versionLabel.setFont(Ui.font(12f));
 
         add(item(6, statePill, statusLabel));
+        buildBusyBar();
+        add(Box.createHorizontalStrut(8));
+        add(busyBar);
         buildWizardLink();
         add(Box.createHorizontalStrut(10));
         add(wizardLink);
@@ -165,6 +168,29 @@ public class StatusBarPanel extends JPanel {
         });
     }
 
+    /**
+     * Runs while the machine is working on something outside a job - homing, a calibration, a
+     * move - which used to show nothing but the busy cursor. A job has its own progress.
+     */
+    private final javax.swing.JProgressBar busyBar = new javax.swing.JProgressBar();
+    private boolean busy;
+
+    private void buildBusyBar() {
+        busyBar.setIndeterminate(true);
+        busyBar.setToolTipText(Translations.getString("StatusBar.Busy")); //$NON-NLS-1$
+        Dimension size = new Dimension(64, 4);
+        busyBar.setPreferredSize(size);
+        busyBar.setMaximumSize(size);
+        busyBar.setVisible(false);
+    }
+
+    /** Whether the machine is carrying out a task. */
+    public void setBusy(boolean busy) {
+        this.busy = busy;
+        busyBar.setVisible(busy && stateTone == Tone.Pending);
+        revalidateItems();
+    }
+
     /** What the machine is doing right now, in words. */
     public void setStatus(String status) {
         statusLabel.setText(status == null || status.isEmpty() ? " " : status); //$NON-NLS-1$
@@ -201,6 +227,7 @@ public class StatusBarPanel extends JPanel {
             statePill.setText(stateText);
             statePill.setTone(stateTone);
         }
+        busyBar.setVisible(busy && idle);
         revalidate();
     }
 

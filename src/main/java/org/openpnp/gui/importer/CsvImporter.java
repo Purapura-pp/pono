@@ -529,15 +529,8 @@ public abstract class CsvImporter {
             }
 
             public void actionPerformed(ActionEvent e) {
-                FileDialog fileDialog = new FileDialog(Dlg.this);
-                fileDialog.setFilenameFilter(new FilenameFilter() {
-                    @Override
-                    public boolean accept(File dir, String name) {
-                        return false || name.toLowerCase().endsWith(".csv") //$NON-NLS-1$
-                                || name.toLowerCase().endsWith(".txt") //$NON-NLS-1$
-                                || name.toLowerCase().endsWith(".dat"); //$NON-NLS-1$
-                    }
-                });
+                FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(Dlg.this),
+                    Translations.getString("FileDialogs.Import.Title"), ".csv", ".txt", ".dat"); //$NON-NLS-1$
                 fileDialog.setVisible(true);
                 if (fileDialog.getFile() == null) {
                     return;

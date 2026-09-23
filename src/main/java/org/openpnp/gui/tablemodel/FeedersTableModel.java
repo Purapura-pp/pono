@@ -29,7 +29,6 @@ import org.openpnp.model.Part;
 import org.openpnp.spi.Feeder;
 import org.openpnp.util.BeanUtils;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.pmw.tinylog.Logger;
 
 public class FeedersTableModel extends AbstractObjectTableModel {
     final private Configuration configuration;
@@ -133,9 +132,7 @@ public class FeedersTableModel extends AbstractObjectTableModel {
             configuration.setDirty(true);
         }
         catch (Exception e) {
-            // TODO: dialog, bad input
-            Logger.warn(e, "Failed to apply the edit of column {}, the value was discarded.",
-                    getColumnName(columnIndex));
+            org.openpnp.gui.support.TableUtils.rejected(this, columnIndex, aValue, e);
         }
     }
 

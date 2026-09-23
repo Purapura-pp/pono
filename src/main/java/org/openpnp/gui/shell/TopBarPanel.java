@@ -116,7 +116,27 @@ public class TopBarPanel extends JPanel {
         configurationDirty.setVisible(configuration.isDirty());
         add(configurationDirty);
         add(Box.createHorizontalGlue());
-        add(new MachineStateChip(configuration, machineControls.startStopMachineAction));
+        MachineStateChip state = new MachineStateChip(configuration, machineControls.startStopMachineAction);
+        add(state);
+        // Disconnected, the chip has the button that connects beside it, as the mockups' chip.err.
+        JButton connect = Ui.button(Translations.getString("TopBar.Connect"), Ui.iconSm("zap"), //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Size.Sm, Ui.Variant.Primary);
+        connect.setToolTipText(Translations.getString("TopBar.Connect.toolTipText")); //$NON-NLS-1$
+        connect.addActionListener(e -> {
+            if (machineControls.startStopMachineAction.isEnabled()) {
+                machineControls.startStopMachineAction.actionPerformed(e);
+            }
+        });
+        java.awt.Component connectGap = Box.createHorizontalStrut(8);
+        Runnable followState = () -> {
+            connect.setVisible(state.isDisconnected());
+            connectGap.setVisible(state.isDisconnected());
+            revalidate();
+        };
+        state.addPropertyChangeListener(MachineStateChip.PROPERTY_DISCONNECTED, e -> followState.run());
+        add(connectGap);
+        add(connect);
+        followState.run();
         add(Box.createHorizontalStrut(14));
         add(Ui.divider(24));
         add(Box.createHorizontalStrut(14));
@@ -264,6 +284,11 @@ public class TopBarPanel extends JPanel {
         unsavedDot.setVisible(dirty);
     }
 
+    private static String reason(Action action) {
+        Object reason = action.getValue(Ui.WHY_DISABLED);
+        return reason == null ? null : reason.toString();
+    }
+
     /** Start, Pause, Step, Stop as {@code .btn}s: Start green, Stop red, the two others plain. */
     private JComponent jobControls() {
         JPanel row = row(6);
@@ -280,6 +305,16 @@ public class TopBarPanel extends JPanel {
         JButton stop = Ui.button(Translations.getString("TopBar.Job.Stop"), Ui.icon("stop"), //$NON-NLS-1$ //$NON-NLS-2$
                 Ui.Size.Md, Ui.Variant.Danger);
         stop.addActionListener(e -> jobPanel.stopJobAction.actionPerformed(e));
+        // They run the job: no focus stop for a stray space bar.
+        for (JButton button : new JButton[] { startButton, pauseButton, step, stop }) {
+            button.setFocusable(false);
+        }
+        Ui.whyDisabled(startButton, () -> !startPause.isEnabled() ? reason(startPause)
+                : Translations.getString("TopBar.Job.Disabled.Running")); //$NON-NLS-1$
+        Ui.whyDisabled(pauseButton, () -> !startPause.isEnabled() ? reason(startPause)
+                : Translations.getString("JobPanel.Disabled.NotRunning")); //$NON-NLS-1$
+        Ui.whyDisabled(step, () -> reason(jobPanel.stepJobAction));
+        Ui.whyDisabled(stop, () -> reason(jobPanel.stopJobAction));
         row.add(startButton);
         row.add(pauseButton);
         row.add(step);
