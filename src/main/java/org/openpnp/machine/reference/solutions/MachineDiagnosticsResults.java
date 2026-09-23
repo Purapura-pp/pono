@@ -878,6 +878,13 @@ public class MachineDiagnosticsResults {
         private String reportDirectory;
         @Attribute(required = false)
         private long durationMillis;
+        /**
+         * The calibration step whose change made this measurement out of date, or null while it
+         * still describes the machine: a backlash measured before the compensation was set says
+         * nothing about the machine after it.
+         */
+        @Attribute(required = false)
+        private String invalidatedBy;
 
         Run() {
         }
@@ -912,6 +919,14 @@ public class MachineDiagnosticsResults {
 
         public String getReportDirectory() {
             return reportDirectory;
+        }
+
+        public String getInvalidatedBy() {
+            return invalidatedBy;
+        }
+
+        public boolean isInvalidated() {
+            return invalidatedBy != null;
         }
     }
 
@@ -1160,5 +1175,24 @@ public class MachineDiagnosticsResults {
     public void setRun(TestGroup group, long millis, String reportDirectory, long durationMillis) {
         runs.removeIf(run -> run.getGroup().equals(group.name()));
         runs.add(new Run(group.name(), millis, reportDirectory, durationMillis));
+    }
+
+    /**
+     * Marks what the group last measured as out of date, because a calibration step changed what
+     * it measured. Running the group again makes it current.
+     * 
+     * @param by The step that changed it, as its name.
+     */
+    public void invalidate(TestGroup group, String by) {
+        Run run = getRun(group);
+        if (run != null) {
+            run.invalidatedBy = by;
+        }
+    }
+
+    /** Whether the group has measured this machine and nothing has changed what it measured since. */
+    public boolean isCurrent(TestGroup group) {
+        Run run = getRun(group);
+        return run != null && !run.isInvalidated();
     }
 }

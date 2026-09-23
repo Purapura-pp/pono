@@ -48,6 +48,7 @@ import org.openpnp.machine.reference.vision.ReferenceBottomVision;
 import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.BottomVisionSettings;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
 import org.openpnp.model.Length;
@@ -146,8 +147,13 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private static final double DATUM_RESIDUAL_TOLERANCE_MM = 0.03;
     /** Periodic error at the belt pitch worth a warning. */
     private static final double PERIODIC_ERROR_TOLERANCE_MM = 0.01;
-    /** Margin over the measured backlash for a one-sided offset, which has to clear it. */
-    private static final double BACKLASH_OFFSET_MARGIN = 1.2;
+    /** X/Y backlash worth calibrating: the repeatability the lost steps test holds an axis to. */
+    private static final double XY_BACKLASH_TOLERANCE_MM = 0.02;
+    /**
+     * The share of the measured backlash a directional compensation or a sneak-up has to set as
+     * its offset to count as covering it; one-sided positioning has to clear all of it.
+     */
+    private static final double DIRECTIONAL_COVERAGE = 0.5;
     /** Margin over the measured settle time for a fixed wait, which has to outlast it. */
     private static final double SETTLE_MARGIN = 1.5;
     /** A fixed wait longer than this many times the measured time is worth shortening. */
@@ -494,7 +500,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         state == Solutions.State.Solved ? proposed : oldAllowMisdetections);
                 super.setState(state);
             }
-        });
+        }.withCalibrationStep(CalibrationStep.NozzleTipCalibration));
     }
 
     /**
@@ -542,7 +548,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         stage.setSuperSampling(state == Solutions.State.Solved ? target : 1);
                         super.setState(state);
                     }
-                });
+                }.withCalibrationStep(CalibrationStep.SubPixel));
             }
         }
     }
@@ -608,7 +614,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "rather than corrected, because which of the two positions is the right "
                         + "one is not something the machine can know.",
                         primary.getLinearLengthTo(homing)
-                                .convertToUnits(LengthUnit.Millimeters).getValue())));
+                                .convertToUnits(LengthUnit.Millimeters).getValue()))
+                                        .withCalibrationStep(CalibrationStep.VisualHoming));
     }
 
     /**
@@ -698,7 +705,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "it scales against them, are computed for a machine that is not "
                             + "there.", feedRate, unit, when, axis.getMotionLimit(1), unit),
                     previous, new Length(feedRate, AxesLocation.getUnits()),
-                    (value, solved) -> axis.setFeedratePerSecond(value)));
+                    (value, solved) -> axis.setFeedratePerSecond(value))
+                            .measuredBy(TestGroup.Firmware)
+                            .withCalibrationStep(CalibrationStep.ControllerLimits));
         }
         Double acceleration = limits.getMaxAcceleration();
         if (acceleration != null && axis.getMotionLimit(2) > acceleration * LIMIT_TOLERANCE) {
@@ -717,7 +726,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "moving when the plan says it has arrived.", acceleration, unit,
                             when, axis.getMotionLimit(2), unit),
                     previous, new Length(acceleration, AxesLocation.getUnits()),
-                    (value, solved) -> axis.setAccelerationPerSecond2(value)));
+                    (value, solved) -> axis.setAccelerationPerSecond2(value))
+                            .measuredBy(TestGroup.Firmware)
+                            .withCalibrationStep(CalibrationStep.ControllerLimits));
         }
         Double steps = limits.getStepsPerUnit();
         if (steps != null && steps > 0 && axis.getDriver() != null) {
@@ -742,7 +753,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                                 driverUnits.getShortName()),
                         new Length(previous, driverUnits), new Length(step, driverUnits),
                         (value, solved) -> axis.setResolution(
-                                value.convertToUnits(driverUnits).getValue())));
+                                value.convertToUnits(driverUnits).getValue()))
+                                        .measuredBy(TestGroup.Firmware)
+                                        .withCalibrationStep(CalibrationStep.ControllerLimits));
             }
         }
     }
@@ -772,7 +785,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             motion.getVelocity(), unit, configuredVelocity, unit),
                     axis.getFeedratePerSecond(),
                     new Length(motion.getVelocity(), AxesLocation.getUnits()),
-                    (value, solved) -> axis.setFeedratePerSecond(value)));
+                    (value, solved) -> axis.setFeedratePerSecond(value))
+                            .measuredBy(TestGroup.Kinematics)
+                            .withCalibrationStep(CalibrationStep.FeedAcceleration));
         }
         double configuredAcceleration = axis.getMotionLimit(2);
         if (Double.isFinite(motion.getAcceleration()) && configuredAcceleration > 0
@@ -791,42 +806,49 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             configuredAcceleration, unit),
                     axis.getAccelerationPerSecond2(),
                     new Length(motion.getAcceleration(), AxesLocation.getUnits()),
-                    (value, solved) -> axis.setAccelerationPerSecond2(value)));
+                    (value, solved) -> axis.setAccelerationPerSecond2(value))
+                            .measuredBy(TestGroup.Kinematics)
+                            .withCalibrationStep(CalibrationStep.FeedAcceleration));
         }
     }
 
     /**
-     * One-sided positioning always approaches a target from the same side, having first driven
-     * past it by the backlash offset. An offset smaller than the backlash does not get past it,
-     * so the approach starts inside the slack and the compensation does nothing.
+     * X/Y backlash that the compensation set on the axis does not cover. One-sided positioning
+     * drives past the target by the offset before approaching it, so an offset short of the
+     * backlash starts the approach inside the slack; a directional compensation of well under
+     * the backlash leaves most of it; no compensation leaves all of it.
+     * <p>
+     * Pointed at, not written: the backlash calibration Issues and Solutions offers is the one
+     * way the compensation is set, choosing the method as well as the offset. This finding once
+     * raised the offset to 1.2 times the measured backlash on its own, the second of two ways of
+     * setting the same thing, and it never looked at the method.
      */
     private void findBacklashOffsetIssue(Solutions solutions, ReferenceControllerAxis axis,
             Positioning positioning, String when) {
-        if (!axis.getBacklashCompensationMethod().isOneSidedPositioningMethod()) {
+        double measured = Math.abs(positioning.getBacklashMaxMm());
+        if (measured <= XY_BACKLASH_TOLERANCE_MM) {
             return;
         }
-        double measured = positioning.getBacklashMaxMm();
+        BacklashCompensationMethod method = axis.getBacklashCompensationMethod();
         Length offset = axis.getBacklashOffset().convertToUnits(LengthUnit.Millimeters);
-        if (measured <= offset.getValue()) {
+        boolean covered = method != BacklashCompensationMethod.None
+                && Math.abs(offset.getValue()) >= measured
+                        * (method.isOneSidedPositioningMethod() ? 1.0 : DIRECTIONAL_COVERAGE);
+        if (covered) {
             return;
         }
-        solutions.add(new LengthSettingIssue(axis,
+        solutions.add(new PointerIssue(axis,
                 "One-sided backlash compensation is set to less offset than the axis has "
                         + "backlash.",
-                "Raise the offset past the backlash that was measured.",
+                "Calibrate the backlash compensation of the axis, as offered here.",
                 Solutions.Severity.Warning, WIKI_MOTION_PLANNER,
-                "Backlash offset",
-                "How far past the target the axis drives before approaching it.",
                 String.format("The axis measured up to %.4f mm of backlash on %s, with compensation "
-                        + "switched off, and %s is set to drive %.4f mm past the target before "
-                        + "approaching it. That does not clear the slack, so the approach begins "
-                        + "inside it and every position still carries the backlash. The offered "
-                        + "value keeps a margin over the largest backlash measured.", measured,
-                        when, axis.getBacklashCompensationMethod(), offset.getValue()),
-                axis.getBacklashOffset(),
-                new Length(measured * BACKLASH_OFFSET_MARGIN, LengthUnit.Millimeters)
-                        .convertToUnits(axis.getBacklashOffset().getUnits()),
-                (value, solved) -> axis.setBacklashOffset(value)));
+                        + "switched off, and it is compensated by %s with an offset of %.4f mm. "
+                        + "That leaves most of the slack in every position the axis approaches. "
+                        + "The backlash calibration measures it again and sets the method and the "
+                        + "offsets together.", measured, when, method, offset.getValue()))
+                .measuredBy(TestGroup.XyPositioning)
+                .withCalibrationStep(CalibrationStep.XyBacklash));
     }
 
     /**
@@ -841,6 +863,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         long configured = camera.getSettleTimeMs();
         double measured = settling.getSettleSeconds();
+        // The one fixed wait: the slower of the image settling and the frames arriving late,
+        // with the margin. The settle time includes the latency when the settling test saw it,
+        // but a run that measured the latency on its own knows it better.
+        MachineDiagnosticsResults.CameraLatency latency = lastResults == null ? null
+                : lastResults.getCameraLatency(camera.getId());
+        double wait = Math.max(measured, latency == null ? 0 : latency.getLatencySeconds());
         if (configured < measured * 1000) {
             solutions.add(new SettleTimeIssue(camera,
                     "The camera waits a fixed time that ends before the image has stopped moving.",
@@ -852,7 +880,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "part alignment - is therefore measuring a moving image, and no "
                             + "amount of calibration afterwards can recover that.",
                             measured * 1000, settling.getDistanceMm(), when, configured),
-                    configured, settleMilliseconds(measured * SETTLE_MARGIN)));
+                    configured, settleMilliseconds(wait * SETTLE_MARGIN))
+                    .measuredBy(TestGroup.CameraSettle)
+                    .withCalibrationStep(CalibrationStep.CameraSettle));
         }
         else if (measured > 0 && configured > measured * 1000 * SETTLE_EXCESS) {
             solutions.add(new SettleTimeIssue(camera,
@@ -865,7 +895,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "placements is time spent waiting for something that has already "
                             + "happened.", measured * 1000, settling.getDistanceMm(), when,
                             configured),
-                    configured, settleMilliseconds(measured * SETTLE_MARGIN)));
+                    configured, settleMilliseconds(wait * SETTLE_MARGIN))
+                    .measuredBy(TestGroup.CameraSettle)
+                    .withCalibrationStep(CalibrationStep.CameraSettle));
         }
     }
 
@@ -903,7 +935,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "the advanced camera calibration in this list measures the scale "
                             + "together with the camera's tilt and the lens distortion, which is "
                             + "what the residual says is also present.", when,
-                            scan.getScaleError() * 100, scan.getAxis(), scan.getResidualMm())));
+                            scan.getScaleError() * 100, scan.getAxis(), scan.getResidualMm()))
+                                    .measuredBy(TestGroup.XyPositioning)
+                                    .withCalibrationStep(CalibrationStep.AdvancedDownCamera));
         }
     }
 
@@ -935,7 +969,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "same scatter into placement. A well lit fiducial in focus holds a "
                         + "tenth of a pixel with sub-pixel detection enabled.", when,
                         noise.getFrames(), camera.getName(), noise.getSdPixels(), noise.getSdMm(),
-                        noise.getRangePixels())));
+                        noise.getRangePixels())).measuredBy(TestGroup.VisionNoise));
     }
 
     /**
@@ -973,7 +1007,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "with a margin; the camera settling test measures the mechanical "
                         + "settling on top of it.", camera.getName(),
                         latency.getLatencySeconds() * 1000, when, configured),
-                configured, settleMilliseconds(latency.getLatencySeconds() * SETTLE_MARGIN)));
+                configured, settleMilliseconds(latency.getLatencySeconds() * SETTLE_MARGIN))
+                        .measuredBy(TestGroup.CameraLatency)
+                        .withCalibrationStep(CalibrationStep.CameraSettle));
     }
 
     /**
@@ -1038,7 +1074,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             highestCleanFactor),
                     axis.getFeedratePerSecond(),
                     new Length(offered, AxesLocation.getUnits()),
-                    (value, solved) -> axis.setFeedratePerSecond(value)));
+                    (value, solved) -> axis.setFeedratePerSecond(value))
+                            .measuredBy(TestGroup.LostSteps)
+                            .withCalibrationStep(CalibrationStep.FeedAcceleration));
         }
     }
 
@@ -1112,7 +1150,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "transform axes, every taught coordinate carried across, and a "
                             + "verification run on the board that keeps or undoes it.%s",
                             datum.getBoard(), when, axis.getName(), error * 100, datum.getPoints(),
-                            Math.abs(error) * 100, steps)));
+                            Math.abs(error) * 100, steps))
+                                    .measuredBy(TestGroup.DatumBoard)
+                                    .withCalibrationStep(CalibrationStep.FrameCompensation, machine));
         }
         if (Math.abs(datum.getShearDegrees()) > DATUM_SQUARENESS_TOLERANCE_DEGREES) {
             double factor = -Math.tan(Math.toRadians(datum.getShearDegrees()));
@@ -1130,7 +1170,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "adds it, together with the scale, when asked to.", datum.getBoard(),
                             when, datum.getShearDegrees(), datum.getPoints(),
                             Math.abs(Math.tan(Math.toRadians(datum.getShearDegrees()))) * 100,
-                            factor)));
+                            factor))
+                                    .measuredBy(TestGroup.DatumBoard)
+                                    .withCalibrationStep(CalibrationStep.FrameCompensation, machine));
         }
     }
 
@@ -1186,7 +1228,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         }
                         axis.setBacklashOffset(value);
                     }
-                }));
+                }).measuredBy(TestGroup.ZFocus).withCalibrationStep(CalibrationStep.ZBacklash));
     }
 
     /**
@@ -1217,7 +1259,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         + "between one power-up and the next. Visual homing takes the origin from "
                         + "a fiducial instead, which is the solution offered in this list.",
                         homing.getCycles(), measuredWhen(results, TestGroup.Homing),
-                        homing.getSpreadMm())));
+                        homing.getSpreadMm()))
+                                .measuredBy(TestGroup.Homing)
+                                .withCalibrationStep(CalibrationStep.VisualHoming));
     }
 
     /**
@@ -1264,7 +1308,9 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                                 : previousMethod);
                         axis.setBacklashOffset(value);
                     }
-                }));
+                })
+                        .measuredBy(TestGroup.RotationBacklash)
+                        .withCalibrationStep(CalibrationStep.RotationBacklash));
     }
 
     /**
@@ -1273,13 +1319,34 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * them apart; Issues and Solutions deliberately does not care where an issue came from.
      */
     public interface Finding {
+        /**
+         * The group whose measurement the finding holds against the configuration, or null for
+         * one read off the configuration alone. It is what the calibration page gives as the
+         * basis of the step, with when it was measured, and what it measures again when that
+         * measurement is missing or out of date.
+         */
+        default TestGroup getMeasuredBy() {
+            return null;
+        }
     }
 
     /** An issue one of these checks raised, which is the whole of what the marker means. */
     private abstract static class DiagnosticIssue extends Solutions.Issue implements Finding {
+        private TestGroup measuredBy;
+
         DiagnosticIssue(Solutions.Subject subject, String issue, String solution,
                 Solutions.Severity severity, String uri) {
             super(subject, issue, solution, severity, uri);
+        }
+
+        DiagnosticIssue measuredBy(TestGroup group) {
+            this.measuredBy = group;
+            return this;
+        }
+
+        @Override
+        public TestGroup getMeasuredBy() {
+            return measuredBy;
         }
     }
 
@@ -1290,11 +1357,22 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      */
     private static class PointerIssue extends Solutions.PlainIssue implements Finding {
         private final String explanation;
+        private TestGroup measuredBy;
 
         PointerIssue(Solutions.Subject subject, String issue, String solution,
                 Solutions.Severity severity, String uri, String explanation) {
             super(subject, issue, solution, severity, uri);
             this.explanation = explanation;
+        }
+
+        PointerIssue measuredBy(TestGroup group) {
+            this.measuredBy = group;
+            return this;
+        }
+
+        @Override
+        public TestGroup getMeasuredBy() {
+            return measuredBy;
         }
 
         @Override
@@ -1312,7 +1390,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      * An issue whose solution is one measured length going into one setting. The value is
      * adjustable before accepting, accepting writes it, and undoing puts back what was there.
      */
-    private static class LengthSettingIssue extends DiagnosticIssue {
+    private static class LengthSettingIssue extends DiagnosticIssue
+            implements org.openpnp.machine.reference.calibration.SettingChange {
         private final String label;
         private final String toolTip;
         private final String explanation;
@@ -1358,13 +1437,29 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     state == Solutions.State.Solved);
             super.setState(state);
         }
+
+        @Override
+        public String getSettingName() {
+            return label;
+        }
+
+        @Override
+        public Object getCurrentValue() {
+            return previous;
+        }
+
+        @Override
+        public Object getProposedValue() {
+            return proposed;
+        }
     }
 
     /**
      * The settle time issues, which differ from the length ones only in that a wait is a number
      * of milliseconds and the camera keeps it as one.
      */
-    private static class SettleTimeIssue extends DiagnosticIssue {
+    private static class SettleTimeIssue extends DiagnosticIssue
+            implements org.openpnp.machine.reference.calibration.SettingChange {
         private final AbstractSettlingCamera camera;
         private final String explanation;
         private final long previous;
@@ -1404,6 +1499,21 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         public void setState(Solutions.State state) throws Exception {
             camera.setSettleTimeMs(state == Solutions.State.Solved ? proposed : previous);
             super.setState(state);
+        }
+
+        @Override
+        public String getSettingName() {
+            return "Settle time in milliseconds";
+        }
+
+        @Override
+        public Object getCurrentValue() {
+            return previous;
+        }
+
+        @Override
+        public Object getProposedValue() {
+            return proposed;
         }
     }
 
@@ -1816,6 +1926,23 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
      */
     public MachineDiagnosticsResults getLastResults() {
         return lastResults;
+    }
+
+    /**
+     * Whether the camera's settling or its frame latency was measured. Its fixed wait is then
+     * held against the measurement, and the adaptive settling Issues and Solutions suggests for a
+     * fixed wait would be a second fix for the same thing, pulling the other way.
+     */
+    public boolean hasMeasuredSettling(Camera camera) {
+        if (lastResults == null) {
+            return false;
+        }
+        for (Settling settling : lastResults.getSettling()) {
+            if (settling.getCameraId().equals(camera.getId())) {
+                return true;
+            }
+        }
+        return lastResults.getCameraLatency(camera.getId()) != null;
     }
 
     public void setLastResults(MachineDiagnosticsResults lastResults) {
@@ -6153,6 +6280,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         // A coarse sweep finds it first. It may run further up, away from the glass, as far as
         // it likes; it never goes lower than the configured range allows.
         double centreZ = focus.getZ();
+        // The raw slack, with Z compensation off: measured through it, the difference between
+        // the sides was what the compensation left, and taking that for the offset compensated
+        // too little.
+        List<BacklashSetting> savedZ = suspendBacklashCompensation(machine, Axis.Type.Z);
         camera.actuateLightBeforeCapture();
         try {
             double lowest = focus.getZ() - range;
@@ -6220,6 +6351,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         }
         finally {
             camera.actuateLightAfterCapture();
+            restoreBacklashCompensation(savedZ);
             nozzle.moveToSafeZ();
         }
         report.writeCsv("z-focus.csv",
@@ -6235,8 +6367,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         report.line("  from above: mean %.4f sd %.4f range %.4f; from below: mean %.4f sd %.4f "
                 + "range %.4f", above.mean, above.stdDev, above.getRange(), below.mean,
                 below.stdDev, below.getRange());
-        report.line("  Z repeatability %.4f mm from one side, slack between the sides %.4f mm",
-                repeatability, backlash);
+        report.line("  Z repeatability %.4f mm from one side, slack between the sides %.4f mm "
+                + "with compensation switched off", repeatability, backlash);
         if (Math.abs(each.mean - focus.getZ()) > Z_BACKLASH_TOLERANCE_MM) {
             report.finding(Severity.Warning, "The nozzle tip is sharpest %.3f mm %s the height the "
                     + "bottom camera is set to. Bottom vision images every part %.3f mm out of "

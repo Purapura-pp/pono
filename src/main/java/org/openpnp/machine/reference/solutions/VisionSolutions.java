@@ -47,6 +47,7 @@ import org.openpnp.machine.reference.camera.AbstractSettlingCamera.SettleMethod;
 import org.openpnp.machine.reference.camera.AutoFocusProvider;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.camera.SimulatedUpCamera;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Configuration.TablesLinked;
 import org.openpnp.model.Footprint;
@@ -522,7 +523,7 @@ public class VisionSolutions implements Solutions.Subject {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.PrimaryFiducial, head));
 
             final Location oldSecondaryFiducialLocation = head.getCalibrationSecondaryFiducialLocation();
             final Length oldSecondaryFiducialDiameter = head.getCalibrationSecondaryFiducialDiameter();
@@ -605,7 +606,7 @@ public class VisionSolutions implements Solutions.Subject {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.SecondaryFiducial, head));
         }
         else if (isSolvedPrimaryXY(head)) {
             // Not the default camera.
@@ -689,7 +690,7 @@ public class VisionSolutions implements Solutions.Subject {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.OtherCameraOffsets));
         }
     }
 
@@ -807,7 +808,7 @@ public class VisionSolutions implements Solutions.Subject {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.BottomCamera));
         }
     }
 
@@ -837,7 +838,7 @@ public class VisionSolutions implements Solutions.Subject {
                         "Head "+head.getName()+" primary and secondary calibration fiducial Z coordinates must be at least "
                                 +fiducialsMinimumZOffsetMm+"\u00A0mm apart.", 
                                 Solutions.Severity.Error,
-                        "https://github.com/openpnp/openpnp/wiki/Vision-Solutions#nozzle-offsets"));
+                        "https://github.com/openpnp/openpnp/wiki/Vision-Solutions#nozzle-offsets").withCalibrationStep(CalibrationStep.SecondaryFiducial));
             }
 
             for (boolean primary : (nozzle == defaultNozzle && isSolvedSecondaryXY(head)) ? new boolean [] {true, false} : new boolean [] {true} ) {
@@ -856,7 +857,7 @@ public class VisionSolutions implements Solutions.Subject {
                             "Safe Z of Nozzle "+nozzle.getName()+" is lower than the calibration "+qualifier+" fiducial Z. "
                                     + "Please change the calibration rig "+qualifier+" height or adjust Safe Z.", 
                             Solutions.Severity.Error,
-                            "https://github.com/openpnp/openpnp/wiki/Vision-Solutions#nozzle-offsets"));
+                            "https://github.com/openpnp/openpnp/wiki/Vision-Solutions#nozzle-offsets").withCalibrationStep(CalibrationStep.SafeZ));
                 }
                 solutions.add(new Solutions.Issue(
                         nozzle, 
@@ -1041,7 +1042,7 @@ public class VisionSolutions implements Solutions.Subject {
                             }
                         }
                     }
-                });
+                }.withCalibrationStep(primary ? (nozzle == defaultNozzle ? CalibrationStep.NozzleTouchPrimary : CalibrationStep.OtherNozzleOffsets) : CalibrationStep.SecondaryFiducial, primary ? nozzle : head));
             }
         }
     }
@@ -1125,7 +1126,7 @@ public class VisionSolutions implements Solutions.Subject {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.VisualHoming));
 
         }
     }

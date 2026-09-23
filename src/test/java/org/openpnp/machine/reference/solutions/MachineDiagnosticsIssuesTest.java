@@ -208,29 +208,45 @@ public class MachineDiagnosticsIssuesTest {
         assertFalse(reported.contains(ACCELERATION_NOT_REACHED));
     }
 
+    /**
+     * The backlash calibration is the one way the compensation is set: the finding points at it
+     * and writes nothing. It used to raise the offset to 1.2 times the backlash on its own.
+     */
     @Test
-    public void aOneSidedOffsetShorterThanTheBacklashIsReportedAndRaisedPastIt() throws Exception {
+    public void backlashTheOneSidedOffsetDoesNotClearPointsAtTheCalibration() throws Exception {
         xAxis.setBacklashCompensationMethod(BacklashCompensationMethod.OneSidedPositioning);
         xAxis.setBacklashOffset(new Length(0.05, LengthUnit.Millimeters));
         MachineDiagnosticsResults results = new MachineDiagnosticsResults();
         results.setPositioning(List.of(new Positioning(xAxis.getId(), 0.02, 0.2, null)));
 
-        issue(results, OFFSET_BELOW_BACKLASH).setState(Solutions.State.Solved);
-
-        assertTrue(millimetres(xAxis.getBacklashOffset()) > 0.2,
-                "the offset has to clear the backlash, not merely equal it");
-        assertEquals(0.24, millimetres(xAxis.getBacklashOffset()), 1e-9);
+        Solutions.Issue issue = issue(results, OFFSET_BELOW_BACKLASH);
+        assertFalse(issue.canBeAccepted(), "a pointer to the backlash calibration");
+        assertEquals(org.openpnp.model.CalibrationStep.XyBacklash, issue.getCalibrationStep());
+        assertEquals(MachineDiagnostics.TestGroup.XyPositioning,
+                ((MachineDiagnostics.Finding) issue).getMeasuredBy());
+        assertEquals(0.05, millimetres(xAxis.getBacklashOffset()), 1e-9);
     }
 
-    /** The other methods do not drive past the target, so the offset is not asked to clear it. */
+    /**
+     * Every method is held to the backlash measured with compensation off: a directional one has
+     * to set about half of it or more, and no compensation covers none of it.
+     */
     @Test
-    public void aBacklashOffsetIsOnlyReportedForTheMethodThatDependsOnIt() {
-        xAxis.setBacklashCompensationMethod(BacklashCompensationMethod.DirectionalCompensation);
-        xAxis.setBacklashOffset(new Length(0.05, LengthUnit.Millimeters));
+    public void backlashIsHeldAgainstWhateverMethodCompensatesIt() {
         MachineDiagnosticsResults results = new MachineDiagnosticsResults();
         results.setPositioning(List.of(new Positioning(xAxis.getId(), 0.02, 0.2, null)));
 
+        xAxis.setBacklashCompensationMethod(BacklashCompensationMethod.DirectionalCompensation);
+        xAxis.setBacklashOffset(new Length(0.05, LengthUnit.Millimeters));
+        assertTrue(wordings(results).contains(OFFSET_BELOW_BACKLASH));
+        xAxis.setBacklashOffset(new Length(0.12, LengthUnit.Millimeters));
         assertFalse(wordings(results).contains(OFFSET_BELOW_BACKLASH));
+
+        xAxis.setBacklashCompensationMethod(BacklashCompensationMethod.None);
+        assertTrue(wordings(results).contains(OFFSET_BELOW_BACKLASH));
+
+        results.setPositioning(List.of(new Positioning(xAxis.getId(), 0.005, 0.01, null)));
+        assertFalse(wordings(results).contains(OFFSET_BELOW_BACKLASH), "too little to be worth it");
     }
 
     @Test

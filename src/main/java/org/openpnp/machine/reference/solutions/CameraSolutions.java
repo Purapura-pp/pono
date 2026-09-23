@@ -41,6 +41,7 @@ import org.openpnp.machine.reference.camera.OpenPnpCaptureCamera;
 import org.openpnp.machine.reference.camera.OpenPnpCaptureCamera.CapturePropertyHolder;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.camera.SwitcherCamera;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.model.Solutions;
@@ -139,8 +140,10 @@ public class CameraSolutions implements Solutions.Subject  {
                     }
                 });
             }
-            CameraPanel cameraPanel = MainFrame.get().getCameraViews();
-            CameraView view = cameraPanel.getCameraView(camera);
+            // No window, no views: a search run without one, as the calibration page's own is
+            // in the tests, goes on to the checks that do not depend on how a view renders.
+            CameraPanel cameraPanel = MainFrame.get() == null ? null : MainFrame.get().getCameraViews();
+            CameraView view = cameraPanel == null ? null : cameraPanel.getCameraView(camera);
             if (view != null) {
                 final RenderingQuality renderingQuality = view.getRenderingQuality();
                 if (renderingQuality.ordinal() < RenderingQuality.High.ordinal()) {
@@ -186,7 +189,11 @@ public class CameraSolutions implements Solutions.Subject  {
                     final HeadMountable movable = movable0;
                     final Location location = location0;
                     final SettleMethod oldSettleMethod = camera.getSettleMethod();
-                    if (oldSettleMethod == SettleMethod.FixedTime) {
+                    MachineDiagnostics diagnostics = ((ReferenceMachine) machine).getMachineDiagnostics();
+                    // Once the settling was measured, the measured fixed wait is the fix, and
+                    // this one would pull the other way.
+                    if (oldSettleMethod == SettleMethod.FixedTime
+                            && (diagnostics == null || !diagnostics.hasMeasuredSettling(camera))) {
                         solutions.add(new Solutions.Issue(
                                 camera, 
                                 "Use an adaptive camera settling method.", 
@@ -255,7 +262,7 @@ public class CameraSolutions implements Solutions.Subject  {
                                     super.setState(state);
                                 }
                             }
-                        });
+                        }.withCalibrationStep(CalibrationStep.CameraSettle));
                     }
                 }
             }
@@ -378,7 +385,7 @@ public class CameraSolutions implements Solutions.Subject  {
                             }
                             super.setState(state);
                         }
-                    });
+                    }.withCalibrationStep(CalibrationStep.Exposure));
                 }
             }
         }
@@ -475,7 +482,7 @@ public class CameraSolutions implements Solutions.Subject  {
                     }
                     super.setState(state);
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.Exposure));
             return false;
         }
         return true;
@@ -518,7 +525,7 @@ public class CameraSolutions implements Solutions.Subject  {
                     camera.ensureCameraVisible();
                     super.setState(state);
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.Exposure));
             return false;
         }
         return true;

@@ -55,6 +55,7 @@ import org.openpnp.machine.reference.camera.MjpgCaptureCamera;
 import org.openpnp.machine.reference.camera.OnvifIPCamera;
 import org.openpnp.machine.reference.camera.OpenCvCamera;
 import org.openpnp.machine.reference.camera.OpenPnpCaptureCamera;
+import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.camera.SimulatedUpCamera;
 import org.openpnp.machine.reference.camera.SwitcherCamera;
 import org.openpnp.machine.reference.camera.Webcams;
@@ -87,6 +88,7 @@ import org.openpnp.machine.reference.psh.SignalersPropertySheetHolder;
 import org.openpnp.machine.reference.signaler.ActuatorSignaler;
 import org.openpnp.machine.reference.signaler.SoundSignaler;
 import org.openpnp.machine.reference.solutions.CalibrationSolutions;
+import org.openpnp.machine.reference.solutions.CameraSolutions;
 import org.openpnp.machine.reference.solutions.KinematicSolutions;
 import org.openpnp.machine.reference.solutions.MachineDiagnostics;
 import org.openpnp.machine.reference.solutions.NozzleTipSolutions;
@@ -663,6 +665,24 @@ public class ReferenceMachine extends AbstractMachine {
     }
 
     private ScriptingSolutions scriptingSolutions = new ScriptingSolutions();
+
+    /**
+     * The calibration page's own search: only what raises calibration issues, into an instance of
+     * its own (see {@link Solutions#forCalibration}), so that the issues page's milestone hides
+     * nothing and its list is left alone.
+     */
+    public void findCalibrationIssues(Solutions solutions) {
+        kinematicSolutions.setMachine(this).findIssues(solutions);
+        nozzleTipSolutions.setMachine(this).findIssues(solutions);
+        visualSolutions.setMachine(this).findIssues(solutions);
+        calibrationSolutions.setMachine(this).findIssues(solutions);
+        machineDiagnostics.setMachine(this).findIssues(solutions);
+        for (Camera camera : getAllCameras()) {
+            if (camera instanceof ReferenceCamera) {
+                new CameraSolutions((ReferenceCamera) camera).findIssues(solutions);
+            }
+        }
+    }
 
     @Override
     public void findIssues(Solutions solutions) {
