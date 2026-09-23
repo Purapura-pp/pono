@@ -44,7 +44,12 @@ public class PackageNozzleTipsWizard extends AbstractConfigurationWizard /*JPane
     }
     private void createUi() {
         table = new JTable(new NozzleTipsTableModel());
-        contentPanel.add(table);
+        // In a scroll pane, which is what gives a table its header: added bare, the columns had
+        // no names.
+        scrollPane = new JScrollPane(table);
+        scrollPane.setPreferredSize(new java.awt.Dimension(360,
+                table.getRowHeight() * Math.max(3, Math.min(12, table.getRowCount())) + 32));
+        contentPanel.add(scrollPane);
     }
 
     public class NozzleTipsTableModel extends AbstractTableModel {

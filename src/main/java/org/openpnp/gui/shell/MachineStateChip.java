@@ -89,6 +89,8 @@ public class MachineStateChip extends JLabel {
     private Machine machine;
     private final Action toggleAction;
     private boolean busy;
+    /** Why the machine last went off or failed to come on, as the driver said; null if it did not say. */
+    private volatile String reason;
 
     public MachineStateChip(Configuration configuration, Action toggleAction) {
         this.toggleAction = toggleAction;
@@ -126,11 +128,19 @@ public class MachineStateChip extends JLabel {
     private final MachineListener machineListener = new MachineListener.Adapter() {
         @Override
         public void machineEnabled(Machine machine) {
+            reason = null;
             refreshLater();
         }
 
         @Override
         public void machineDisabled(Machine machine, String reason) {
+            MachineStateChip.this.reason = reason;
+            refreshLater();
+        }
+
+        @Override
+        public void machineEnableFailed(Machine machine, String reason) {
+            MachineStateChip.this.reason = reason;
             refreshLater();
         }
 
@@ -154,6 +164,14 @@ public class MachineStateChip extends JLabel {
         State state = state();
         setText(Translations.getString(state.textKey));
         setForeground(state.color());
+        String toolTip = Translations.getString("TopBar.MachineState.toolTipText"); //$NON-NLS-1$
+        if (state == State.Disconnected && reason != null && !reason.trim().isEmpty()) {
+            toolTip = "<html>" + toolTip + "<br>" //$NON-NLS-1$ //$NON-NLS-2$
+                    + String.format(Translations.getString("TopBar.MachineState.Reason"), //$NON-NLS-1$
+                            reason.trim().replace("<", "&lt;")) //$NON-NLS-1$ //$NON-NLS-2$
+                    + "</html>"; //$NON-NLS-1$
+        }
+        setToolTipText(toolTip);
         revalidate();
         repaint();
     }

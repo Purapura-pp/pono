@@ -217,6 +217,18 @@ public abstract class AbstractVisionSettings extends AbstractModelObject impleme
         return getUsedIn((h) -> h.getFiducialVisionSettings());
     }
 
+    /** Everything this setting is assigned to, as bottom vision or as fiducial vision. */
+    public List<PartSettingsHolder> getUsedIn() {
+        List<PartSettingsHolder> list = new ArrayList<>(getUsedBottomVisionIn());
+        for (PartSettingsHolder holder : getUsedFiducialVisionIn()) {
+            if (!list.contains(holder)) {
+                list.add(holder);
+            }
+        }
+        list.sort(new AbstractPartSettingsHolder.PartSettingsComparator());
+        return list;
+    }
+
     public static class ListConverter extends Converter<List<PartSettingsHolder>, String> {
         private final PartSettingsHolder settingsHolder;
         private final boolean html;

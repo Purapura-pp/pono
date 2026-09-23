@@ -1840,6 +1840,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         results.setRun(group, now, report.getDirectory().getAbsolutePath(),
                 groupStartedMillis > 0 ? now - groupStartedMillis : 0);
         setLastResults(results);
+        // The conclusions live in machine.xml; a measurement is worth nothing if a crash loses it.
+        if (configuration != null) {
+            configuration.setDirty(true);
+        }
     }
 
     public SimpleGraph getTimingGraph() {

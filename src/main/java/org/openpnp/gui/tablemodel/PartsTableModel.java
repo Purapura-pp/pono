@@ -136,6 +136,7 @@ public class PartsTableModel extends AbstractObjectTableModel implements Propert
             else if (columnIndex == 7) {
                 part.setFiducialVisionSettings((FiducialVisionSettings) aValue);
             }
+            configuration.setDirty(true);
         }
         catch (Exception e) {
             // TODO: dialog, bad input

@@ -417,10 +417,63 @@ public class MachineDiagnosticsWizard extends AbstractConfigurationWizard {
                     selected.add(entry.getKey());
                 }
             }
+            if (!confirmMotion(selected)) {
+                return;
+            }
             UiUtils.submitUiMachineTask(() -> diagnostics.run(machine, selected),
                     (report) -> reportIssues(), (t) -> UiUtils.showError(t));
         }
     };
+
+    /** The groups that only talk to the controller or read the configuration. */
+    private static final Set<TestGroup> STILL = EnumSet.of(TestGroup.Firmware,
+            TestGroup.ConfigSnapshot);
+    /** The groups that run the axes fast, over the whole travel, for minutes. */
+    private static final Set<TestGroup> LONG_TRAVEL = EnumSet.of(TestGroup.LostSteps,
+            TestGroup.Kinematics, TestGroup.HysteresisMap, TestGroup.Homing,
+            TestGroup.XyPositioning, TestGroup.DatumBoard);
+
+    /**
+     * Says what is about to move before it moves. A click on Measure used to start minutes of
+     * full-travel motion at speed with nothing more than a tooltip to warn about it, where the
+     * compensation next door asks first.
+     */
+    private boolean confirmMotion(Set<TestGroup> selected) {
+        List<String> moving = new ArrayList<>();
+        List<String> travelling = new ArrayList<>();
+        for (TestGroup group : selected) {
+            if (STILL.contains(group)) {
+                continue;
+            }
+            String name = Translations.getString("MachineDiagnosticsWizard.Test." + group.name()); //$NON-NLS-1$
+            moving.add(name);
+            if (LONG_TRAVEL.contains(group)) {
+                travelling.add(name);
+            }
+        }
+        if (moving.isEmpty()) {
+            return true;
+        }
+        String separator = Translations.getString("MachineDiagnosticsWizard.ConfirmMotion.Separator"); //$NON-NLS-1$
+        StringBuilder message = new StringBuilder("<html><body style='width: 420px'>"); //$NON-NLS-1$
+        message.append(String.format(Translations.getString("MachineDiagnosticsWizard.ConfirmMotion.Moving"), //$NON-NLS-1$
+                String.join(separator, moving)));
+        if (!travelling.isEmpty()) {
+            message.append("<br><br>").append(String.format(Translations.getString( //$NON-NLS-1$
+                    "MachineDiagnosticsWizard.ConfirmMotion.Travelling"), String.join(separator, travelling))); //$NON-NLS-1$
+        }
+        message.append("<br><br>").append(String.format(Translations.getString( //$NON-NLS-1$
+                "MachineDiagnosticsWizard.ConfirmMotion.Check"), //$NON-NLS-1$
+                org.openpnp.gui.shell.Hotkeys.describe(org.openpnp.gui.shell.Hotkeys.STOP_MACHINE)));
+        message.append("</body></html>"); //$NON-NLS-1$
+        String start = Translations.getString("MachineDiagnosticsWizard.ConfirmMotion.Start"); //$NON-NLS-1$
+        String cancel = Translations.getString("Dialog.Cancel"); //$NON-NLS-1$
+        int answer = javax.swing.JOptionPane.showOptionDialog(MachineDiagnosticsWizard.this,
+                message.toString(), Translations.getString("MachineDiagnosticsWizard.ConfirmMotion.Title"), //$NON-NLS-1$
+                javax.swing.JOptionPane.OK_CANCEL_OPTION, javax.swing.JOptionPane.WARNING_MESSAGE,
+                null, new Object[] { start, cancel }, cancel);
+        return answer == 0;
+    }
 
     /**
      * Ask Issues and Solutions to look again, now that there is something measured to look at.

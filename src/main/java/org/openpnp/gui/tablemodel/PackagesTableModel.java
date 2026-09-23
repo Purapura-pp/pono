@@ -101,6 +101,7 @@ public class PackagesTableModel extends AbstractObjectTableModel implements Prop
             else if (columnIndex == 4) {
                 this_package.setFiducialVisionSettings((FiducialVisionSettings) aValue);
             }
+            configuration.setDirty(true);
         }
         catch (Exception e) {
             // TODO: dialog, bad input

@@ -36,6 +36,8 @@ import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
  */
 public class OverlayAnchorLayoutTest {
     private static final int MARGIN = 10;
+    /** Where the instructions start: below the camera tools that line the top edge. */
+    private static final int NORTH_TOP = 56;
 
     /** A card that cannot be made narrower than it asks for, like a grid of buttons. */
     private JPanel card(int width, int height) {
@@ -182,7 +184,7 @@ public class OverlayAnchorLayoutTest {
     }
 
     @Test
-    public void theInstructionsSitCentredAgainstTheTopEdge() {
+    public void theInstructionsSitCentredBelowTheCameraTools() {
         JPanel stage = stage(800, 600);
         JPanel instructions = card(400, 60);
         stage.add(card(100, 100), Anchor.Fill);
@@ -191,7 +193,7 @@ public class OverlayAnchorLayoutTest {
         stage.doLayout();
 
         assertEquals((800 - 400) / 2, instructions.getX());
-        assertEquals(MARGIN, instructions.getY());
+        assertEquals(NORTH_TOP, instructions.getY());
     }
 
     @Test
