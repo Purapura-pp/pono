@@ -687,6 +687,14 @@ public abstract class AbstractMachine extends AbstractModelObject implements Mac
         return executor == null || executor.isShutdown() || executor.getQueue().isEmpty();
     }
 
+    /**
+     * No task running and none waiting. Unlike isBusy, which only says whether a task is
+     * running, this is false for a task submitted and not yet started.
+     */
+    public boolean isIdle() {
+        return !isBusy() && isQueueEmpty();
+    }
+
     @Override
     public <T> Future<T> submit(final Callable<T> callable, final FutureCallback<T> callback,
             final boolean ignoreEnabled) {

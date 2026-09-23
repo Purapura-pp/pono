@@ -37,6 +37,7 @@ import org.openpnp.machine.reference.ReferenceNozzleTipCalibration.BackgroundCal
 import org.openpnp.machine.reference.ReferenceNozzleTipCalibration.RecalibrationTrigger;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.wizards.ReferenceNozzleTipCalibrationWizard;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
@@ -113,7 +114,7 @@ public class NozzleTipSolutions implements Solutions.Subject  {
                                             nozzle.getLocation() : Location.origin);
                                     super.setState(state);
                                 }
-                            });
+                            }.withCalibrationStep(CalibrationStep.ManualNozzleTipChange));
                         }
                     }
                 }
@@ -268,7 +269,7 @@ public class NozzleTipSolutions implements Solutions.Subject  {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.NozzleTipCalibration));
         }
         else { 
             if (nozzleTip.getMaxPickTolerance().compareTo(new Length(1.0, LengthUnit.Millimeters)) > 0) {
@@ -376,7 +377,7 @@ public class NozzleTipSolutions implements Solutions.Subject  {
                             super.setState(state);
                         }
                     }
-                });
+                }.withCalibrationStep(CalibrationStep.NozzleTipCalibration));
             }
         }
     }

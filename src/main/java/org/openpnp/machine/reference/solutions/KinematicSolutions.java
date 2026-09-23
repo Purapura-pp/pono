@@ -32,6 +32,7 @@ import org.openpnp.machine.reference.ReferenceNozzleTip;
 import org.openpnp.machine.reference.axis.ReferenceCamClockwiseAxis;
 import org.openpnp.machine.reference.axis.ReferenceCamCounterClockwiseAxis;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -104,7 +105,7 @@ public class KinematicSolutions implements Solutions.Subject {
                             super.setState(state);
                         }
                     }
-                });
+                }.withCalibrationStep(CalibrationStep.Home));
                 return;
             }
             // Dynamic Safe Z yes/no.
@@ -154,7 +155,7 @@ public class KinematicSolutions implements Solutions.Subject {
                                 super.setState(state);
                             }
                         };
-                        solutions.add(issue);
+                        solutions.add(issue.withCalibrationStep(CalibrationStep.SafeZ));
                         if (!solutions.isSolutionsIssueSolved(issue)) {
                             okDynamicSafeZ = false;
                         }
@@ -202,7 +203,7 @@ public class KinematicSolutions implements Solutions.Subject {
                                                 axisZ.setSafeZoneHighEnabled(state != State.Solved);
                                                 MainFrame.get().getIssuesAndSolutionsTab().findIssuesAndSolutions();
                                             }
-                                        });
+                                        }.withCalibrationStep(CalibrationStep.SafeZ));
                                     }
                                     else {
                                         if (bothSafeZoneHighAndLowEnabled
@@ -279,7 +280,7 @@ public class KinematicSolutions implements Solutions.Subject {
                                                 solutions.setSolutionsIssueSolved(this, (state == State.Solved));
                                                 super.setState(state);
                                             }
-                                        });
+                                        }.withCalibrationStep(CalibrationStep.SafeZ));
                                     }
                                     if (safeZSolved && hm instanceof ReferenceNozzle) {
                                         // try to find a shared Z axis nozzle
@@ -472,7 +473,7 @@ public class KinematicSolutions implements Solutions.Subject {
                                         }
                                         super.setState(state);
                                     }
-                                });
+                                }.withCalibrationStep(CalibrationStep.SoftLimits));
                             }
                         }
                     }

@@ -39,6 +39,7 @@ import org.openpnp.machine.reference.camera.ImageCamera;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.camera.calibration.AdvancedCalibration;
 import org.openpnp.machine.reference.feeder.ReferenceTubeFeeder;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -307,7 +308,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                                     super.setState(state);
                                 }
                             }
-                        });
+                        }.withCalibrationStep(CalibrationStep.XyBacklash, axis));
                     }
                 }
             }
@@ -356,7 +357,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                         }
                         super.setState(state);
                     }
-                });
+                }.withCalibrationStep(CalibrationStep.AdvancedDownCamera));
             }
         }
     }
@@ -461,7 +462,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                         super.setState(state);
                     }
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.PreciseNozzleOffsets));
         }
     }
 
@@ -516,7 +517,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                     }
                     super.setState(state);
                 }
-            });
+            }.withCalibrationStep(CalibrationStep.AdvancedUpCamera));
         }
     }
 
@@ -1253,6 +1254,9 @@ public class CalibrationSolutions implements Solutions.Subject {
             CameraView cameraView = MainFrame.get()
                                              .getCameraViews()
                                              .getCameraView(camera);
+            // The issue reads Solved as soon as this starts; this says when it has ended.
+            java.util.concurrent.CompletableFuture<Boolean> done = new java.util.concurrent.CompletableFuture<>();
+            advancedCalibrations.put(camera, done);
             // Encapsulated CalibrateCameraProcess
             new CalibrateCameraProcess(MainFrame.get(), cameraView, calibrationLocations,
                     detectionDiameters, automationLevel) {
@@ -1287,6 +1291,10 @@ public class CalibrationSolutions implements Solutions.Subject {
                                 MovableUtils.moveToLocationAtSafeZ(movable,
                                         camera.getLocation(movable));
                             }
+                            return true;
+                        }, result -> done.complete(true), t -> {
+                            UiUtils.showError(t);
+                            done.complete(false);
                         });
                     }
                     catch (Exception e) {
@@ -1296,6 +1304,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                         advCal.setOverridingOldTransformsAndDistortionCorrectionSettings(false);
                         issue.setState(State.Open);
                         camera.setDefaultZ(oldDefaultZ);
+                        done.complete(false);
                     }
                     MainFrame.get()
                              .getIssuesAndSolutionsTab()
@@ -1315,6 +1324,8 @@ public class CalibrationSolutions implements Solutions.Subject {
                     catch (Exception e) {
                         Logger.warn(e, "Failed to reopen the issue after the calibration of camera {} was canceled.", camera.getName());
                     }
+                    // It can be called twice, from a worker thread; a future completes once.
+                    done.complete(false);
                     MainFrame.get()
                              .getIssuesAndSolutionsTab()
                              .solutionChanged();
@@ -1324,7 +1335,25 @@ public class CalibrationSolutions implements Solutions.Subject {
         catch (Exception e) {
             // Aborted 
             advCal.setOverridingOldTransformsAndDistortionCorrectionSettings(false);
+            java.util.concurrent.CompletableFuture<Boolean> done = advancedCalibrations.get(camera);
+            if (done != null) {
+                done.complete(false);
+            }
             throw e;
         }
+    }
+
+    /** The advanced calibration last started for each camera. */
+    private final java.util.Map<Camera, java.util.concurrent.CompletableFuture<Boolean>> advancedCalibrations =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * How the advanced calibration last started for the camera ended: true once its result is
+     * applied and the camera is back where it was, false if it was cancelled or failed; not done
+     * while it runs. Null if none was started. Its issue reads Solved as soon as it starts, so
+     * this is what anyone waiting for the calibration waits on.
+     */
+    public java.util.concurrent.CompletableFuture<Boolean> getAdvancedCalibrationCompletion(Camera camera) {
+        return advancedCalibrations.get(camera);
     }
 }

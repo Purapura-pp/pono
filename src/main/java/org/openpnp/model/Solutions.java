@@ -377,6 +377,37 @@ public class Solutions {
             return true;
         }
 
+        private CalibrationStep calibrationStep;
+        private Object calibrationSubject;
+
+        /**
+         * The calibration step that resolves this issue, or null for an issue that is not about
+         * calibrating. Tagging leaves the wording, and so the fingerprint, as it was.
+         */
+        public CalibrationStep getCalibrationStep() {
+            return calibrationStep;
+        }
+
+        /**
+         * What the step is about: the axis whose backlash is calibrated, where the issue is about
+         * the camera that measures it. The issue's subject when not said otherwise.
+         */
+        public Object getCalibrationSubject() {
+            return calibrationSubject != null ? calibrationSubject : subject;
+        }
+
+        /** Tags the issue with the step that resolves it, about the issue's own subject. */
+        public Issue withCalibrationStep(CalibrationStep step) {
+            return withCalibrationStep(step, null);
+        }
+
+        /** Tags the issue with the step that resolves it, about the given element. */
+        public Issue withCalibrationStep(CalibrationStep step, Object stepSubject) {
+            this.calibrationStep = step;
+            this.calibrationSubject = stepSubject;
+            return this;
+        }
+
         /**
          * Ultra simple custom property support. 
          *
@@ -684,6 +715,37 @@ public class Solutions {
                 };
             }
         });
+        applyRecords();
+    }
+
+    /**
+     * A search for the calibration page: only the given producers, and no milestone issue. See
+     * {@link #forCalibration(Solutions)}.
+     */
+    public synchronized void findIssues(java.util.function.Consumer<Solutions> producers) {
+        pendingIssues = new ArrayList<>();
+        producers.accept(this);
+        applyRecords();
+    }
+
+    /**
+     * An instance for the calibration page's own search. It targets the last milestone, so that
+     * the issues page's milestone hides no step, keeps what was solved and dismissed, as Solved
+     * and Dismissed, because a step done once is still a step, and shares the machine's record
+     * of both, so that either page sees what the other did.
+     */
+    public static Solutions forCalibration(Solutions shared) {
+        Solutions scan = new Solutions();
+        scan.dismissedSolutions = shared.dismissedSolutions;
+        scan.solvedSolutions = shared.solvedSolutions;
+        scan.targetMilestone = Milestone.Advanced;
+        scan.showSolved = true;
+        scan.showDismissed = true;
+        return scan;
+    }
+
+    /** Takes out, or marks, what the user dismissed and what was solved before. */
+    private void applyRecords() {
         for (Issue issue : new ArrayList<>(pendingIssues)) {
             if (isSolutionsIssueDismissed(issue)) {
                 if (isShowDismissed()) {
