@@ -160,7 +160,7 @@ public class Webcams extends ReferenceCamera implements Runnable, WebcamImageTra
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName() + " " + getName();
+        return org.openpnp.gui.support.DisplayNames.title(this, getName());
     }
 
     @Override

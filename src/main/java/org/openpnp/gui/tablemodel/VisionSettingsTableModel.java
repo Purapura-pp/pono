@@ -75,7 +75,7 @@ public class VisionSettingsTableModel extends AbstractObjectTableModel implement
         AbstractVisionSettings visionSettings = this.visionSettings.get(rowIndex);
         switch (columnIndex) {
             case 0:
-                return visionSettings.getName();
+                return org.openpnp.gui.support.DisplayNames.visionSettingsName(visionSettings.getName());
             case 1:
                 // Both kinds of use: a fiducial vision setting is assigned to parts and packages
                 // as much as a bottom vision one is, and this column used to show it as unused.

@@ -72,7 +72,7 @@ public class BlindsFeederConfigurationWizard extends AbstractConfigurationWizard
         panelPart = new JPanel();
         panelPart.setBorder(new TitledBorder(null,
                 Translations.getString("BlindsFeederConfigurationWizard.panelPart.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, //$NON-NLS-1$
-                new Color(0, 0, 0)));
+                null));
         contentPanel.add(panelPart);
         panelPart.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
@@ -145,7 +145,7 @@ public class BlindsFeederConfigurationWizard extends AbstractConfigurationWizard
         contentPanel.add(panelTapeSettings);
         panelTapeSettings.setBorder(new TitledBorder(
                 null, Translations.getString("BlindsFeederConfigurationWizard.panelTapeSettings.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
+                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         panelTapeSettings.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("max(70dlu;default)"),

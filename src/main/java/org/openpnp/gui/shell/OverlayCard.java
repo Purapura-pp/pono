@@ -43,7 +43,8 @@ import javax.swing.UIManager;
 @SuppressWarnings("serial")
 public class OverlayCard extends JPanel {
     /** The stylesheet's {@code .glass}: a 10 pixel arc. */
-    private static final int ARC = 10;
+    /** The stylesheet's .glass radius, 10, as the diameter Java2D takes. */
+    private static final int ARC = 2 * Tokens.R_MD;
 
     public OverlayCard() {
         setOpaque(false);

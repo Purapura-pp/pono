@@ -421,6 +421,8 @@ public class MainFrame extends JFrame {
     public MainFrame(Configuration configuration) {
         mainFrame = this;
         this.configuration = configuration;
+        // Enum values in every combo box and table, the wizards' included, by their display names.
+        org.openpnp.gui.support.DisplayNames.installEverywhere();
         // From here on the model can ask the user things. Without this it answers itself and logs,
         // which is what a script or a test gets.
         configuration.setUserInteraction(new SwingUserInteraction());
@@ -650,6 +652,12 @@ public class MainFrame extends JFrame {
             mnHelp.add(new JMenuItem(aboutAction));
         }
         mnHelp.add(hotkeysAction);
+        mnHelp.add(new AbstractAction(Translations.getString("Menu.Help.ControlGallery")) { //$NON-NLS-1$
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                org.openpnp.gui.shell.ControlGallery.showGallery(MainFrame.this);
+            }
+        });
         mnHelp.addSeparator();
         mnHelp.add(quickStartLinkAction);
         mnHelp.add(setupAndCalibrationLinkAction);
@@ -664,6 +672,8 @@ public class MainFrame extends JFrame {
 
         contentPane = new JPanel();
         contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+        // The window between the cards is the stylesheet's --bg; the panels are --surface.
+        contentPane.setBackground(org.openpnp.gui.shell.Ui.bg());
         setContentPane(contentPane);
         contentPane.setLayout(new BorderLayout(0, 0));
 
@@ -934,20 +944,20 @@ public class MainFrame extends JFrame {
         addNavigation("Packages", Icons.footprintQuad, packagesPanel); //$NON-NLS-1$
         addNavigation("Boards", Icons.board, boardsPanel); //$NON-NLS-1$
         addNavigation("Panels", Icons.panel, panelsPanel); //$NON-NLS-1$
-        addNavigation("Vision", Icons.captureCamera, visionSettingsPanel); //$NON-NLS-1$
+        addNavigation("Vision", org.openpnp.gui.shell.Ui.icon("eye", 20), visionSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         navigationRail.addGap();
         addNavigation("MachineSetup", Icons.axisCartesian, machineSetupPanel); //$NON-NLS-1$
         diagnosticsPanel = new DiagnosticsPanel(configuration);
         addNavigation("Diagnostics", org.openpnp.gui.shell.Ui.icon("ruler", 20, null), diagnosticsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         addNavigation("IssuesAndSolutions", Icons.solutions, issuesAndSolutionsPanel); //$NON-NLS-1$
         LogPanel logPanel = new LogPanel();
-        addNavigation("Log", Icons.info, logPanel); //$NON-NLS-1$
+        addNavigation("Log", org.openpnp.gui.shell.Ui.icon("log", 20), logPanel); //$NON-NLS-1$ //$NON-NLS-2$
         // Settings opens the appearance dialog for now; the plan is for it to gather the settings
         // that are spread across the menus.
         navigationRail.addAction(
                 Translations.getString("MainFrame.Navigation.Settings"), //$NON-NLS-1$
                 Translations.getString("MainFrame.Navigation.Settings.toolTipText"), //$NON-NLS-1$
-                Icons.driver, e -> ThemeDialog.showThemeDialog(MainFrame.this));
+                org.openpnp.gui.shell.Ui.icon("gear", 20), e -> ThemeDialog.showThemeDialog(MainFrame.this)); //$NON-NLS-1$
         contentPane.add(navigationRail, BorderLayout.WEST);
 
         navigationRail.addChangeListener(new ChangeListener() {

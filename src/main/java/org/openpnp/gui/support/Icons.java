@@ -1,133 +1,152 @@
 package org.openpnp.gui.support;
 
+import java.awt.Color;
+
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 
+import org.openpnp.gui.shell.Ui;
+
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 
+/**
+ * The icons of the pages and wizards, by what they do. Every one is an icon of the mockups' set,
+ * {@code icons/pono}: monochrome, drawn in the colour of the component's text, so it follows the
+ * theme and the enabled state. The coloured multi-tone icons these names used to stand for are
+ * gone; where an icon carried its meaning in colour - a power button on or off, a pin enabled or
+ * not - the colour is the stylesheet's.
+ * <p>
+ * The diagrams a few wizards show, such as the nozzle arrangements and the Safe Z modes, are
+ * pictures rather than icons and stay as they were drawn, under {@code icons/diagrams}.
+ */
 public class Icons {
-    public static Icon add = getIcon("/icons/general-add.svg");
-    public static Icon delete = getIcon("/icons/general-remove.svg");
-    public static Icon copy = getIcon("/icons/copy.svg");
-    public static Icon paste = getIcon("/icons/paste.svg");
-    public static Icon export = getIcon("/icons/export.svg");
-    public static Icon importt = getIcon("/icons/import.svg");
+    private static final int SIZE = 18;
+
+    public static Icon add = pono("plus");
+    public static Icon delete = pono("trash");
+    public static Icon copy = pono("copy");
+    public static Icon paste = pono("clipboard");
+    public static Icon export = pono("download");
+    public static Icon importt = pono("upload");
+
+    public static Icon nozzleAdd = pono("nozzle");
+    public static Icon nozzleRemove = pono("trash");
+
+    public static Icon nozzleTipAdd = pono("plus");
+    public static Icon nozzleTipRemove = pono("x");
+    public static Icon nozzleTipLoad = pono("download");
+    public static Icon nozzleTipUnload = pono("upload");
+
+    public static Icon captureCamera = pono("camera");
+    public static Icon captureTool = pono("nozzle");
+    public static Icon capturePin = pono("pin");
+
+    public static Icon centerCamera = pono("target");
+    public static Icon centerCameraMoveNext = pono("chevsright");
+    public static Icon centerTool = pono("crosshair");
+    public static Icon centerToolNoSafeZ = pono("crosshair");
+    public static Icon contactProbeNozzle = pono("probe");
+    public static Icon centerPin = pono("pin");
+    public static Icon centerPinNoSafeZ = pono("pin");
+    public static Icon centerCameraOnFeeder = pono("target");
+    public static Icon centerNozzleOnFeeder = pono("crosshair");
+
+    public static Icon colorFalse = Ui.icon("dot", SIZE, new Color(0x7f8a9c)); //$NON-NLS-1$
+    public static Icon colorTrue = Ui.icon("dot", SIZE, new Color(0x34c77b)); //$NON-NLS-1$
     
-    public static Icon nozzleAdd = getIcon("/icons/nozzle-add.svg");
-    public static Icon nozzleRemove = getIcon("/icons/nozzle-remove.svg");
+    public static Icon start = pono("play");
+    public static Icon pause = pono("pause");
+    public static Icon step = pono("step");
+    public static Icon stop = pono("stop");
 
-    public static Icon nozzleTipAdd = getIcon("/icons/nozzletip-add.svg");
-    public static Icon nozzleTipRemove = getIcon("/icons/nozzletip-remove.svg");
-    public static Icon nozzleTipLoad = getIcon("/icons/nozzletip-load.svg");
-    public static Icon nozzleTipUnload = getIcon("/icons/nozzletip-unload.svg");
+    public static Icon errorDefer = pono("clock");
+    public static Icon errorAlert = pono("alert");
 
-    public static Icon captureCamera = getIcon("/icons/capture-camera.svg");
-    public static Icon captureTool = getIcon("/icons/capture-nozzle.svg");
-    public static Icon capturePin = getIcon("/icons/capture-actuator.svg");
+    public static Icon twoPointLocate = pono("move");
+    public static Icon fiducialCheck = pono("target");
+    public static Icon autoPanelize = pono("grid");
+    public static Icon autoPanelizeXOut = pono("x");
+    public static Icon autoPanelizeFidCheck = pono("target");
+    public static Icon useChildFiducial = pono("crosshair");
+    public static Icon board = pono("board");
+    public static Icon panel = pono("layers");
+    public static Icon clean = pono("broom");
 
-    public static Icon centerCamera = getIcon("/icons/position-camera.svg");
-    public static Icon centerCameraMoveNext = getIcon("/icons/position-camera-move-next.svg");
-    public static Icon centerTool = getIcon("/icons/position-nozzle.svg");
-    public static Icon centerToolNoSafeZ = getIcon("/icons/position-nozzle-no-safe-z.svg");
-    public static Icon contactProbeNozzle = getIcon("/icons/contact-probe-nozzle.svg");
-    public static Icon centerPin = getIcon("/icons/position-actuator.svg");
-    public static Icon centerPinNoSafeZ = getIcon("/icons/position-actuator-no-safe-z.svg");
-    public static Icon centerCameraOnFeeder = getIcon("/icons/position-camera-on-feeder.svg");
-    public static Icon centerNozzleOnFeeder = getIcon("/icons/position-nozzle-on-feeder.svg");
+    public static Icon feed = pono("step");
+    public static Icon pick = pono("hand");
+    public static Icon place = pono("job");
+    public static Icon showPart = pono("footprint");
+    public static Icon editFeeder = pono("edit");
+    public static Icon feeder = pono("feeder");
 
-    public static Icon colorFalse = getIcon("/icons/color-false.svg");
-    public static Icon colorTrue = getIcon("/icons/color-true.svg");
+    public static Icon partAlign = pono("target");
+
+    public static Icon arrowUp = pono("up");
+    public static Icon arrowDown = pono("down");
+    public static Icon arrowLeft = pono("left");
+    public static Icon arrowRight = pono("right");
+    public static Icon home = pono("home");
+    public static Icon homeWarning = Ui.icon("home", SIZE, new Color(0xf5b840)); //$NON-NLS-1$
+    public static Icon refresh = pono("refresh");
+    public static Icon rotateClockwise = pono("rcw");
+    public static Icon rotateCounterclockwise = pono("rccw");
+    public static Icon zero = pono("circle");
     
-    public static Icon start = getIcon("/icons/control-start.svg");
-    public static Icon pause = getIcon("/icons/control-pause.svg");
-    public static Icon step = getIcon("/icons/control-next.svg");
-    public static Icon stop = getIcon("/icons/control-stop.svg");
+    public static Icon navigateFirst = pono("chevsleft");
+    public static Icon navigateLast = pono("chevsright");
+    public static Icon navigatePrevious = pono("chevleft");
+    public static Icon navigateNext = pono("chevright");
 
-    public static Icon errorDefer = getIcon("/icons/error-defer.svg");
-    public static Icon errorAlert = getIcon("/icons/error-alert.svg");
+    public static Icon pinDisabled = Ui.icon("pin", SIZE, new Color(0x7f8a9c)); //$NON-NLS-1$
+    public static Icon pinEnabled = Ui.icon("pin", SIZE, new Color(0x4f8cff)); //$NON-NLS-1$
 
-    public static Icon twoPointLocate = getIcon("/icons/board-two-placement-locate.svg");
-    public static Icon fiducialCheck = getIcon("/icons/board-fiducial-locate.svg");
-    public static Icon autoPanelize = getIcon("/icons/panelize.svg");
-    public static Icon autoPanelizeXOut = getIcon("/icons/panelize_xout.svg");
-    public static Icon autoPanelizeFidCheck = getIcon("/icons/panelize_fiducialcheck.svg");
-    public static Icon useChildFiducial = getIcon("/icons/panelize_use_board_fiducial.svg");
-    public static Icon board = getIcon("/icons/board.svg");
-    public static Icon panel = getIcon("/icons/panel.svg");
-    public static Icon clean = getIcon("/icons/clean-sweep.svg");
+    public static Icon powerOn = Ui.icon("power", SIZE, new Color(0x34c77b)); //$NON-NLS-1$
+    public static Icon powerOff = Ui.icon("power", SIZE, new Color(0x7f8a9c)); //$NON-NLS-1$
 
-    public static Icon feed = getIcon("/icons/feeder-feed.svg");
-    public static Icon pick = getIcon("/icons/pick.svg");
-    public static Icon place = getIcon("/icons/place.svg");
-    public static Icon showPart = getIcon("/icons/feeder-show-part-outline.svg");
-    public static Icon editFeeder = getIcon("/icons/feeder-edit.svg");
-    public static Icon feeder = getIcon("/icons/feeder.svg");
-    
+    public static Icon park = pono("park");
 
-    public static Icon partAlign = getIcon("/icons/part-align.svg");
+    public static Icon scrollDown = pono("down");
 
-    public static Icon arrowUp = getIcon("/icons/arrow-up.svg");
-    public static Icon arrowDown = getIcon("/icons/arrow-down.svg");
-    public static Icon arrowLeft = getIcon("/icons/arrow-left.svg");
-    public static Icon arrowRight = getIcon("/icons/arrow-right.svg");
-    public static Icon home = getIcon("/icons/home.svg");
-    public static Icon homeWarning = getIcon("/icons/home_warning.svg");
-    public static Icon refresh = getIcon("/icons/refresh.svg");
-    public static Icon rotateClockwise = getIcon("/icons/rotate-clockwise.svg");
-    public static Icon rotateCounterclockwise = getIcon("/icons/rotate-counterclockwise.svg");
-    public static Icon zero = getIcon("/icons/zero.svg");
-    
-    public static Icon navigateFirst = getIcon("/icons/nav-first.svg");
-    public static Icon navigateLast = getIcon("/icons/nav-last.svg");
-    public static Icon navigatePrevious = getIcon("/icons/nav-previous.svg");
-    public static Icon navigateNext = getIcon("/icons/nav-next.svg");
+    public static Icon lockOutline = pono("lock");
+    public static Icon lockOpenOutline = pono("unlock");
+    public static Icon lockQuestion = Ui.icon("lock", SIZE, new Color(0xf5b840)); //$NON-NLS-1$
 
-    public static Icon pinDisabled = getIcon("/icons/pin_disabled.svg");
-    public static Icon pinEnabled = getIcon("/icons/pin_enabled.svg");
+    public static Icon openSCadIcon = pono("download");
+    public static Icon processActivity1Icon = pono("loader");
+    public static Icon processActivity2Icon = pono("activity");
 
-    public static Icon powerOn = getIcon("/icons/power_button_on.svg");
-    public static Icon powerOff = getIcon("/icons/power_button_off.svg");
+    public static Icon axisCartesian = pono("machine");
+    public static Icon axisRotation = pono("rcw");
+    public static Icon captureAxisLow = pono("download");
+    public static Icon captureAxisHigh = pono("upload");
+    public static Icon positionAxisLow = pono("down");
+    public static Icon positionAxisHigh = pono("up");
+    public static Icon driver = pono("sliders");
+    public static Icon solutions = pono("alert");
+    public static Icon accept = pono("check");
+    public static Icon dismiss = pono("x");
+    public static Icon undo = pono("undo");
+    public static Icon info = pono("info");
 
-    public static Icon park = getIcon("/icons/park.svg");
+    public static Icon nozzleSingle = getIcon("/icons/diagrams/nozzle-single.svg", 96, 96);
+    public static Icon nozzleDualNeg = getIcon("/icons/diagrams/nozzle-neg.svg", 96, 96);
+    public static Icon nozzleDualCam = getIcon("/icons/diagrams/nozzle-cam.svg", 96, 96);
 
-    public static Icon scrollDown = getIcon("/icons/scroll-down.svg");
+    public static Icon milestone = getIcon("/icons/diagrams/milestone.svg", 96, 96);
+    public static Icon camAxisTransform = getIcon("/icons/diagrams/cam-axis-transform.svg", 283, 283);
+    public static Icon safeZFixed = getIcon("/icons/diagrams/safe-z-fixed.svg", 96, 96);
+    public static Icon safeZDynamic = getIcon("/icons/diagrams/safe-z-dynamic.svg", 96, 96);
+    public static Icon safeZCapture = getIcon("/icons/diagrams/safe-z-capture.svg", 96, 96);
 
-    public static Icon lockOutline = getIcon("/icons/lock-outline.svg");
-    public static Icon lockOpenOutline = getIcon("/icons/lock-open-outline.svg");
-    public static Icon lockQuestion = getIcon("/icons/lock-question.svg");
+    public static Icon footprintQuad = pono("pkg");
+    public static Icon footprintDual = pono("parts");
+    public static Icon footprintBga = pono("grid");
+    public static Icon footprintToggle = pono("footprint");
+    public static Icon kicad = getIcon("/icons/diagrams/kicad-logo.svg");
 
-    public static Icon openSCadIcon = getIcon("/icons/openscad-icon.svg");
-    public static Icon processActivity1Icon = getIcon("/icons/process-activity-1.svg");
-    public static Icon processActivity2Icon = getIcon("/icons/process-activity-2.svg");
-
-    public static Icon axisCartesian = getIcon("/icons/axis-cartesian.svg");
-    public static Icon axisRotation = getIcon("/icons/axis-rotate.svg");
-    public static Icon captureAxisLow = getIcon("/icons/capture-axis-low.svg");
-    public static Icon captureAxisHigh = getIcon("/icons/capture-axis-high.svg");
-    public static Icon positionAxisLow = getIcon("/icons/position-axis-low.svg");
-    public static Icon positionAxisHigh = getIcon("/icons/position-axis-high.svg");
-    public static Icon driver = getIcon("/icons/driver.svg");
-    public static Icon solutions = getIcon("/icons/solutions.svg");
-    public static Icon accept = getIcon("/icons/accept.svg");
-    public static Icon dismiss = getIcon("/icons/dismiss.svg");
-    public static Icon undo = getIcon("/icons/undo.svg");
-    public static Icon info = getIcon("/icons/info.svg");
-
-    public static Icon nozzleSingle = getIcon("/icons/nozzle-single.svg", 96, 96);
-    public static Icon nozzleDualNeg = getIcon("/icons/nozzle-neg.svg", 96, 96);
-    public static Icon nozzleDualCam = getIcon("/icons/nozzle-cam.svg", 96, 96);
-
-    public static Icon milestone = getIcon("/icons/milestone.svg", 96, 96);
-    public static Icon camAxisTransform = getIcon("/icons/cam-axis-transform.svg", 283, 283);
-    public static Icon safeZFixed = getIcon("/icons/safe-z-fixed.svg", 96, 96);
-    public static Icon safeZDynamic = getIcon("/icons/safe-z-dynamic.svg", 96, 96);
-    public static Icon safeZCapture = getIcon("/icons/safe-z-capture.svg", 96, 96);
-
-    public static Icon footprintQuad = getIcon("/icons/footprint-quad.svg");
-    public static Icon footprintDual = getIcon("/icons/footprint-dual.svg");
-    public static Icon footprintBga = getIcon("/icons/footprint-bga.svg");
-    public static Icon footprintToggle = getIcon("/icons/footprint-mark.svg");
-    public static Icon kicad = getIcon("/icons/kicad-logo.svg");
+    private static Icon pono(String name) {
+        return Ui.icon(name, SIZE);
+    }
 
     public static Icon getIcon(String resourceName, int width, int height) {
         if (resourceName.endsWith(".svg")) {

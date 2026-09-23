@@ -1,6 +1,7 @@
 package org.openpnp.machine.photon;
 
 import org.openpnp.ConfigurationListener;
+import org.openpnp.Translations;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.photon.exceptions.FeedFailureException;
 import org.openpnp.machine.photon.exceptions.FeederHasNoLocationOffsetException;
@@ -344,11 +345,11 @@ public class PhotonFeeder extends ReferenceFeeder {
 
     @Override
     public String getPropertySheetHolderTitle() {
-        String classSimpleName = getClass().getSimpleName();
         if (hardwareId == null) {
-            return String.format("Unconfigured %s", classSimpleName);
+            return String.format(Translations.getString("PhotonFeeder.Title.Unconfigured"), //$NON-NLS-1$
+                    org.openpnp.gui.support.DisplayNames.typeName(getClass()));
         } else {
-            return String.format("%s %s", classSimpleName, getName());
+            return org.openpnp.gui.support.DisplayNames.title(this, getName());
         }
     }
 

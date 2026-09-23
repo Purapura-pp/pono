@@ -319,7 +319,7 @@ public class CameraConfigurationWizard extends AbstractConfigurationWizard {
         
         advancedCalWarning = new JLabel(Translations.getString(
                 "CameraConfigurationWizard.UnitsPerPixelPanel.AdvancedCalibrationActiveLabel.text")); //$NON-NLS-1$
-        advancedCalWarning.setForeground(Color.RED);
+        advancedCalWarning.setForeground(org.openpnp.gui.shell.Ui.err());
         panelUpp.add(advancedCalWarning, "6, 2, 9, 1, right, default");
 
         lblX = new JLabel("X");

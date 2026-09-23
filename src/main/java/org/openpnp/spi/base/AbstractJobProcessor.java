@@ -30,7 +30,7 @@ public abstract class AbstractJobProcessor extends AbstractMachineElement implem
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName();
+        return org.openpnp.gui.support.DisplayNames.typeName(getClass());
     }
 
     @Override

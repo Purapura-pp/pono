@@ -134,6 +134,19 @@ public final class DockRenderers {
     }
 
     /** Text in the muted colour, for a column that is only sometimes worth reading. */
+    /** The stylesheet's bold ID: the column a row is known by. */
+    public static TableCellRenderer bold() {
+        return new DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(javax.swing.JTable table,
+                    Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setFont(Ui.font(Tokens.FS_TABLE, Font.BOLD));
+                return this;
+            }
+        };
+    }
+
     public static TableCellRenderer muted() {
         return new DefaultTableCellRenderer() {
             @Override
@@ -209,7 +222,7 @@ public final class DockRenderers {
                     int x = 10, y = (getHeight() - s) / 2;
                     if (on) {
                         g2.setColor(Ui.accent());
-                        g2.fillRoundRect(x, y, s, s, 4, 4);
+                        g2.fillRoundRect(x, y, s, s, 8, 8);
                         g2.setColor(Color.WHITE);
                         g2.setStroke(new java.awt.BasicStroke(2f));
                         g2.drawLine(x + 4, y + 8, x + 7, y + 11);
@@ -218,7 +231,7 @@ public final class DockRenderers {
                     else {
                         g2.setColor(Ui.borderStrong());
                         g2.setStroke(new java.awt.BasicStroke(1.5f));
-                        g2.drawRoundRect(x, y, s - 1, s - 1, 4, 4);
+                        g2.drawRoundRect(x, y, s - 1, s - 1, 8, 8);
                     }
                 }
             }
@@ -243,7 +256,7 @@ public final class DockRenderers {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 g2.setColor(top ? Ui.accentSoft() : Ui.warnSoft());
-                g2.fillRoundRect(0, 0, 14, 14, 3, 3);
+                g2.fillRoundRect(0, 0, 14, 14, 6, 6);
                 g2.setColor(top ? Ui.accent() : Ui.warn());
                 g2.setFont(Ui.font(9f, Font.BOLD));
                 String letter = top ? "T" : "B"; //$NON-NLS-1$ //$NON-NLS-2$

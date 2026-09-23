@@ -131,7 +131,7 @@ public class ReferenceCamCounterClockwiseAxisConfigurationWizard extends Abstrac
         camWheelRadius.setColumns(10);
         
         lblDeprecated2 = new JLabel("<html>Cam Wheel Radius and Gap are deprecated.<br/>\nIssues & Solutions can fix existing configurations <br/>\nwithout losing captured Z coordinates. </html>");
-        lblDeprecated2.setForeground(Color.RED);
+        lblDeprecated2.setForeground(org.openpnp.gui.shell.Ui.err());
         panelTransformation.add(lblDeprecated2, "6, 8, 1, 3");
         
         lblCamWheelGap = new JLabel(Translations.getString("ReferenceCamCounterClockwiseAxisConfigurationWizard.lblCamWheelGap.text")); //$NON-NLS-1$

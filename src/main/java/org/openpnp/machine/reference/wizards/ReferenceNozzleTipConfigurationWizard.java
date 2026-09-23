@@ -104,7 +104,7 @@ public class ReferenceNozzleTipConfigurationWizard extends AbstractConfiguration
         panelPickAndPlace = new JPanel();
         panelPickAndPlace.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
                 Translations.getString("ReferenceNozzleTipConfigurationWizard.PickAndPlacePanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
+                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         contentPanel.add(panelPickAndPlace);
         panelPickAndPlace.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,

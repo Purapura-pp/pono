@@ -82,7 +82,7 @@ public class ReferenceLoosePartFeederConfigurationWizard
         
         JLabel lblWarningThisFeeder = new JLabel(Translations.getString("ReferenceLoosePartFeederConfigurationWizard.lblWarningThisFeeder.text")); //$NON-NLS-1$
         lblWarningThisFeeder.setFont(new Font("Lucida Grande", Font.PLAIN, 16));
-        lblWarningThisFeeder.setForeground(Color.RED);
+        lblWarningThisFeeder.setForeground(org.openpnp.gui.shell.Ui.err());
         lblWarningThisFeeder.setHorizontalAlignment(SwingConstants.LEFT);
     }
 

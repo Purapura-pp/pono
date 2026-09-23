@@ -181,7 +181,7 @@ public abstract class AbstractDriver extends AbstractMachineElement implements D
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName() + " " + getName();
+        return org.openpnp.gui.support.DisplayNames.title(this, getName());
     }
 
     public void createDefaults() throws Exception  {}

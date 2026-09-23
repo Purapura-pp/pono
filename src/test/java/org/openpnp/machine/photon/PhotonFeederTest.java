@@ -1141,7 +1141,10 @@ public class PhotonFeederTest {
 
     @Test
     public void getPropertySheetHolderTitleDefault() {
-        assertEquals("Unconfigured PhotonFeeder", feeder.getPropertySheetHolderTitle());
+        // In the display language: the type's name, said to be unconfigured.
+        assertEquals(String.format(org.openpnp.Translations.getString("PhotonFeeder.Title.Unconfigured"),
+                org.openpnp.gui.support.DisplayNames.typeName(PhotonFeeder.class)),
+                feeder.getPropertySheetHolderTitle());
     }
 
     @Test
@@ -1149,10 +1152,10 @@ public class PhotonFeederTest {
         feeder.setHardwareId(hardwareId);
         feeder.setSlotAddress(15);
 
-        assertEquals(
-                String.format("PhotonFeeder %s", feeder.getName()),
-                feeder.getPropertySheetHolderTitle()
-        );
+        assertEquals(org.openpnp.gui.support.DisplayNames.title(feeder, feeder.getName()),
+                feeder.getPropertySheetHolderTitle());
+        assertTrue(feeder.getPropertySheetHolderTitle().endsWith(feeder.getName()),
+                "the feeder's own name, with its hardware id and slot, is in the title");
     }
 
     @Test

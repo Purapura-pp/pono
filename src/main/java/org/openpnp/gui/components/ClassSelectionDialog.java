@@ -90,9 +90,28 @@ public class ClassSelectionDialog<T> extends JDialog {
         });
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setBorder(null);
+        // Each type by the name the interface uses for it, with a line on what it is for, and the
+        // class name small underneath for whoever follows the wiki.
+        list.setCellRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public java.awt.Component getListCellRendererComponent(JList<?> l, Object value,
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(l, value, index, isSelected, cellHasFocus);
+                Class<?> type = ((ClassListItem<?>) value).getTheClass();
+                String description = org.openpnp.gui.support.DisplayNames.typeDescription(type);
+                String name = org.openpnp.gui.support.DisplayNames.typeName(type);
+                setText("<html><b>" + escape(name) + "</b>" //$NON-NLS-1$ //$NON-NLS-2$
+                        + (description == null ? "" : "<br><span style='font-size:92%'>" + escape(description) + "</span>") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        + (name.equals(type.getSimpleName()) ? "" //$NON-NLS-1$
+                                : "<br><span style='font-size:85%;color:gray'>" + type.getSimpleName() + "</span>") //$NON-NLS-1$ //$NON-NLS-2$
+                        + "</html>"); //$NON-NLS-1$
+                setBorder(new EmptyBorder(6, 10, 6, 10));
+                return this;
+            }
+        });
         panel.add(new JScrollPane(list), BorderLayout.CENTER);
         // setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
-        setSize(400, 400);
+        setSize(460, 520);
         setLocationRelativeTo(parent);
 
         DefaultListModel listModel = new DefaultListModel();
@@ -139,6 +158,10 @@ public class ClassSelectionDialog<T> extends JDialog {
 
     public Class<? extends T> getSelectedClass() {
         return selectedClass;
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
     }
 
     private class ClassListItem<T1> {

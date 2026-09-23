@@ -262,7 +262,7 @@ public class ReferenceRotatedTrayFeeder extends ReferenceFeeder {
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName() + " " + getName();
+        return org.openpnp.gui.support.DisplayNames.title(this, getName());
     }
 
     @Override

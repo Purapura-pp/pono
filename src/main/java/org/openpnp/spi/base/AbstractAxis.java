@@ -228,7 +228,7 @@ public abstract class AbstractAxis extends AbstractMachineElement implements Axi
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName() + " " + getName();
+        return org.openpnp.gui.support.DisplayNames.title(this, getName());
     }
 
 }

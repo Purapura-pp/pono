@@ -157,8 +157,9 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
                 }
             }
         }
-        catch (Exception e) {
-            // No machine to ask, which is a wizard shown outside the running application.
+        catch (Exception | Error e) {
+            // No machine to ask, which is a wizard shown outside the running application: the
+            // configuration then reports that it is not initialised with an Error.
         }
     }
 

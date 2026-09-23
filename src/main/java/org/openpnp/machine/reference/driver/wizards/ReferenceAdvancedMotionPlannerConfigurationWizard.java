@@ -291,7 +291,7 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
         panel.add(toMid1SafeZ, "10, 6, center, default");
 
         lblCaution1 = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.TestMotionPanel.CautionLabel.text")); //$NON-NLS-1$
-        lblCaution1.setForeground(Color.RED);
+        lblCaution1.setForeground(org.openpnp.gui.shell.Ui.err());
         panel.add(lblCaution1, "12, 6");
 
         mid1LocationEnabled = new JCheckBox("");
@@ -321,7 +321,7 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
         panel.add(toMid2SafeZ, "10, 10, center, default");
 
         lblCaution2 = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.TestMotionPanel.CautionLabel.text")); //$NON-NLS-1$
-        lblCaution2.setForeground(Color.RED);
+        lblCaution2.setForeground(org.openpnp.gui.shell.Ui.err());
         panel.add(lblCaution2, "12, 10");
 
         mid2LocationEnabled = new JCheckBox("");
@@ -410,7 +410,7 @@ public class ReferenceAdvancedMotionPlannerConfigurationWizard extends AbstractC
         panel.add(toEndSafeZ, "10, 15, center, default");
 
         lblCaution3 = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.TestMotionPanel.CautionLabel.text")); //$NON-NLS-1$
-        lblCaution3.setForeground(Color.RED);
+        lblCaution3.setForeground(org.openpnp.gui.shell.Ui.err());
         panel.add(lblCaution3, "12, 15");
 
         lblEndLocation = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerConfigurationWizard.TestMotionPanel.LastLocationLabel.text")); //$NON-NLS-1$

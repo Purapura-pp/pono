@@ -1,18 +1,19 @@
 package org.openpnp.gui.support;
 
+import org.openpnp.gui.shell.Tokens;
+import org.openpnp.gui.shell.Ui;
 import org.pmw.tinylog.LogEntry;
 
 import javax.swing.*;
 import java.awt.*;
 
+/**
+ * One line of the log in the stylesheet's .log colours: debug and trace muted, information in the
+ * text colour, warnings and errors in the status colours, an error on its soft fill. The colours
+ * follow the theme; the debug lines used to be pure black, unreadable on the dark one, and the font
+ * follows the user's font size instead of a fixed 13 point Monospaced.
+ */
 public class LogEntryListCellRenderer extends JTextField implements ListCellRenderer<LogEntry> {
-    final Color colorTrace = new Color(64, 128, 64);
-    final Color colorDebug = new Color(0, 0, 0);
-    final Color colorInfo = new Color(00, 0x5B, 0xD9); // the OpenPNP blue
-    final Color colorWarning = new Color(255, 0, 0);
-    final Color colorError = new Color(255, 0, 0);
-    final Color colorErrorBg = new Color(255, 255, 220);
-    
     @Override
     public Component getListCellRendererComponent(JList<? extends LogEntry> list, LogEntry logEntry, int index, boolean isSelected, boolean cellHasFocus) {
 
@@ -21,7 +22,7 @@ public class LogEntryListCellRenderer extends JTextField implements ListCellRend
         }
 
         this.setText(logEntry.getRenderedLogEntry());
-        this.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        this.setFont(Ui.mono(Tokens.FS_AUX, Font.PLAIN));
         this.setBorder(null);
 
         if (isSelected) {
@@ -30,26 +31,24 @@ public class LogEntryListCellRenderer extends JTextField implements ListCellRend
         } else {
             switch(logEntry.getLevel()) {
                 case ERROR:
-                    setBackground(colorErrorBg);
+                    setBackground(Ui.errSoft());
                     break;
                 default:
                     setBackground(list.getBackground());
             }
             switch(logEntry.getLevel()) {
                 case TRACE:
-                    setForeground(colorTrace);
-                    break;
                 case DEBUG:
-                    setForeground(colorDebug);
+                    setForeground(Ui.muted());
                     break;
                 case INFO:
-                    setForeground(colorInfo);
+                    setForeground(Ui.text());
                     break;
                 case WARNING:
-                    setForeground(colorWarning);
+                    setForeground(Ui.warn());
                     break;
                 case ERROR:
-                    setForeground(colorError);
+                    setForeground(Ui.err());
                     break;
                 default:
                     setForeground(list.getForeground());

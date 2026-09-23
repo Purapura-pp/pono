@@ -758,7 +758,7 @@ public class ReferenceFiducialLocator extends AbstractPartSettingsHolder
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return "Fiducal Locator";
+        return org.openpnp.gui.support.DisplayNames.typeName(getClass());
     }
 
     @Override

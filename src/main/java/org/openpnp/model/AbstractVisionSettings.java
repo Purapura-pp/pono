@@ -106,7 +106,8 @@ public abstract class AbstractVisionSettings extends AbstractModelObject impleme
     }
 
     public String toString() {
-        return getName();
+        // What a combo box shows; the name itself, which is stored, stays as it is.
+        return org.openpnp.gui.support.DisplayNames.visionSettingsName(getName());
     }
 
     public static void fireUsedInProperty(AbstractVisionSettings settings) {

@@ -163,7 +163,7 @@ public class ReferenceAdvancedMotionPlannerDiagnosticsWizard extends AbstractCon
         moveTimeActual.setColumns(10);
         
         interpolationFailed = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerDiagnosticsWizard.InterpolationFailedLabel.text")); //$NON-NLS-1$
-        interpolationFailed.setForeground(Color.RED);
+        interpolationFailed.setForeground(org.openpnp.gui.shell.Ui.err());
         contentPanel.add(interpolationFailed, "16, 2");
         
         JLabel lblMotionGraph = new JLabel(Translations.getString("ReferenceAdvancedMotionPlannerDiagnosticsWizard.MotionGraphLabel.text")); //$NON-NLS-1$

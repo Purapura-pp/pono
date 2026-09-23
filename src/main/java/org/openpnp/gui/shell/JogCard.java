@@ -131,7 +131,7 @@ public class JogCard extends OverlayCard {
         JPanel head = row(8);
         JComboBox<?> tool = controls.getHeadMountableCombo();
         tool.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 6; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
+                "arc: 12; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
                         + "buttonBackground: null; buttonArrowColor: $Pono.textMuted; focusWidth: 0"); //$NON-NLS-1$
         tool.setFont(Ui.font(Ui.BASE, Font.BOLD));
         tool.setRenderer(new ToolRenderer());
@@ -252,7 +252,7 @@ public class JogCard extends OverlayCard {
         open.setIconTextGap(7);
         open.setFont(Ui.font(Ui.BASE, Font.BOLD));
         open.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 10; focusWidth: 0; borderWidth: 0; minimumHeight: 38; margin: 0,12,0,12; " //$NON-NLS-1$
+                "arc: 20; focusWidth: 0; borderWidth: 0; minimumHeight: 38; margin: 0,12,0,12; " //$NON-NLS-1$
                         + "background: null; borderColor: null; hoverBackground: $Pono.hover; pressedBackground: $Pono.surface3"); //$NON-NLS-1$
         open.addActionListener(e -> setExpanded(true));
         JPanel inner = new JPanel();
@@ -340,7 +340,7 @@ public class JogCard extends OverlayCard {
         key.setIcon(Ui.icon(icon));
         key.setFocusable(false);
         key.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 9; focusWidth: 0; borderWidth: 1; margin: 0,0,0,0; minimumWidth: 40; minimumHeight: 40; " //$NON-NLS-1$
+                "arc: 18; focusWidth: 0; borderWidth: 1; margin: 0,0,0,0; minimumWidth: 40; minimumHeight: 40; " //$NON-NLS-1$
                         + "background: $Pono.surface2; borderColor: $Pono.borderStrong; foreground: $Label.foreground; " //$NON-NLS-1$
                         + "hoverBackground: $Pono.surface3; pressedBackground: $Pono.accentSoft"); //$NON-NLS-1$
         Dimension size = new Dimension(KEY, KEY);
@@ -374,7 +374,7 @@ public class JogCard extends OverlayCard {
         key.setFocusable(false);
         key.setFont(Ui.font(12f, Font.BOLD));
         key.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 9; focusWidth: 0; borderWidth: 1; margin: 0,0,0,0; minimumWidth: 40; minimumHeight: 26; " //$NON-NLS-1$
+                "arc: 18; focusWidth: 0; borderWidth: 1; margin: 0,0,0,0; minimumWidth: 40; minimumHeight: 26; " //$NON-NLS-1$
                         + "background: $Pono.surface3; borderColor: $Pono.borderStrong; foreground: $Pono.textMuted; " //$NON-NLS-1$
                         + "hoverBackground: $Pono.surface2; pressedBackground: $Pono.accentSoft"); //$NON-NLS-1$
         Dimension size = new Dimension(KEY, 26);

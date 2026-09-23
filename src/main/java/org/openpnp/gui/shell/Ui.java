@@ -41,11 +41,12 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 /**
  * The mockups' design system as Swing factories. Every number and colour here is from
- * {@code ui-mockups/src/mock.css}; the icons are its sprite, one SVG file per icon.
+ * {@code design/mockups/mock.css}, through the generated {@link Tokens} and the generated block of
+ * the two themes; the icons are its sprite, one SVG file per icon.
  * <p>
- * Colours are read from the theme by their {@code Pono.*} key, with the stylesheet's literal value
- * as the fallback for a user on a look and feel that is not one of the Pono themes. Button styling
- * goes through FlatLaf's per-component style strings, which re-resolve their {@code $key}
+ * Colours are {@link ThemeColor}s: looked up in the theme by their {@code Pono.*} key every time
+ * they are painted, so a component handed one follows a theme switch without being told. Button
+ * styling goes through FlatLaf's per-component style strings, which re-resolve their {@code $key}
  * references when the theme changes; the few shapes FlatLaf has no slot for (chips, keycaps,
  * toggles) are painted here.
  */
@@ -55,66 +56,98 @@ public final class Ui {
 
     // ---- tokens -------------------------------------------------------------------------------
 
-    /** Base type size of the mockups. */
-    public static final float BASE = 13f;
+    /** Base type size of the mockups: every size here is relative to it. */
+    public static final float BASE = Tokens.FS_BODY;
+
+    private static final Map<String, ThemeColor> COLORS = new HashMap<>();
 
     public static Color color(String key, int fallbackRgb) {
-        Color color = UIManager.getColor(key);
-        return color != null ? color : new Color(fallbackRgb);
+        return color(key, fallbackRgb, 0xff);
     }
 
     public static Color color(String key, int fallbackRgb, int fallbackAlpha) {
-        Color color = UIManager.getColor(key);
-        return color != null ? color : new Color((fallbackRgb & 0xffffff) | (fallbackAlpha << 24), true);
+        synchronized (COLORS) {
+            return COLORS.computeIfAbsent(key,
+                    k -> new ThemeColor(k, (fallbackRgb & 0xffffff) | (fallbackAlpha << 24)));
+        }
     }
 
-    public static Color accent() { return color("Pono.accent", 0x4f8cff); } //$NON-NLS-1$
-    public static Color accentStrong() { return color("Pono.accentStrong", 0x2f6fe0); } //$NON-NLS-1$
-    public static Color accentSoft() { return color("Pono.accentSoft", 0x4f8cff, 0x29); } //$NON-NLS-1$
-    public static Color onAccent() { return color("Pono.onAccent", 0xffffff); } //$NON-NLS-1$
-    public static Color ok() { return color("Pono.statusOk", 0x34c77b); } //$NON-NLS-1$
-    public static Color okSoft() { return color("Pono.okSoft", 0x34c77b, 0x29); } //$NON-NLS-1$
-    public static Color warn() { return color("Pono.statusWarn", 0xf5b840); } //$NON-NLS-1$
-    public static Color warnSoft() { return color("Pono.warnSoft", 0xf5b840, 0x29); } //$NON-NLS-1$
-    public static Color err() { return color("Pono.statusErr", 0xff5d5d); } //$NON-NLS-1$
-    public static Color errSoft() { return color("Pono.errSoft", 0xff5d5d, 0x29); } //$NON-NLS-1$
-    public static Color run() { return color("Pono.statusRun", 0x38bdf8); } //$NON-NLS-1$
-    public static Color bg() { return color("Pono.bg", 0xeceff3); } //$NON-NLS-1$
-    public static Color surface() { return color("Pono.surface", 0xffffff); } //$NON-NLS-1$
-    public static Color surface2() { return color("Pono.surface2", 0xf5f7fa); } //$NON-NLS-1$
-    public static Color surface3() { return color("Pono.surface3", 0xe9edf2); } //$NON-NLS-1$
-    public static Color border() { return color("Pono.border", 0xdde2e9); } //$NON-NLS-1$
-    public static Color borderStrong() { return color("Pono.borderStrong", 0xc6cfda); } //$NON-NLS-1$
-    public static Color hover() { return color("Pono.hover", 0x000000, 0x0a); } //$NON-NLS-1$
-    public static Color text() { return color("Label.foreground", 0x171c26); } //$NON-NLS-1$
-    public static Color text2() { return color("Pono.textSecondary", 0x48546a); } //$NON-NLS-1$
-    public static Color muted() { return color("Pono.textMuted", 0x7f8a9c); } //$NON-NLS-1$
-    public static Color overlay() { return color("Pono.overlayBackground", 0xffffff, 0xd1); } //$NON-NLS-1$
+    public static Color accent() { return color(Tokens.ACCENT, 0x4f8cff); }
+    public static Color accentStrong() { return color(Tokens.ACCENT_STRONG, 0x2f6fe0); }
+    public static Color accentSoft() { return color(Tokens.ACCENT_SOFT, 0x4f8cff, 0x29); }
+    public static Color onAccent() { return color(Tokens.ON_ACCENT, 0xffffff); }
+    public static Color ok() { return color(Tokens.OK, 0x34c77b); }
+    public static Color okSoft() { return color(Tokens.OK_SOFT, 0x34c77b, 0x29); }
+    public static Color warn() { return color(Tokens.WARN, 0xf5b840); }
+    public static Color warnSoft() { return color(Tokens.WARN_SOFT, 0xf5b840, 0x29); }
+    public static Color err() { return color(Tokens.ERR, 0xff5d5d); }
+    public static Color errSoft() { return color(Tokens.ERR_SOFT, 0xff5d5d, 0x29); }
+    public static Color info() { return color(Tokens.INFO, 0x38bdf8); }
+    /** The stylesheet's .status.run: running is shown in the accent, not in info. */
+    public static Color run() { return accent(); }
+    public static Color bg() { return color(Tokens.BG, 0xeceff3); }
+    public static Color surface() { return color(Tokens.SURFACE, 0xffffff); }
+    public static Color surface2() { return color(Tokens.SURFACE_2, 0xf5f7fa); }
+    public static Color surface3() { return color(Tokens.SURFACE_3, 0xe9edf2); }
+    public static Color border() { return color(Tokens.BORDER, 0xdde2e9); }
+    public static Color borderStrong() { return color(Tokens.BORDER_STRONG, 0xc6cfda); }
+    public static Color hover() { return color(Tokens.HOVER, 0x000000, 0x0a); }
+    public static Color text() { return color(Tokens.TEXT, 0x171c26); }
+    public static Color text2() { return color(Tokens.TEXT_2, 0x48546a); }
+    public static Color muted() { return color(Tokens.MUTED, 0x7f8a9c); }
+    public static Color overlay() { return color(Tokens.OVERLAY, 0xffffff, 0xd1); }
+    public static Color cameraBg() { return color(Tokens.CAMERA_BG, 0x0b0e12); }
 
-    /** A colour with its alpha replaced, for the stylesheet's rgba(colour, .35) borders. */
+    /**
+     * A colour with its alpha replaced, for the stylesheet's rgba(colour, .35) borders. A theme
+     * colour stays one.
+     */
     public static Color alpha(Color color, double alpha) {
+        if (color instanceof ThemeColor) {
+            return ((ThemeColor) color).withAlpha(alpha);
+        }
         return new Color(color.getRed(), color.getGreen(), color.getBlue(),
                 (int) Math.round(alpha * 255));
     }
 
+    /**
+     * A font of the type scale. The size is the stylesheet's at its 13 pixel body and is scaled
+     * with the user's font size, so a larger default makes everything larger in proportion.
+     *
+     * @param style Font.PLAIN or Font.BOLD.
+     */
     public static Font font(float size, int style) {
         Font base = UIManager.getFont("Label.font"); //$NON-NLS-1$
         if (base == null) {
-            base = new Font(Font.DIALOG, Font.PLAIN, 13);
+            base = new Font(Font.DIALOG, Font.PLAIN, Math.round(BASE));
         }
-        return base.deriveFont(style, size);
+        return base.deriveFont(style, scaled(base, size));
     }
 
     public static Font font(float size) {
         return font(size, Font.PLAIN);
     }
 
+    /**
+     * A font of the type scale by the stylesheet's weight. Java2D has no weight between regular
+     * and bold for the fonts Chinese text falls back to, so 600 and up is bold - which is also
+     * what a browser draws for 600 with those fonts - and below it is regular.
+     */
+    public static Font weighted(float size, int weight) {
+        return font(size, weight >= 600 ? Font.BOLD : Font.PLAIN);
+    }
+
     public static Font mono(float size, int style) {
         Font mono = UIManager.getFont("monospaced.font"); //$NON-NLS-1$
         if (mono == null) {
-            mono = new Font(Font.MONOSPACED, Font.PLAIN, 13);
+            mono = new Font(Font.MONOSPACED, Font.PLAIN, Math.round(BASE));
         }
-        return mono.deriveFont(style, size);
+        Font base = UIManager.getFont("Label.font"); //$NON-NLS-1$
+        return mono.deriveFont(style, base == null ? size : scaled(base, size));
+    }
+
+    private static float scaled(Font base, float size) {
+        return size * base.getSize2D() / BASE;
     }
 
     // ---- icons --------------------------------------------------------------------------------
@@ -178,8 +211,9 @@ public final class Ui {
         @Override
         public void paintIcon(Component c, Graphics g, int x, int y) {
             Color was = currentForeground;
-            currentForeground = c.isEnabled() ? c.getForeground()
-                    : alpha(c.getForeground(), 0.45);
+            // A dimmed button is already painted at the disabled opacity, icon and all.
+            currentForeground = c.isEnabled() || c instanceof Dimmed ? c.getForeground()
+                    : alpha(c.getForeground(), DISABLED_OPACITY);
             try {
                 inner.paintIcon(c, g, x, y);
             }
@@ -200,6 +234,252 @@ public final class Ui {
     }
 
     // ---- buttons ------------------------------------------------------------------------------
+
+    /** The stylesheet's .btn.disabled: the same colours, at this opacity. */
+    public static final float DISABLED_OPACITY = 0.45f;
+
+    /** A control that paints itself at {@link #DISABLED_OPACITY} when disabled. */
+    public interface Dimmed {
+    }
+
+    static void paintDimmed(JComponent c, Graphics g, java.util.function.Consumer<Graphics> paint) {
+        if (c.isEnabled()) {
+            paint.accept(g);
+            return;
+        }
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            g2.setComposite(java.awt.AlphaComposite.SrcOver.derive(DISABLED_OPACITY));
+            paint.accept(g2);
+        }
+        finally {
+            g2.dispose();
+        }
+    }
+
+    /**
+     * A button that keeps its colours when disabled and is painted at the stylesheet's opacity,
+     * so a greyed-out Start still reads as the green Start, only unavailable.
+     */
+    @SuppressWarnings("serial")
+    public static class Button extends JButton implements Dimmed {
+        public Button(Action action) {
+            super(action);
+        }
+
+        public Button(String text, Icon icon) {
+            super(text, icon);
+        }
+
+        @Override
+        public void paint(Graphics g) {
+            paintDimmed(this, g, super::paint);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return sized(this, super.getPreferredSize());
+        }
+    }
+
+    private static final String HEIGHT = "Pono.button.height"; //$NON-NLS-1$
+    private static final String MIN_WIDTH = "Pono.button.minWidth"; //$NON-NLS-1$
+    private static final String SQUARE = "Pono.button.square"; //$NON-NLS-1$
+
+    /**
+     * A button's size from the stylesheet, applied whenever it is measured. Measured once and
+     * fixed, the width was the text's at 100 %, taken before the button was on a screen: at
+     * 125 % the text is wider and came out as "Botto...".
+     */
+    static Dimension sized(javax.swing.AbstractButton button, Dimension size) {
+        if (button.isPreferredSizeSet()) {
+            return size;
+        }
+        Object height = button.getClientProperty(HEIGHT);
+        if (height instanceof Integer) {
+            size.height = com.formdev.flatlaf.util.UIScale.scale((Integer) height);
+        }
+        Object width = button.getClientProperty(MIN_WIDTH);
+        if (width instanceof Integer) {
+            size.width = Math.max(size.width, com.formdev.flatlaf.util.UIScale.scale((Integer) width));
+        }
+        if (Boolean.TRUE.equals(button.getClientProperty(SQUARE))) {
+            size.width = size.height;
+        }
+        return size;
+    }
+
+    /**
+     * A button that opens a menu: the stylesheet's button with a caret after its text. Space,
+     * Enter and the down arrow open the menu as a click does, so it can be used from the keyboard.
+     */
+    @SuppressWarnings("serial")
+    public static class MenuButton extends Button {
+        private final java.util.function.Supplier<javax.swing.JPopupMenu> menu;
+
+        public MenuButton(String text, Icon icon, java.util.function.Supplier<javax.swing.JPopupMenu> menu) {
+            super(text, icon);
+            this.menu = menu;
+            addActionListener(e -> open());
+            getInputMap(WHEN_FOCUSED).put(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_DOWN, 0), "openMenu"); //$NON-NLS-1$
+            getActionMap().put("openMenu", new javax.swing.AbstractAction() { //$NON-NLS-1$
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    open();
+                }
+            });
+        }
+
+        private void open() {
+            javax.swing.JPopupMenu popup = menu.get();
+            if (popup != null) {
+                popup.show(this, 0, getHeight());
+                if (popup.getComponentCount() > 0) {
+                    javax.swing.MenuSelectionManager.defaultManager().setSelectedPath(new javax.swing.MenuElement[] {
+                            popup, (javax.swing.MenuElement) popup.getComponent(0) });
+                }
+            }
+        }
+
+        @Override
+        public java.awt.Insets getInsets() {
+            java.awt.Insets insets = super.getInsets();
+            return new java.awt.Insets(insets.top, insets.left, insets.bottom, insets.right + 18);
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                currentForeground = getForeground();
+                Icon caret = icon("chevdown", 14); //$NON-NLS-1$
+                caret.paintIcon(this, g2, getWidth() - super.getInsets().right - 16,
+                        (getHeight() - caret.getIconHeight()) / 2);
+            }
+            finally {
+                g2.dispose();
+            }
+        }
+    }
+
+    /**
+     * Marks a button that moves the machine: the stylesheet's zap after its text, in the warning
+     * colour, and a tooltip saying so. Every such button carries it, and no other does.
+     */
+    public static <B extends javax.swing.AbstractButton> B movesMachine(B button) {
+        button.setIcon(icon("zap", 13, warn())); //$NON-NLS-1$
+        button.setHorizontalTextPosition(javax.swing.SwingConstants.LEFT);
+        String tip = org.openpnp.Translations.getString("Form.MovesMachine"); //$NON-NLS-1$
+        button.setToolTipText(button.getToolTipText() == null ? tip : button.getToolTipText() + " \u00b7 " + tip); //$NON-NLS-1$
+        return button;
+    }
+
+    /** A button of the stylesheet's shape that opens a menu. */
+    public static JButton menuButton(String text, Icon icon, Size size, Variant variant,
+            java.util.function.Supplier<javax.swing.JPopupMenu> menu) {
+        JButton button = new MenuButton(text, icon, menu);
+        style(button, size, variant, false);
+        button.setFocusable(true);
+        return button;
+    }
+
+    /**
+     * The stylesheet's {@code .btn-group}: buttons side by side sharing their borders, with only
+     * the group's outer corners rounded.
+     */
+    public static JComponent group(javax.swing.AbstractButton... buttons) {
+        JPanel group = new JPanel() {
+            private java.awt.Shape outline() {
+                return new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth(), getHeight(),
+                        2 * Tokens.R_SM, 2 * Tokens.R_SM);
+            }
+
+            @Override
+            protected void paintChildren(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                try {
+                    g2.clip(outline());
+                    super.paintChildren(g2);
+                }
+                finally {
+                    g2.dispose();
+                }
+                // The outer corners the clip cut from the buttons' square borders.
+                Graphics2D g3 = (Graphics2D) g.create();
+                try {
+                    g3.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                    g3.setColor(borderStrong());
+                    g3.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 2 * Tokens.R_SM, 2 * Tokens.R_SM);
+                }
+                finally {
+                    g3.dispose();
+                }
+            }
+        };
+        group.setOpaque(false);
+        group.setLayout(new java.awt.LayoutManager() {
+            @Override
+            public void addLayoutComponent(String name, Component comp) {
+            }
+
+            @Override
+            public void removeLayoutComponent(Component comp) {
+            }
+
+            @Override
+            public Dimension preferredLayoutSize(java.awt.Container parent) {
+                int width = 0;
+                int height = 0;
+                for (Component c : parent.getComponents()) {
+                    width += c.getPreferredSize().width;
+                    height = Math.max(height, c.getPreferredSize().height);
+                }
+                // Neighbours overlap by their shared border.
+                return new Dimension(width - Math.max(0, parent.getComponentCount() - 1), height);
+            }
+
+            @Override
+            public Dimension minimumLayoutSize(java.awt.Container parent) {
+                return preferredLayoutSize(parent);
+            }
+
+            @Override
+            public void layoutContainer(java.awt.Container parent) {
+                int x = 0;
+                for (Component c : parent.getComponents()) {
+                    int width = c.getPreferredSize().width;
+                    c.setBounds(x, 0, width, parent.getHeight());
+                    x += width - 1;
+                }
+            }
+        });
+        for (javax.swing.AbstractButton button : buttons) {
+            Object style = button.getClientProperty(FlatClientProperties.STYLE);
+            button.putClientProperty(FlatClientProperties.STYLE, (style == null ? "" : style + "; ") + "arc: 0"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            group.add(button);
+        }
+        group.setMaximumSize(group.getPreferredSize());
+        return group;
+    }
+
+    /** The toggle counterpart of {@link Button}. */
+    @SuppressWarnings("serial")
+    public static class ToggleButton extends JToggleButton implements Dimmed {
+        public ToggleButton(String text, Icon icon) {
+            super(text, icon);
+        }
+
+        @Override
+        public void paint(Graphics g) {
+            paintDimmed(this, g, super::paint);
+        }
+
+        @Override
+        public Dimension getPreferredSize() {
+            return sized(this, super.getPreferredSize());
+        }
+    }
 
     public enum Size {
         /** 32 pixels high, 0 12 padding. */
@@ -237,132 +517,153 @@ public final class Ui {
 
     /** A button in the stylesheet's shape. The action's text and icon are kept if it has them. */
     public static JButton button(Action action, Size size, Variant variant) {
-        JButton button = new JButton(action);
+        JButton button = new Button(action);
         style(button, size, variant, false);
         return button;
     }
 
     public static JButton button(String text, Icon icon, Size size, Variant variant) {
-        JButton button = new JButton(text, icon);
+        JButton button = new Button(text, icon);
         style(button, size, variant, false);
         return button;
     }
 
     /** A square button holding only an icon. */
     public static JButton iconButton(Icon icon, Size size, Variant variant, String toolTip) {
-        JButton button = new JButton(icon);
+        JButton button = new Button(null, icon);
         button.setToolTipText(toolTip);
         style(button, size, variant, true);
         return button;
     }
 
     public static JButton iconButton(Action action, Size size, Variant variant) {
-        JButton button = new JButton(action);
+        JButton button = new Button(action);
         button.setHideActionText(true);
         style(button, size, variant, true);
         return button;
     }
 
     public static JToggleButton toggle(Icon icon, Size size, String toolTip) {
-        JToggleButton button = new JToggleButton(icon);
+        JToggleButton button = new ToggleButton(null, icon);
         button.setToolTipText(toolTip);
         style(button, size, Variant.Default, true);
         return button;
+    }
+
+    /**
+     * FlatLaf's borderless button: no fill and no border until it is hovered, pressed or selected.
+     * A style's "background: null" does not do this - it takes the button's colour away, and the
+     * button then paints its parent's, a box where the mockups have none.
+     */
+    static String borderless(String foreground, String selectedBackground, String selectedForeground) {
+        return "foreground: " + foreground + "; disabledText: " + foreground //$NON-NLS-1$ //$NON-NLS-2$
+                + "; toolbar.hoverBackground: $Pono.hover; toolbar.pressedBackground: $Pono.surface3" //$NON-NLS-1$
+                + "; toolbar.selectedBackground: " + selectedBackground //$NON-NLS-1$
+                + "; toolbar.selectedForeground: " + selectedForeground //$NON-NLS-1$
+                + "; toolbar.disabledSelectedBackground: " + selectedBackground //$NON-NLS-1$
+                + "; toolbar.disabledSelectedForeground: " + selectedForeground; //$NON-NLS-1$
+    }
+
+    private static void borderless(javax.swing.AbstractButton button, String style) {
+        button.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
+        button.putClientProperty(FlatClientProperties.STYLE, style);
+    }
+
+    /** The FlatLaf style of a button variant: its colours, the same again for the disabled state. */
+    static String colours(Variant variant) {
+        // Background, border, foreground, and the rest of the states.
+        String[] v;
+        switch (variant) {
+            case Ghost:
+                return borderless("$Pono.text2", "$Pono.surface3", "$Pono.text"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            case Primary:
+                v = new String[] { "$Pono.accent", "$Pono.accent", "$Pono.onAccent", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        "hoverBackground: $Pono.accentStrong; hoverBorderColor: $Pono.accentStrong; " //$NON-NLS-1$
+                                + "pressedBackground: $Pono.accentStrong" }; //$NON-NLS-1$
+                break;
+            case PrimaryOk:
+                v = new String[] { "$Pono.ok", "$Pono.ok", "#05140b", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        "hoverBackground: darken($Pono.ok,5%); hoverBorderColor: darken($Pono.ok,5%); " //$NON-NLS-1$
+                                + "pressedBackground: darken($Pono.ok,10%)" }; //$NON-NLS-1$
+                break;
+            case Danger:
+                v = new String[] { "$Pono.errSoft", "fade($Pono.err,45%)", "$Pono.err", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        "hoverBackground: fade($Pono.err,25%); hoverBorderColor: fade($Pono.err,60%); " //$NON-NLS-1$
+                                + "pressedBackground: fade($Pono.err,35%)" }; //$NON-NLS-1$
+                break;
+            case SolidDanger:
+                v = new String[] { "$Pono.err", "$Pono.err", "#ffffff", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        "hoverBackground: darken($Pono.err,6%); hoverBorderColor: darken($Pono.err,6%); " //$NON-NLS-1$
+                                + "pressedBackground: darken($Pono.err,12%)" }; //$NON-NLS-1$
+                break;
+            case Default:
+            default:
+                v = new String[] { "$Pono.surface2", "$Pono.borderStrong", "$Pono.text", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                        "hoverBackground: $Pono.surface3; hoverBorderColor: $Pono.borderStrong; " //$NON-NLS-1$
+                                + "pressedBackground: $Pono.surface3; selectedBackground: $Pono.accentSoft; selectedForeground: $Pono.accent" }; //$NON-NLS-1$
+                break;
+        }
+        return "background: " + v[0] + "; borderColor: " + v[1] + "; foreground: " + v[2] //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                + "; disabledBackground: " + v[0] + "; disabledBorderColor: " + v[1] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; disabledText: " + v[2] + "; " + v[3]; //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     private static void style(javax.swing.AbstractButton button, Size size, Variant variant,
             boolean square) {
         button.setFocusable(false);
         button.setIconTextGap(7);
-        button.setFont(font(size.fontSize, Font.PLAIN).deriveFont(
-                java.util.Map.of(java.awt.font.TextAttribute.WEIGHT,
-                        java.awt.font.TextAttribute.WEIGHT_MEDIUM)));
+        button.setFont(weighted(size.fontSize, Tokens.FW_BUTTON));
         StringBuilder style = new StringBuilder();
-        style.append("arc: 6; focusWidth: 0; borderWidth: 1; "); //$NON-NLS-1$
+        style.append("arc: ").append(2 * Tokens.R_SM).append("; focusWidth: 0; borderWidth: 1; "); //$NON-NLS-1$ //$NON-NLS-2$
         style.append("minimumHeight: ").append(size.height).append("; "); //$NON-NLS-1$ //$NON-NLS-2$
         style.append("margin: 0,").append(square ? 0 : size.padding).append(",0,") //$NON-NLS-1$ //$NON-NLS-2$
                 .append(square ? 0 : size.padding).append("; "); //$NON-NLS-1$
         if (square) {
             style.append("minimumWidth: ").append(size.height).append("; "); //$NON-NLS-1$ //$NON-NLS-2$
         }
-        switch (variant) {
-            case Ghost:
-                style.append("background: null; borderColor: null; foreground: $Pono.textSecondary; " //$NON-NLS-1$
-                        + "hoverBackground: $Pono.hover; hoverBorderColor: null; " //$NON-NLS-1$
-                        + "pressedBackground: $Pono.surface3; selectedBackground: $Pono.surface3"); //$NON-NLS-1$
-                break;
-            case Primary:
-                style.append("background: $Pono.accent; borderColor: $Pono.accent; foreground: $Pono.onAccent; " //$NON-NLS-1$
-                        + "hoverBackground: $Pono.accentStrong; hoverBorderColor: $Pono.accentStrong; " //$NON-NLS-1$
-                        + "pressedBackground: $Pono.accentStrong"); //$NON-NLS-1$
-                break;
-            case PrimaryOk:
-                style.append("background: $Pono.statusOk; borderColor: $Pono.statusOk; foreground: #05140b; " //$NON-NLS-1$
-                        + "hoverBackground: darken($Pono.statusOk,5%); hoverBorderColor: darken($Pono.statusOk,5%); " //$NON-NLS-1$
-                        + "pressedBackground: darken($Pono.statusOk,10%)"); //$NON-NLS-1$
-                break;
-            case Danger:
-                style.append("background: $Pono.errSoft; borderColor: fade($Pono.statusErr,45%); foreground: $Pono.statusErr; " //$NON-NLS-1$
-                        + "hoverBackground: fade($Pono.statusErr,25%); hoverBorderColor: fade($Pono.statusErr,60%); " //$NON-NLS-1$
-                        + "pressedBackground: fade($Pono.statusErr,35%)"); //$NON-NLS-1$
-                break;
-            case SolidDanger:
-                style.append("background: $Pono.statusErr; borderColor: $Pono.statusErr; foreground: #ffffff; " //$NON-NLS-1$
-                        + "hoverBackground: darken($Pono.statusErr,6%); hoverBorderColor: darken($Pono.statusErr,6%); " //$NON-NLS-1$
-                        + "pressedBackground: darken($Pono.statusErr,12%)"); //$NON-NLS-1$
-                break;
-            case Default:
-            default:
-                style.append("background: $Pono.surface2; borderColor: $Pono.borderStrong; foreground: $Label.foreground; " //$NON-NLS-1$
-                        + "hoverBackground: $Pono.surface3; hoverBorderColor: $Pono.borderStrong; " //$NON-NLS-1$
-                        + "pressedBackground: $Pono.surface3; selectedBackground: $Pono.accentSoft; selectedForeground: $Pono.accent"); //$NON-NLS-1$
-                break;
+        style.append(colours(variant));
+        if (variant == Variant.Ghost) {
+            borderless(button, style.toString());
         }
-        button.putClientProperty(FlatClientProperties.STYLE, style.toString());
-        Dimension preferred = button.getPreferredSize();
-        button.setPreferredSize(new Dimension(square ? size.height : preferred.width, size.height));
+        else {
+            button.putClientProperty(FlatClientProperties.STYLE, style.toString());
+        }
+        button.putClientProperty(HEIGHT, size.height);
+        button.putClientProperty(SQUARE, square);
     }
 
     /**
-     * Dress a toggle as one of the stylesheet's {@code .pills .pill}: 26 high, 7 pixel arc, no
+     * Dress a toggle as one of the stylesheet's {@code .pills .pill}: 26 high, 7 pixel radius, no
      * border, secondary text, and the accent as a fill when selected.
      */
     public static void pill(javax.swing.AbstractButton button) {
         button.setFocusable(false);
         button.setIconTextGap(6);
-        button.setFont(font(12f).deriveFont(
-                java.util.Map.of(java.awt.font.TextAttribute.WEIGHT,
-                        java.awt.font.TextAttribute.WEIGHT_MEDIUM)));
-        button.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 7; focusWidth: 0; borderWidth: 0; minimumHeight: 26; margin: 0,11,0,11; " //$NON-NLS-1$
-                        + "background: null; borderColor: null; foreground: $Pono.textSecondary; " //$NON-NLS-1$
-                        + "hoverBackground: $Pono.hover; hoverBorderColor: null; pressedBackground: $Pono.surface3; " //$NON-NLS-1$
-                        + "selectedBackground: $Pono.accent; selectedForeground: $Pono.onAccent; " //$NON-NLS-1$
-                        + "toolbar.selectedBackground: $Pono.accent"); //$NON-NLS-1$
+        button.setFont(weighted(Tokens.FS_SMALL, Tokens.FW_BUTTON));
+        borderless(button, "arc: 14; focusWidth: 0; minimumHeight: 26; margin: 0,11,0,11; " //$NON-NLS-1$
+                + borderless("$Pono.text2", "$Pono.accent", "$Pono.onAccent")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
     /**
-     * One segment of the stylesheet's {@code .seg}: 24 high, at least 38 wide, 5 pixel arc, mono
-     * 11.5 pixel text, the accent as a fill when selected.
+     * One segment of the stylesheet's {@code .seg}: 24 high, at least 38 wide, 5 pixel radius, mono
+     * 11.5 pixel text, the accent as a fill when selected. FlatLaf makes a one-character button
+     * square whatever its minimum width, so a {@link ToggleButton} or {@link Button} gets its size
+     * from here; other buttons get FlatLaf's.
      */
     public static void seg(javax.swing.AbstractButton button) {
         button.setFocusable(false);
-        button.setFont(mono(11.5f, Font.PLAIN));
-        button.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 5; focusWidth: 0; borderWidth: 0; minimumHeight: 24; minimumWidth: 36; margin: 0,6,0,6; " //$NON-NLS-1$
-                        + "background: null; borderColor: null; foreground: $Pono.textSecondary; " //$NON-NLS-1$
-                        + "hoverBackground: $Pono.hover; hoverBorderColor: null; pressedBackground: $Pono.surface3; " //$NON-NLS-1$
-                        + "selectedBackground: $Pono.accent; selectedForeground: $Pono.onAccent"); //$NON-NLS-1$
+        button.setFont(mono(Tokens.FS_AUX, Font.PLAIN));
+        borderless(button, "arc: 10; focusWidth: 0; minimumHeight: 24; minimumWidth: 38; margin: 0,8,0,8; " //$NON-NLS-1$
+                + borderless("$Pono.text2", "$Pono.accent", "$Pono.onAccent")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        button.putClientProperty(HEIGHT, 24);
+        button.putClientProperty(MIN_WIDTH, 38);
     }
 
     /** An icon-only pill, 7 pixel padding, whose "on" state is the surface-3 fill. */
     public static void iconPill(javax.swing.AbstractButton button) {
         pill(button);
-        button.putClientProperty(FlatClientProperties.STYLE,
-                "arc: 7; focusWidth: 0; borderWidth: 0; minimumHeight: 26; minimumWidth: 30; margin: 0,7,0,7; " //$NON-NLS-1$
-                        + "background: null; borderColor: null; foreground: $Pono.textSecondary; " //$NON-NLS-1$
-                        + "hoverBackground: $Pono.hover; hoverBorderColor: null; pressedBackground: $Pono.surface3; " //$NON-NLS-1$
-                        + "selectedBackground: $Pono.surface3; selectedForeground: $Label.foreground"); //$NON-NLS-1$
+        borderless(button, "arc: 14; focusWidth: 0; minimumHeight: 26; minimumWidth: 30; margin: 0,7,0,7; " //$NON-NLS-1$
+                + borderless("$Pono.text2", "$Pono.surface3", "$Pono.text")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
     // ---- small shapes -------------------------------------------------------------------------
@@ -387,9 +688,9 @@ public final class Ui {
                 try {
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2.setColor(surface3());
-                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 4, 4);
+                    g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
                     g2.setColor(borderStrong());
-                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 4, 4);
+                    g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 8, 8);
                 }
                 finally {
                     g2.dispose();

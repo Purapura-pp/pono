@@ -1133,7 +1133,7 @@ public abstract class AbstractMotionPlanner extends AbstractMachineElement imple
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName();
+        return org.openpnp.gui.support.DisplayNames.typeName(getClass());
     }
 
     @Override

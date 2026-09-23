@@ -426,12 +426,8 @@ public class JobPanel extends JPanel {
         placementsTab.setCount(jobPlacementsPanel.getTable().getRowCount());
         currentBoardChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$
         currentBoardChip.setVisible(false);
-        JButton maximise = org.openpnp.gui.shell.Ui.iconButton(
-                org.openpnp.gui.shell.Ui.iconSm("maximize"), //$NON-NLS-1$
-                org.openpnp.gui.shell.Ui.Size.Xs, org.openpnp.gui.shell.Ui.Variant.Ghost,
-                Translations.getString("Dock.Maximize")); //$NON-NLS-1$
-        maximise.addActionListener(e -> MainFrame.get().toggleDockMaximised());
-        dock.setTools(currentBoardChip, maximise);
+        dock.setMaximize(() -> MainFrame.get().toggleDockMaximised());
+        dock.setTools(currentBoardChip);
         setBorder(new EmptyBorder(0, 10, 10, 10));
         add(dock);
 

@@ -6,6 +6,33 @@
   --r-sm: 6px;
   --r-md: 10px;
   --r-lg: 14px;
+  /* The type scale, size and weight: what the program's fonts are generated from. */
+  --fs-title: 15px; --fw-title: 700;
+  --fs-body: 13px; --fw-body: 400;
+  --fs-button: 13px; --fw-button: 500;
+  --fs-section: 13px; --fw-section: 600;
+  --fs-small: 12px; --fw-small: 400;
+  --fs-table: 12.5px; --fw-table: 400;
+  --fs-header: 11.5px; --fw-header: 600;
+  --fs-aux: 11.5px; --fw-aux: 500;
+  --fs-tag: 11px; --fw-tag: 600;
+  --fs-micro: 10px; --fw-micro: 700;
+  --fs-dro: 20px; --fw-dro: 600;
+  --fs-dro-compact: 16px;
+  /* Spacing the shell keeps to. */
+  --gap-card: 10px;
+  --pad-overlay: 12px;
+  --pad-section: 16px;
+  --form-label: 112px;
+  --h-control: 32px;
+  --h-control-sm: 28px;
+  --h-control-xs: 24px;
+  --h-input: 30px;
+  --h-row: 32px;
+  --w-rail: 68px;
+  --w-side: 500px;
+  --h-topbar: 52px;
+  --h-status: 28px;
   --accent: #4f8cff;
   --accent-strong: #2f6fe0;
   --accent-soft: rgba(79, 140, 255, .16);
