@@ -136,7 +136,7 @@ public class BacklashCompensationConfigurationWizard extends AbstractConfigurati
         panelBacklashDiagnostics.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
                 Translations.getString(
                         "BacklashCompensationConfigurationWizard.BacklashDiagnosticsPanel.Border.title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
+                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         contentPanel.add(panelBacklashDiagnostics);
         panelBacklashDiagnostics.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,

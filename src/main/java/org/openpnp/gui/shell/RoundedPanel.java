@@ -28,22 +28,27 @@ import javax.swing.JPanel;
  * A panel with rounded corners, a fill and a hairline border: the stylesheet's cards, pills,
  * search box and input fields all start here.
  * <p>
+ * The radius is the stylesheet's border-radius. Java2D's round rectangles take the corner's
+ * diameter, which is why every card used to come out with half the rounding of the mockups.
+ * Children are clipped to the corners, as {@code overflow: hidden} does, and the outline is drawn
+ * over them, so an opaque table in a card no longer paints square corners across its border.
+ * <p>
  * The fill and border are looked up again on every paint through the suppliers handed in, so a
  * theme change needs no bookkeeping.
  */
 @SuppressWarnings("serial")
 public class RoundedPanel extends JPanel {
-    private final int arc;
+    private final int radius;
     private final java.util.function.Supplier<Color> fill;
     private final java.util.function.Supplier<Color> line;
 
-    public RoundedPanel(int arc, Color fill, Color line) {
-        this(arc, () -> fill, () -> line);
+    public RoundedPanel(int radius, Color fill, Color line) {
+        this(radius, () -> fill, () -> line);
     }
 
-    public RoundedPanel(int arc, java.util.function.Supplier<Color> fill,
+    public RoundedPanel(int radius, java.util.function.Supplier<Color> fill,
             java.util.function.Supplier<Color> line) {
-        this.arc = arc;
+        this.radius = radius;
         this.fill = fill;
         this.line = line;
         setOpaque(false);
@@ -51,7 +56,11 @@ public class RoundedPanel extends JPanel {
 
     /** The stylesheet's {@code .card}: 14 pixel corners, the surface colour, a border. */
     public static RoundedPanel card() {
-        return new RoundedPanel(14, Ui::surface, Ui::border);
+        return new RoundedPanel(Tokens.R_LG, Ui::surface, Ui::border);
+    }
+
+    public int getRadius() {
+        return radius;
     }
 
     @Override
@@ -62,17 +71,39 @@ public class RoundedPanel extends JPanel {
             Color background = fill.get();
             if (background != null) {
                 g2.setColor(background);
-                g2.fillRoundRect(0, 0, getWidth(), getHeight(), arc, arc);
-            }
-            Color border = line.get();
-            if (border != null) {
-                g2.setColor(border);
-                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 2 * radius, 2 * radius);
             }
         }
         finally {
             g2.dispose();
         }
         super.paintComponent(g);
+    }
+
+    @Override
+    protected void paintChildren(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            if (radius > 0) {
+                g2.clip(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth(), getHeight(),
+                        2 * radius, 2 * radius));
+            }
+            super.paintChildren(g2);
+        }
+        finally {
+            g2.dispose();
+        }
+        Color border = line.get();
+        if (border != null) {
+            Graphics2D g3 = (Graphics2D) g.create();
+            try {
+                g3.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g3.setColor(border);
+                g3.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 2 * radius, 2 * radius);
+            }
+            finally {
+                g3.dispose();
+            }
+        }
     }
 }

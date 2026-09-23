@@ -137,7 +137,7 @@ public class SubmitDiagnosticsDialog extends JDialog {
         {
             txtpnWarningIfYou = new JTextPane();
             txtpnWarningIfYou.setText("Warning: If you include a screenshot or Vision Debug Images these images may include output from your machine's cameras. If these images contain content you don't want to share you should uncheck these options. You can review the images from the generated link before sharing it.");
-            txtpnWarningIfYou.setForeground(Color.RED);
+            txtpnWarningIfYou.setForeground(org.openpnp.gui.shell.Ui.err());
             txtpnWarningIfYou.setBackground(UIManager.getColor("Label.background"));
             txtpnWarningIfYou.setEditable(false);
             contentPanel.add(txtpnWarningIfYou, "2, 8, 3, 1, fill, fill");

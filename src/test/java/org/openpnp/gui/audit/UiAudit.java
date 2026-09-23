@@ -134,7 +134,7 @@ final class UiAudit {
 
     private final Rules rules;
     private final Map<Component, String> landmarks;
-    private final JRootPane root;
+    private final JComponent root;
     private final BufferedImage shot;
     private final double scale;
     private final String scene;
@@ -145,7 +145,7 @@ final class UiAudit {
     private final Map<String, String> offScaleExample = new HashMap<>();
     private final JList<Object> listForRenderers = new JList<>();
 
-    UiAudit(Rules rules, Map<Component, String> landmarks, JRootPane root, BufferedImage shot,
+    UiAudit(Rules rules, Map<Component, String> landmarks, JComponent root, BufferedImage shot,
             double scale, String scene, String round) {
         this.rules = rules;
         this.landmarks = landmarks;
@@ -187,7 +187,7 @@ final class UiAudit {
     }
 
     private void inspect(JComponent c) {
-        if (c instanceof Wizard) {
+        if (c instanceof Wizard && !(c instanceof org.openpnp.gui.form.FormWizard)) {
             add(Check.LegacyWizard, where(c), c.getClass().getName());
         }
         titledBorder(c);
@@ -409,7 +409,7 @@ final class UiAudit {
                     continue;
                 }
                 int width = table.getColumnModel().getColumn(col).getWidth();
-                if (rendered.getPreferredSize().width > width) {
+                if (needs((JLabel) rendered, text) > width) {
                     truncated++;
                     if (truncatedExample == null) {
                         truncatedExample = table.getColumnName(col) + "\uff1a" + shorten(text, 30);
@@ -437,6 +437,26 @@ final class UiAudit {
         }
     }
 
+    /**
+     * The width a label needs for its text as painted at the round's scale. Measured at 100 %, as
+     * Swing lays out, a cell can look as if it fits and still be painted "R..." at 150 %.
+     */
+    private double needs(JLabel label, String text) {
+        java.awt.Insets insets = label.getInsets();
+        Icon icon = label.getIcon();
+        double width = insets.left + insets.right + textWidth(label.getFont(), text);
+        if (icon != null) {
+            width += icon.getIconWidth() + label.getIconTextGap();
+        }
+        return width;
+    }
+
+    private double textWidth(Font font, String text) {
+        java.awt.font.FontRenderContext context = new java.awt.font.FontRenderContext(
+                java.awt.geom.AffineTransform.getScaleInstance(scale, scale), true, false);
+        return font.getStringBounds(text, context).getWidth();
+    }
+
     // ----- layout ------------------------------------------------------------------------------
 
     /**
@@ -460,6 +480,10 @@ final class UiAudit {
         if (!laidOut.equals(text)) {
             add(Check.TextTruncated, where(c), "\u300c" + shorten(text, 60) + "\u300d \u663e\u793a\u6210\u300c"
                     + laidOut + "\u300d");
+        }
+        else if (c instanceof JLabel && needs((JLabel) c, text) > c.getWidth() + 0.5) {
+            add(Check.TextTruncated, where(c), "\u300c" + shorten(text, 60) + "\u300d \u5728 "
+                    + Math.round(scale * 100) + "% \u4e0b\u653e\u4e0d\u4e0b");
         }
     }
 
@@ -506,7 +530,10 @@ final class UiAudit {
         if (view == null) {
             return;
         }
-        int need = view.getPreferredSize().width;
+        // A view held at the viewport's width gives way down to its minimum; beyond that it is cut.
+        boolean tracks = view instanceof javax.swing.Scrollable
+                && ((javax.swing.Scrollable) view).getScrollableTracksViewportWidth();
+        int need = tracks ? view.getMinimumSize().width : view.getPreferredSize().width;
         int have = viewport.getExtentSize().width;
         if (need > have + 1 && !(view instanceof JTable) && !(view instanceof JTree)
                 && !(view instanceof JList)) {
@@ -532,7 +559,9 @@ final class UiAudit {
         }
         if (icon instanceof FlatSVGIcon) {
             String name = ((FlatSVGIcon) icon).getName();
-            return name != null && name.startsWith("icons/pono/") ? null : name; //$NON-NLS-1$
+            // Diagrams are pictures, not icons, and are drawn as they are meant to be seen.
+            return name != null && (name.startsWith("icons/pono/") || name.startsWith("icons/diagrams/")) //$NON-NLS-1$ //$NON-NLS-2$
+                    ? null : name;
         }
         if (icon instanceof ImageIcon) {
             String description = ((ImageIcon) icon).getDescription();

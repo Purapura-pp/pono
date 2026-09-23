@@ -145,31 +145,33 @@ public class SolutionsTableModel extends AbstractTableModel {
         }
     }
 
-    static protected class SeverityRenderer extends DefaultTableCellRenderer {
-        @Override
-        public void setValue(Object value) {
-            if (value == null) {
-                return;
-            }
-            Severity severity = (Severity) value;
-            setForeground(Color.black);
-            setBackground(severity.color);
-            setText(severity.toString());
-            setBorder(new LineBorder(getBackground()));
+    /**
+     * Severity as a status capsule in the theme's colours. It used to be black text on a light
+     * fill of its own, the one bright cell in every row of the dark theme.
+     */
+    static protected class SeverityRenderer extends org.openpnp.gui.support.StatusPillRenderer {
+        SeverityRenderer() {
+            super(value -> {
+                switch ((Severity) value) {
+                    case Error:
+                    case Fundamental:
+                        return Tone.Error;
+                    case Warning:
+                        return Tone.Warning;
+                    case Suggestion:
+                        return Tone.Info;
+                    default:
+                        return Tone.Muted;
+                }
+            }, org.openpnp.gui.support.DisplayNames::of);
         }
     }
 
-    static protected class StateRenderer extends DefaultTableCellRenderer {
-        @Override
-        public void setValue(Object value) {
-            if (value == null) {
-                return;
-            }
-            State state = (State) value;
-            setForeground(Color.black);
-            setBackground(state.color);
-            setText(state.toString());
-            setBorder(new LineBorder(getBackground()));
+    /** State as a status capsule: solved in green, the rest quiet. */
+    static protected class StateRenderer extends org.openpnp.gui.support.StatusPillRenderer {
+        StateRenderer() {
+            super(value -> value == State.Solved ? Tone.Ok : Tone.Muted,
+                    org.openpnp.gui.support.DisplayNames::of);
         }
     }
 

@@ -90,7 +90,7 @@ public class CommandPalette extends JDialog {
 
         field.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT,
                 Translations.getString("TopBar.Search.Placeholder")); //$NON-NLS-1$
-        field.putClientProperty(FlatClientProperties.STYLE, "arc: 6; minimumHeight: 32"); //$NON-NLS-1$
+        field.putClientProperty(FlatClientProperties.STYLE, "arc: 12; minimumHeight: 32"); //$NON-NLS-1$
         field.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {

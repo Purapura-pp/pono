@@ -284,8 +284,10 @@ public class BoardPlacementsPanel extends JPanel {
             public void keyTyped(KeyEvent e) {
                 if (e.getKeyChar() == ' ') {
                     Placement placement = getSelection();
-                    placement.setEnabled(!placement.isEnabled());
-                    refreshSelectedRow();
+                    if (placement != null) {
+                        placement.setEnabled(!placement.isEnabled());
+                        refreshSelectedRow();
+                    }
                 }
                 else {
                     super.keyTyped(e);
@@ -845,43 +847,11 @@ public class BoardPlacementsPanel extends JPanel {
         }
     };
 
+    /** The placement's type by its display name, in the table's own colours; see JobPlacementsPanel. */
     static class TypeRenderer extends DefaultTableCellRenderer {
         @Override
         public void setValue(Object value) {
-            if (value == null) {
-                return;
-            }
-            Type type = (Type) value;
-            String name;
-            if (type == Placement.Type.Fiducial) {
-                name = Translations.getString("Placement.Type.Fiducial"); //$NON-NLS-1$
-            }
-            else if (type == Placement.Type.Placement) {
-                name = Translations.getString("Placement.Type.Placement"); //$NON-NLS-1$
-            }
-            else {
-                name = value.toString();
-            }
-            setText(name); //$NON-NLS-1$
-        }
-
-        @Override
-        public Component getTableCellRendererComponent(JTable table, Object value,
-                                                       boolean isSelected, boolean hasFocus, int row, int column) {
-            Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            Color alternateRowColor = UIManager.getColor("Table.alternateRowColor"); //$NON-NLS-1$
-            if (value == Type.Fiducial) {
-                c.setForeground(Color.black);
-                c.setBackground(typeColorFiducial);
-            } else if (isSelected) {
-                c.setForeground(table.getSelectionForeground());
-                c.setBackground(table.getSelectionBackground());
-            } else {
-                c.setForeground(table.getForeground());
-                c.setBackground(row%2==0 ? table.getBackground() : alternateRowColor);
-            }
-            
-            return c;
+            setText(value == null ? "" : org.openpnp.gui.support.DisplayNames.of(value)); //$NON-NLS-1$
         }
     }
 

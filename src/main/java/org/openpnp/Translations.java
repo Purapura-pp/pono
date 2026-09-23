@@ -64,6 +64,11 @@ public class Translations {
         }
     }
 
+    /** Whether the key has a translation, in the display language or in English. */
+    public static boolean has(String key) {
+        return RESOURCE_BUNDLE.containsKey(key);
+    }
+
     private static ResourceBundle loadTextBundle() {
         try {
             return ResourceBundle.getBundle(TEXT_BUNDLE_NAME, new UTF8Control());

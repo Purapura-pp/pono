@@ -113,7 +113,7 @@ public class PillBar extends JPanel {
     }
 
     public void insertItemAt(Object item, int index) {
-        JToggleButton button = new JToggleButton(labeller.apply(item));
+        JToggleButton button = new Ui.ToggleButton(labeller.apply(item), null);
         Ui.pill(button);
         button.setVisible(!hidden.test(item));
         button.addActionListener(e -> setSelectedItem(item));

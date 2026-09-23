@@ -70,7 +70,7 @@ public class AutoFocusProviderConfigurationWizard extends AbstractConfigurationW
 
         panelGeneral = new JPanel();
         contentPanel.add(panelGeneral);
-        panelGeneral.setBorder(new TitledBorder(null, Translations.getString("AutoFocusProviderConfigurationWizard.panelGeneral.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0))); //$NON-NLS-1$
+        panelGeneral.setBorder(new TitledBorder(null, Translations.getString("AutoFocusProviderConfigurationWizard.panelGeneral.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
         panelGeneral.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("max(70dlu;default)"),

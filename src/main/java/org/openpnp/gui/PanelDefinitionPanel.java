@@ -338,8 +338,10 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
             public void keyTyped(KeyEvent e) {
                 if (e.getKeyChar() == ' ') {
                     PlacementsHolderLocation<?> child = getChildrenSelection();
-                    child.setLocallyEnabled(!child.isLocallyEnabled());
-                    refreshSelectedRow();
+                    if (child != null) {
+                        child.setLocallyEnabled(!child.isLocallyEnabled());
+                        refreshSelectedRow();
+                    }
                 }
                 else {
                     super.keyTyped(e);
@@ -379,7 +381,7 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
         pnlFiducials.setBorder(new TitledBorder(new EtchedBorder(EtchedBorder.LOWERED, 
                 new Color(255, 255, 255), new Color(160, 160, 160)), 
                 Translations.getString("PanelDefinition.PanelAlignment.Title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0)));
+                TitledBorder.LEADING, TitledBorder.TOP, null, null));
         splitPane.setRightComponent(pnlFiducials);
         pnlFiducials.setLayout(new BorderLayout(0, 0));
         

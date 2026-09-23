@@ -91,7 +91,7 @@ public class ReferenceCameraTransformsConfigurationWizard extends AbstractConfig
         advancedCalWarning = new JLabel(Translations.getString(
                 "ReferenceCameraTransformsConfigurationWizard.TransformsPanel.AdvancedCalibrationActiveLabel.text" //$NON-NLS-1$
         ));
-        advancedCalWarning.setForeground(Color.RED);
+        advancedCalWarning.setForeground(org.openpnp.gui.shell.Ui.err());
         panelTransforms.add(advancedCalWarning, "7, 2, right, default");
 
         lblOffsetX = new JLabel(Translations.getString(

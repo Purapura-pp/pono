@@ -481,7 +481,7 @@ public class ReferenceCameraCalibrationWizard extends AbstractConfigurationWizar
         textFieldDesiredNumberOfRadialLines.setColumns(10);
         
         startCameraCalibrationBtn = new JButton(startCalibration);
-        startCameraCalibrationBtn.setForeground(Color.RED);
+        startCameraCalibrationBtn.setForeground(org.openpnp.gui.shell.Ui.err());
         startCameraCalibrationBtn.setText(Translations.getString(
                 "ReferenceCameraCalibrationWizard.CameraCalibrationPanel.StartCameraCalibrationButton.text")); //$NON-NLS-1$
         panelCameraCalibration.add(startCameraCalibrationBtn, "4, 30");

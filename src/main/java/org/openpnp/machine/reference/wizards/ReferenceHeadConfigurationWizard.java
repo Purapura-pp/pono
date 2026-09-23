@@ -162,7 +162,7 @@ public class ReferenceHeadConfigurationWizard extends AbstractConfigurationWizar
 
         JLabel lblWarningChangingThese = new JLabel(Translations.getString(
                 "ReferenceHeadConfigurationWizard.LocationsPanel.WarningChangingLabel.text")); //$NON-NLS-1$
-        lblWarningChangingThese.setForeground(Color.BLACK);
+        lblWarningChangingThese.setForeground(org.openpnp.gui.shell.Ui.warn());
         panel.add(lblWarningChangingThese, "4, 8, 7, 1");
 
         JLabel lblParkLocation = new JLabel(Translations.getString(
@@ -185,7 +185,7 @@ public class ReferenceHeadConfigurationWizard extends AbstractConfigurationWizar
         panelCalibration.setBorder(new TitledBorder(UIManager.getBorder("TitledBorder.border"),
                 Translations.getString("ReferenceHeadConfigurationWizard.CalibrationRigPanel.Border.title"), //$NON-NLS-1$
                 TitledBorder.LEADING, TitledBorder.TOP,
-                null, new Color(0, 0, 0)));
+                null, null));
         contentPanel.add(panelCalibration);
         panelCalibration.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,

@@ -149,7 +149,8 @@ public class Chip extends JLabel {
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int w = getWidth();
             int h = getHeight();
-            int arc = shape == Shape.Chip ? h : 6;
+            // A chip is a capsule; a status tag has the stylesheet's 6 pixel radius.
+            int arc = shape == Shape.Chip ? h : 2 * 6;
             Color background = backgroundFor(tone);
             if (background != null) {
                 g2.setColor(background);

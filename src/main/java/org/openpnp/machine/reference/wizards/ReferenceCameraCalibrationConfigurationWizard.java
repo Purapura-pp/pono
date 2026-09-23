@@ -71,7 +71,7 @@ public class ReferenceCameraCalibrationConfigurationWizard extends AbstractConfi
         advancedCalWarning = new JLabel(Translations.getString(
                 "ReferenceCameraCalibrationConfigurationWizard.LensCalibrationPanel.AdvancedCalibrationActiveLabel.text" //$NON-NLS-1$
         ));
-        advancedCalWarning.setForeground(Color.RED);
+        advancedCalWarning.setForeground(org.openpnp.gui.shell.Ui.err());
         panelLensCalibration.add(advancedCalWarning, "8, 2, left, default");
 
         lblApplyCalibration = new JLabel(Translations.getString(

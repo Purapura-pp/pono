@@ -397,17 +397,9 @@ public class ThemeSettingsPanel extends JPanel {
                 UIManager.put("defaultFont", newFont);
             }
         }
-        FlexibleColor defaultRowColor = new FlexibleColor(UIManager.getColor("Table.background").getRGB());
-        if (alternateRow == null || alternateRow) {
-            if (FlatLaf.isLafDark()) {
-                UIManager.put("Table.alternateRowColor", defaultRowColor.brighter(30));
-            } else {
-                UIManager.put("Table.alternateRowColor", defaultRowColor.darker(30));
-            }
-        }
-        else {
-            UIManager.put("Table.alternateRowColor", null);
-        }
+        // The mockups' tables separate rows by a hairline, not by stripes; the stripes also fought
+        // the status capsules and the selection for attention. The stored preference is ignored.
+        UIManager.put("Table.alternateRowColor", null);
         FlatLaf.updateUI();
         removeAll();
         initComponents();

@@ -53,7 +53,7 @@ public class Neoden4CameraConfigurationWizard extends AbstractConfigurationWizar
         panelGeneral = new JPanel();
         contentPanel.add(panelGeneral);
         panelGeneral.setBorder(new TitledBorder(null,
-                Translations.getString("Neoden4CameraConfigurationWizard.panelGeneral.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0))); //$NON-NLS-1$
+                Translations.getString("Neoden4CameraConfigurationWizard.panelGeneral.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
         panelGeneral.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 FormSpecs.DEFAULT_COLSPEC,
@@ -89,7 +89,7 @@ public class Neoden4CameraConfigurationWizard extends AbstractConfigurationWizar
         panelImage = new JPanel();
         contentPanel.add(panelImage);
         panelImage.setBorder(new TitledBorder(null, 
-        		Translations.getString("Neoden4CameraConfigurationWizard.panelImage.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0))); //$NON-NLS-1$
+        		Translations.getString("Neoden4CameraConfigurationWizard.panelImage.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
         panelImage.setLayout(new FormLayout(new ColumnSpec[] {
         		FormSpecs.RELATED_GAP_COLSPEC,
         		FormSpecs.DEFAULT_COLSPEC,

@@ -36,6 +36,7 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.PartCellValue;
 import org.openpnp.gui.support.RotationCellValue;
+import org.openpnp.gui.support.TableUtils;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -55,7 +56,7 @@ import com.google.common.eventbus.Subscribe;
 
 @SuppressWarnings("serial")
 public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableModel 
-        implements ColumnAlignable, ColumnWidthSaveable {
+        implements ColumnAlignable, ColumnWidthSaveable, TableUtils.ColumnKinds {
     private PlacementsHolder<?> placementsHolder = null;
 
     private String[] columnNames =
@@ -94,8 +95,21 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
             Side.class, LengthCellValue.class, LengthCellValue.class, RotationCellValue.class, 
             Type.class, Boolean.class, Status.class, ErrorHandling.class, Integer.class, String.class};
     
-    private int[] columnAlignments = new int[] {CENTER, LEFT, LEFT, CENTER, CENTER, CENTER, 
-            CENTER, CENTER, CENTER, CENTER, CENTER, CENTER, LEFT};
+    // Numbers right, everything else left, as the stylesheet's table.grid: centred columns made
+    // the coordinates hard to compare down the column.
+    private int[] columnAlignments = new int[] {CENTER, LEFT, LEFT, LEFT, RIGHT, RIGHT, 
+            RIGHT, LEFT, CENTER, LEFT, LEFT, RIGHT, LEFT};
+
+    private TableUtils.Kind[] columnKinds = new TableUtils.Kind[] {TableUtils.Kind.Check,
+            TableUtils.Kind.Id, TableUtils.Kind.Name, TableUtils.Kind.Status, TableUtils.Kind.Number,
+            TableUtils.Kind.Number, TableUtils.Kind.Number, TableUtils.Kind.Status,
+            TableUtils.Kind.Secondary, TableUtils.Kind.Status, TableUtils.Kind.Status,
+            TableUtils.Kind.Secondary, TableUtils.Kind.Name};
+
+    @Override
+    public TableUtils.Kind[] getColumnKinds() {
+        return columnKinds;
+    }
 
     private int[] columnWidthTypes = new int[] {FIXED, FIXED, PROPORTIONAL, FIXED, FIXED, 
             FIXED, FIXED, FIXED, FIXED, FIXED, FIXED, FIXED, PROPORTIONAL};

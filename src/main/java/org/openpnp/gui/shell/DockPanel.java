@@ -65,7 +65,31 @@ import com.formdev.flatlaf.FlatClientProperties;
  */
 @SuppressWarnings("serial")
 public class DockPanel extends RoundedPanel {
-    private final JPanel tabRow = new JPanel();
+    /**
+     * The row of tabs. The selected tab's underline is drawn here, over the hairline at the
+     * bottom of the row, as the stylesheet's {@code bottom: -1px} puts it.
+     */
+    private final JPanel tabRow = new JPanel() {
+        @Override
+        protected void paintChildren(Graphics g) {
+            super.paintChildren(g);
+            if (selected == null || selected.cell == null || !selected.cell.isShowing()) {
+                return;
+            }
+            java.awt.Rectangle r = javax.swing.SwingUtilities.convertRectangle(selected.cell.getParent(),
+                    selected.cell.getBounds(), this);
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Ui.accent());
+                // 8 pixels in from either end of the tab; the cell ends with a 10 pixel gap.
+                g2.fillRoundRect(r.x + 8, getHeight() - 2, r.width - 26, 2, 2, 2);
+            }
+            finally {
+                g2.dispose();
+            }
+        }
+    };
     private final JPanel tabs = new JPanel();
     private final JPanel tools = new JPanel();
     private final CardLayout cards = new CardLayout();
@@ -74,6 +98,12 @@ public class DockPanel extends RoundedPanel {
     private final List<Tab> all = new ArrayList<>();
     private final List<ChangeListener> listeners = new ArrayList<>();
     private Tab selected;
+    private JComponent[] pageTools = new JComponent[0];
+    /** The stylesheet's two icon buttons at the right end of the tab row. */
+    private final JButton columnsButton = Ui.iconButton(Ui.iconSm("columns"), Ui.Size.Xs, //$NON-NLS-1$
+            Ui.Variant.Ghost, text("Dock.Columns"));
+    private final JButton maximizeButton = Ui.iconButton(Ui.iconSm("maximize"), Ui.Size.Xs, //$NON-NLS-1$
+            Ui.Variant.Ghost, text("Dock.Maximize"));
 
     public DockPanel() {
         super(14, Ui::surface, Ui::border);
@@ -93,6 +123,39 @@ public class DockPanel extends RoundedPanel {
         add(tabRow, BorderLayout.NORTH);
         body.setOpaque(false);
         add(body, BorderLayout.CENTER);
+        columnsButton.addActionListener(e -> {
+            JTable table = selected == null ? null : firstTable(selected.getContent());
+            if (table != null) {
+                org.openpnp.gui.support.TableUtils.columnSettings(table)
+                        .show(columnsButton, 0, columnsButton.getHeight());
+            }
+        });
+        maximizeButton.setVisible(false);
+        layoutTools();
+    }
+
+    /** What the maximise button does; without it the button is not shown. */
+    public void setMaximize(Runnable maximize) {
+        for (java.awt.event.ActionListener listener : maximizeButton.getActionListeners()) {
+            maximizeButton.removeActionListener(listener);
+        }
+        maximizeButton.addActionListener(e -> maximize.run());
+        maximizeButton.setVisible(maximize != null);
+    }
+
+    private static JTable firstTable(Component component) {
+        if (component instanceof JTable) {
+            return (JTable) component;
+        }
+        if (component instanceof java.awt.Container) {
+            for (Component child : ((java.awt.Container) component).getComponents()) {
+                JTable table = firstTable(child);
+                if (table != null && table.isShowing()) {
+                    return table;
+                }
+            }
+        }
+        return null;
     }
 
     /** One tab: its button in the row and its content below. */
@@ -101,38 +164,25 @@ public class DockPanel extends RoundedPanel {
         private final JLabel count = new JLabel();
         private final JComponent content;
         private final String key;
+        /** The button and its count together: what the underline runs under. */
+        private JComponent cell;
 
         Tab(String key, Icon icon, String label, JComponent content) {
             this.key = key;
             this.content = content;
-            button = new JToggleButton(label, icon) {
-                @Override
-                protected void paintComponent(Graphics g) {
-                    super.paintComponent(g);
-                    if (isSelected()) {
-                        // The stylesheet's 2 pixel accent underline, 8 pixels in from either end.
-                        Graphics2D g2 = (Graphics2D) g.create();
-                        try {
-                            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                            g2.setColor(Ui.accent());
-                            g2.fillRoundRect(8, getHeight() - 2, getWidth() - 16, 2, 2, 2);
-                        }
-                        finally {
-                            g2.dispose();
-                        }
-                    }
-                }
-            };
+            button = new JToggleButton(label, icon);
             button.setFocusable(false);
             button.setIconTextGap(7);
             button.setHorizontalTextPosition(SwingConstants.RIGHT);
+            // Borderless: the tab has no fill of its own, selected or not; the underline the tab
+            // row draws is what marks it.
+            button.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_BORDERLESS);
             button.putClientProperty(FlatClientProperties.STYLE,
-                    "arc: 6; focusWidth: 0; borderWidth: 0; minimumHeight: 34; margin: 0,12,0,12; " //$NON-NLS-1$
-                            + "background: null; borderColor: null; foreground: $Pono.textSecondary; " //$NON-NLS-1$
-                            + "hoverBackground: $Pono.hover; pressedBackground: null; " //$NON-NLS-1$
-                            + "selectedBackground: null; selectedForeground: $Label.foreground"); //$NON-NLS-1$
-            button.setFont(Ui.font(Ui.BASE).deriveFont(java.util.Map.of(
-                    java.awt.font.TextAttribute.WEIGHT, java.awt.font.TextAttribute.WEIGHT_MEDIUM)));
+                    "arc: 12; focusWidth: 0; minimumHeight: 34; margin: 0,12,0,12; " //$NON-NLS-1$
+                            + "foreground: $Pono.text2; toolbar.hoverBackground: $Pono.hover; " //$NON-NLS-1$
+                            + "toolbar.pressedBackground: $Pono.hover; toolbar.selectedBackground: #00000000; " //$NON-NLS-1$
+                            + "toolbar.selectedForeground: $Pono.text"); //$NON-NLS-1$
+            button.setFont(Ui.weighted(Tokens.FS_BODY, Tokens.FW_BUTTON));
             count.setFont(Ui.font(11f));
             count.setVisible(false);
             button.addActionListener(e -> select(this));
@@ -149,6 +199,7 @@ public class DockPanel extends RoundedPanel {
 
         private void paintCount() {
             boolean on = selected == this;
+            button.setFont(Ui.weighted(Tokens.FS_BODY, on ? Tokens.FW_SECTION : Tokens.FW_BUTTON));
             count.setForeground(on ? Ui.accent() : Ui.muted());
             count.putClientProperty("fill", on ? Ui.accentSoft() : Ui.surface3()); //$NON-NLS-1$
             count.repaint();
@@ -169,8 +220,15 @@ public class DockPanel extends RoundedPanel {
         cell.setLayout(new BoxLayout(cell, BoxLayout.X_AXIS));
         cell.add(tab.button);
         CountCapsule capsule = new CountCapsule(tab.count);
+        capsule.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                select(tab);
+            }
+        });
         cell.add(capsule);
-        cell.add(Box.createHorizontalStrut(2));
+        cell.add(Box.createHorizontalStrut(10));
+        tab.cell = cell;
         tabs.add(cell);
         body.add(content, key);
         if (selected == null) {
@@ -179,15 +237,26 @@ public class DockPanel extends RoundedPanel {
         return tab;
     }
 
-    /** The controls at the right end of the tab row: a chip, column settings, maximise. */
+    /**
+     * The page's controls at the right end of the tab row, such as the current board chip; the
+     * column settings and maximise buttons follow them.
+     */
     public void setTools(JComponent... components) {
+        pageTools = components;
+        layoutTools();
+    }
+
+    private void layoutTools() {
         tools.removeAll();
-        for (int i = 0; i < components.length; i++) {
+        List<JComponent> all = new ArrayList<>(java.util.Arrays.asList(pageTools));
+        all.add(columnsButton);
+        all.add(maximizeButton);
+        for (int i = 0; i < all.size(); i++) {
             if (i > 0) {
                 tools.add(Box.createHorizontalStrut(6));
             }
-            components[i].setAlignmentY(CENTER_ALIGNMENT);
-            tools.add(components[i]);
+            all.get(i).setAlignmentY(CENTER_ALIGNMENT);
+            tools.add(all.get(i));
         }
         tools.revalidate();
     }
@@ -199,6 +268,8 @@ public class DockPanel extends RoundedPanel {
         for (Tab t : all) {
             t.paintCount();
         }
+        tabs.revalidate();
+        tabRow.repaint();
         for (ChangeListener listener : new ArrayList<>(listeners)) {
             listener.stateChanged(new javax.swing.event.ChangeEvent(this));
         }
@@ -237,7 +308,7 @@ public class DockPanel extends RoundedPanel {
                 try {
                     g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                     g2.setColor((java.awt.Color) fill);
-                    g2.fillRoundRect(0, (getHeight() - 16) / 2, getWidth(), 16, 8, 8);
+                    g2.fillRoundRect(0, (getHeight() - 16) / 2, getWidth(), 16, 16, 16);
                 }
                 finally {
                     g2.dispose();
@@ -355,7 +426,7 @@ public class DockPanel extends RoundedPanel {
             field.putClientProperty(FlatClientProperties.TEXT_FIELD_LEADING_ICON, Ui.iconSm("search")); //$NON-NLS-1$
             field.putClientProperty(FlatClientProperties.TEXT_FIELD_TRAILING_COMPONENT, Ui.kbd("/")); //$NON-NLS-1$
             field.putClientProperty(FlatClientProperties.STYLE,
-                    "arc: 6; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
+                    "arc: 12; background: $Pono.surface2; borderColor: $Pono.border; " //$NON-NLS-1$
                             + "focusedBorderColor: $Pono.accent; focusWidth: 0; placeholderForeground: $Pono.textMuted"); //$NON-NLS-1$
             Dimension size = new Dimension(220, 28);
             field.setPreferredSize(size);
@@ -365,6 +436,14 @@ public class DockPanel extends RoundedPanel {
                 focusScope.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
                         .put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, 0), "focusFilter"); //$NON-NLS-1$
                 focusScope.getActionMap().put("focusFilter", new AbstractAction() { //$NON-NLS-1$
+                    @Override
+                    public boolean isEnabled() {
+                        // A "/" typed into a cell being edited, or into any field, is text: a
+                        // disabled binding lets the key through to it.
+                        return !org.openpnp.util.UiUtils.isTextInput(java.awt.KeyboardFocusManager
+                                .getCurrentKeyboardFocusManager().getFocusOwner());
+                    }
+
                     @Override
                     public void actionPerformed(java.awt.event.ActionEvent e) {
                         field.requestFocusInWindow();
@@ -394,14 +473,17 @@ public class DockPanel extends RoundedPanel {
                         + "selectionInactiveBackground: $Pono.accentSoft; selectionInactiveForeground: $Label.foreground; " //$NON-NLS-1$
                         + "gridColor: $Pono.border; cellMargins: 0,10,0,10; " //$NON-NLS-1$
                         + "cellFocusColor: null; background: $Pono.surface"); //$NON-NLS-1$
-        table.setFont(Ui.font(12.5f));
+        table.setFont(Ui.font(Tokens.FS_TABLE));
         JTableHeader header = table.getTableHeader();
-        header.setFont(Ui.font(11.5f).deriveFont(java.util.Map.of(
-                java.awt.font.TextAttribute.WEIGHT, java.awt.font.TextAttribute.WEIGHT_SEMIBOLD)));
+        header.setFont(Ui.weighted(Tokens.FS_HEADER, Tokens.FW_HEADER));
         header.putClientProperty(FlatClientProperties.STYLE,
                 "background: $Pono.surface2; foreground: $Pono.textMuted; height: 30; " //$NON-NLS-1$
                         + "separatorColor: $Pono.surface2; bottomSeparatorColor: $Pono.border; cellMargins: 0,10,0,10"); //$NON-NLS-1$
         table.putClientProperty("Pono.dockTable", Boolean.TRUE); //$NON-NLS-1$
+        // Widths by content for every dock table; a page that installs its own keeps its key.
+        javax.swing.SwingUtilities.invokeLater(() -> org.openpnp.gui.support.TableUtils
+                .installColumnWidthSaversOnce(table, java.util.prefs.Preferences.userNodeForPackage(DockPanel.class),
+                        "DockTable." + table.getModel().getClass().getSimpleName())); //$NON-NLS-1$
         JScrollPane scroll = new JScrollPane(table) {
             @Override
             public void paint(Graphics g) {

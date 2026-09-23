@@ -41,6 +41,7 @@ import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
 import javax.swing.AbstractButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JRootPane;
 import javax.swing.JTable;
@@ -94,27 +95,26 @@ import io.github.classgraph.ScanResult;
  *     [--design design/mockups] [--out E:/pono-env/ui-ruler/&lt;time&gt;]
  * </pre>
  *
- * A round is a window size and the scale it is painted at. The window is laid out at its logical
- * size, and the layout does not depend on the scale, so one process paints all three: 1600 by 1000
- * at 150 %, the mockups' own pixels; 1366 by 768 at 100 %, the small laptop; 1536 by 864 at
- * 125 %, a 1080p laptop at its usual setting.
+ * A round is a window size: 1600 by 1000, the mockups' own; 1366 by 768, the small laptop; 1536 by
+ * 864, a 1080p laptop at 125 %. Each is painted at the scale of the screen the window is on. Swing
+ * measures text for the layout at that scale, and a glyph rounds to a different width at another
+ * one: painted at 150 % what was laid out at 125 %, Chinese text comes out about 4 % wider than
+ * its label and is cut off, which no one at either setting ever sees.
  *
  * tools/ui-ruler/ruler.ps1 builds and runs it.
  */
 public class UiRuler {
-    /** One window size and paint scale, photographed in each of its themes. */
+    /** One window size, photographed in each of its themes. */
     static final class Round {
         final String id;
         final int width;
         final int height;
-        final double scale;
         final List<String> themes;
 
-        Round(String id, int width, int height, double scale, String... themes) {
+        Round(String id, int width, int height, String... themes) {
             this.id = id;
             this.width = width;
             this.height = height;
-            this.scale = scale;
             this.themes = List.of(themes);
         }
 
@@ -125,9 +125,12 @@ public class UiRuler {
     }
 
     static final List<Round> ROUNDS = List.of(
-            new Round("base", 1600, 1000, 1.5, "dark", "light"),
-            new Round("small", 1366, 768, 1.0, "dark"),
-            new Round("hidpi", 1536, 864, 1.25, "light"));
+            new Round("base", 1600, 1000, "dark", "light"),
+            new Round("small", 1366, 768, "dark"),
+            new Round("hidpi", 1536, 864, "light"));
+
+    /** The scale of the screen the window is on, which the layout measured its text at. */
+    static double scale = 1.0;
 
     /** A page of the rail, known by the class of the panel it shows. */
     static final class Scene {
@@ -222,7 +225,8 @@ public class UiRuler {
     private void run() throws Exception {
         frame = waitForFrame();
         configuration = Configuration.get();
-        say("Pono is up");
+        scale = edtGet(() -> frame.getGraphicsConfiguration().getDefaultTransform().getScaleX());
+        say("Pono is up, painting at " + Math.round(scale * 100) + "%");
         Thread.sleep(4000);
         closeStrayDialogs("\u542f\u52a8");
         inventory();
@@ -236,6 +240,7 @@ public class UiRuler {
                 continue;
             }
             sizeWindow(round);
+            Map<String, BufferedImage> gallery = new LinkedHashMap<>();
             for (String theme : round.themes) {
                 applyTheme(theme);
                 for (Scene scene : edtGet(this::scenes)) {
@@ -244,6 +249,12 @@ public class UiRuler {
                     }
                     photograph(round, theme, scene);
                 }
+                if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("gallery"))) {
+                    gallery.put(theme, photographGallery(round, theme));
+                }
+            }
+            if (gallery.size() == 2) {
+                pairGallery(round, gallery.get("dark"), gallery.get("light"));
             }
         }
         writeFindings();
@@ -419,7 +430,7 @@ public class UiRuler {
         settle(1800);
         closeStrayDialogs(scene.label);
 
-        BufferedImage shot = edtGet(() -> paint(frame.getRootPane(), round.scale));
+        BufferedImage shot = edtGet(() -> paint(frame.getRootPane(), scale));
         String name = round.id + "-" + theme + "-" + scene.id;
         ImageIO.write(shot, "png", new File(out, "shots/" + name + ".png"));
         String pair = null;
@@ -427,7 +438,7 @@ public class UiRuler {
         if (mockup != null) {
             BufferedImage mock = ImageIO.read(mockup);
             ImageIO.write(pair(mock, shot, "\u6548\u679c\u56fe " + mockup.getName(),
-                    "\u5f53\u524d \u00b7 " + label, round.scale), "png",
+                    "\u5f53\u524d \u00b7 " + label, scale), "png",
                     new File(out, "pairs/" + name + ".png"));
             pair = "pairs/" + name + ".png";
         }
@@ -435,12 +446,71 @@ public class UiRuler {
                 .put(scene.id, new String[] { "shots/" + name + ".png", pair, label });
 
         List<UiAudit.Finding> found = edtGet(() -> new UiAudit(rules, landmarks,
-                frame.getRootPane(), shot, round.scale, scene.label, label).run());
+                frame.getRootPane(), shot, scale, scene.label, label).run());
         findings.addAll(found);
         say(name + ": " + found.size() + " findings" + (pair == null ? "" : ", paired"));
     }
 
-    static BufferedImage paint(JRootPane pane, double scale) {
+    /** The control gallery in the current theme: one half of 06-design-system. */
+    private BufferedImage photographGallery(Round round, String theme) throws Exception {
+        String label = round.label(theme);
+        // Shown, off the screen: the audit only looks at what is showing.
+        org.openpnp.gui.shell.ControlGallery gallery = edtGet(() -> {
+            org.openpnp.gui.shell.ControlGallery g = new org.openpnp.gui.shell.ControlGallery();
+            g.setLocation(-4000, -4000);
+            g.setVisible(true);
+            return g;
+        });
+        settle(1200);
+        BufferedImage shot = edtGet(() -> {
+            JComponent content = (JComponent) gallery.getContentPane();
+            layoutAll(content);
+            BufferedImage image = paint(content, scale);
+            List<UiAudit.Finding> found = new UiAudit(rules, new IdentityHashMap<>(),
+                    content, image, scale, "\u63a7\u4ef6\u6837\u5f20", label).run();
+            findings.addAll(found);
+            gallery.dispose();
+            return image;
+        });
+        String name = round.id + "-" + theme + "-gallery";
+        ImageIO.write(shot, "png", new File(out, "shots/" + name + ".png"));
+        photographs.computeIfAbsent(round.id + "-" + theme, k -> new LinkedHashMap<>())
+                .put("gallery", new String[] { "shots/" + name + ".png", null, label });
+        sceneLabels.put("gallery", "\u63a7\u4ef6\u6837\u5f20");
+        say(name + " photographed");
+        return shot;
+    }
+
+    private static void layoutAll(Component c) {
+        if (c instanceof Container) {
+            ((Container) c).doLayout();
+            for (Component child : ((Container) c).getComponents()) {
+                layoutAll(child);
+            }
+        }
+    }
+
+    /** Both halves side by side, as the mockup draws them, beside the mockup. */
+    private void pairGallery(Round round, BufferedImage dark, BufferedImage light) throws IOException {
+        BufferedImage both = new BufferedImage(dark.getWidth() + light.getWidth(),
+                Math.max(dark.getHeight(), light.getHeight()), BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = both.createGraphics();
+        g.drawImage(dark, 0, 0, null);
+        g.drawImage(light, dark.getWidth(), 0, null);
+        g.dispose();
+        File mockup = mockup("design-system", "both");
+        String name = round.id + "-both-gallery";
+        ImageIO.write(both, "png", new File(out, "shots/" + name + ".png"));
+        if (mockup != null) {
+            ImageIO.write(pair(ImageIO.read(mockup), both, "\u6548\u679c\u56fe " + mockup.getName(),
+                    "\u5f53\u524d \u00b7 \u63a7\u4ef6\u6837\u5f20", scale), "png",
+                    new File(out, "pairs/" + name + ".png"));
+            photographs.get(round.id + "-dark").put("gallery",
+                    new String[] { "shots/" + name + ".png", "pairs/" + name + ".png", round.label("dark") });
+        }
+    }
+
+    static BufferedImage paint(JComponent pane, double scale) {
         BufferedImage image = new BufferedImage((int) Math.round(pane.getWidth() * scale),
                 (int) Math.round(pane.getHeight() * scale), BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
@@ -665,8 +735,10 @@ public class UiRuler {
                 classNames.add(info.getSimpleName());
             }
             for (ClassInfo info : scan.getClassesImplementing("org.openpnp.gui.support.Wizard")) {
+                // The declarative forms are what replaces the old wizards, not one of them.
                 if (info.isAbstract() || info.isInterface() || info.isAnonymousInnerClass()
                         || info.getPackageName().equals("org.openpnp.gui.support")
+                        || info.getPackageName().equals("org.openpnp.gui.form")
                         || info.getClasspathElementURL().toString().contains("test-classes")) {
                     continue;
                 }

@@ -180,7 +180,7 @@ public class Neoden4FeederConfigurationWizard extends AbstractReferenceFeederCon
         panelTemplate = new JPanel();
         panelTemplate.setBorder(new TitledBorder(null,
                 Translations.getString("Neoden4FeederConfigurationWizard.panelTemplate.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, //$NON-NLS-1$
-                new Color(0, 0, 0)));
+                null));
         panelVisionTemplateAndAoe.add(panelTemplate, "2, 2, center, fill");
         panelTemplate.setLayout(new BoxLayout(panelTemplate, BoxLayout.Y_AXIS));
 

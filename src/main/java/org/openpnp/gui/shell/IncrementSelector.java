@@ -63,7 +63,7 @@ public class IncrementSelector extends JPanel {
         ButtonGroup group = new ButtonGroup();
         for (int index = 0; index < LEVELS; index++) {
             final int buttonLevel = index + 1;
-            JToggleButton button = new JToggleButton();
+            JToggleButton button = new Ui.ToggleButton(null, null);
             Ui.seg(button);
             button.addActionListener(e -> setLevel(buttonLevel));
             group.add(button);
@@ -166,9 +166,9 @@ public class IncrementSelector extends JPanel {
             g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
                     java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
             g2.setColor(Ui.surface2());
-            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 6, 6);
+            g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
             g2.setColor(Ui.border());
-            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 6, 6);
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 12, 12);
         }
         finally {
             g2.dispose();

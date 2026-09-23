@@ -406,7 +406,7 @@ public class TopBarPanel extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
                 g2.setPaint(new GradientPaint(0, 0, Ui.accent(), 26, 26,
                         Ui.color("Pono.logoGradientEnd", 0x7c5cff))); //$NON-NLS-1$
-                g2.fillRoundRect(0, 0, 26, 26, 8, 8);
+                g2.fillRoundRect(0, 0, 26, 26, 16, 16);
                 g2.setColor(Color.WHITE);
                 g2.setFont(Ui.font(13f, Font.BOLD));
                 String p = "P"; //$NON-NLS-1$
@@ -465,11 +465,11 @@ public class TopBarPanel extends JPanel {
                 g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 int w = getWidth();
                 g2.setColor(Ui.surface3());
-                g2.fillRoundRect(0, 0, w, 6, 3, 3);
+                g2.fillRoundRect(0, 0, w, 6, 6, 6);
                 int filled = (int) Math.round(w * fraction);
                 if (filled > 0) {
                     g2.setColor(fraction >= 1 ? Ui.ok() : Ui.accent());
-                    g2.fillRoundRect(0, 0, filled, 6, 3, 3);
+                    g2.fillRoundRect(0, 0, filled, 6, 6, 6);
                 }
             }
             finally {

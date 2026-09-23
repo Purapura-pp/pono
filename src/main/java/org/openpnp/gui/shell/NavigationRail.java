@@ -168,9 +168,10 @@ public class NavigationRail extends JPanel {
         }
     }
 
+    /** A theme colour that follows a theme switch; see {@link ThemeColor}. */
     private static Color color(String key, Color fallback) {
-        Color color = UIManager.getColor(key);
-        return color != null ? color : fallback;
+        return Ui.color(key, fallback == null ? 0 : fallback.getRGB() & 0xffffff,
+                fallback == null ? 0 : fallback.getAlpha());
     }
 
     /**

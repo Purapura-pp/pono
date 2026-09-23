@@ -381,7 +381,7 @@ public class ReferenceMachine extends AbstractMachine {
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return getClass().getSimpleName();
+        return org.openpnp.gui.support.DisplayNames.typeName(getClass());
     }
 
     @Override

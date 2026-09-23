@@ -54,7 +54,7 @@ public class Neoden4DriverConfigurationWizard extends AbstractConfigurationWizar
 
         JPanel panelMachineDetails = new JPanel();
         panelMachineDetails.setBorder(new TitledBorder(null,
-                Translations.getString("Neoden4DriverConfigurationWizard.panelMachineDetails.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0))); //$NON-NLS-1$
+                Translations.getString("Neoden4DriverConfigurationWizard.panelMachineDetails.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
         contentPanel.add(panelMachineDetails);
         panelMachineDetails.setLayout(new FormLayout(
                 new ColumnSpec[] { 

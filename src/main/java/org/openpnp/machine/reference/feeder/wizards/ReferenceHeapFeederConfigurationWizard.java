@@ -185,7 +185,7 @@ public class ReferenceHeapFeederConfigurationWizard
         whateverPanel.add(dropBoxCb, "4, 2, 2, 1");
         
         JPanel dropBoxPanel = new JPanel();
-        dropBoxPanel.setBorder(new TitledBorder(null, Translations.getString("ReferenceHeapFeederConfigurationWizard.dropBoxPanel.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, new Color(0, 0, 0))); //$NON-NLS-1$
+        dropBoxPanel.setBorder(new TitledBorder(null, Translations.getString("ReferenceHeapFeederConfigurationWizard.dropBoxPanel.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
         contentPanel.add(dropBoxPanel);
         FormLayout fl_dropBoxPanel = new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
