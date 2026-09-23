@@ -83,6 +83,10 @@ public final class Ui {
     public static Color err() { return color(Tokens.ERR, 0xff5d5d); }
     public static Color errSoft() { return color(Tokens.ERR_SOFT, 0xff5d5d, 0x29); }
     public static Color info() { return color(Tokens.INFO, 0x38bdf8); }
+    /** The status colours for words: as they are on the dark theme, darkened on the light one. */
+    public static Color okText() { return ((ThemeColor) ok()).asText(); }
+    public static Color warnText() { return ((ThemeColor) warn()).asText(); }
+    public static Color errText() { return ((ThemeColor) err()).asText(); }
     /** The stylesheet's .status.run: running is shown in the accent, not in info. */
     public static Color run() { return accent(); }
     public static Color bg() { return color(Tokens.BG, 0xeceff3); }

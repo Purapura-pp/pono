@@ -2423,9 +2423,28 @@ public class BlindsFeeder extends ReferenceFeeder {
     }
 
     public void setFeedCount(int feedCount) {
+        Integer oldLeft = getPartsLeft();
         int oldValue = this.feedCount;
         this.feedCount = feedCount;
         firePropertyChange("feedCount", oldValue, feedCount);
+        firePartsLeft(oldLeft);
+    }
+
+    /** The pockets from the first to the last one not yet fed: unknown until the last is set. */
+    @Override
+    public Integer getPartsLeft() {
+        return lastPocket >= firstPocket ? Math.max(0, lastPocket - firstPocket + 1 - feedCount) : null;
+    }
+
+    @Override
+    public boolean isCountedFromGeometry() {
+        return lastPocket >= firstPocket;
+    }
+
+    @Override
+    public void refill(Integer partsLoaded) {
+        setFeedCount(0);
+        super.refill(partsLoaded);
     }
 
     public boolean isVisionEnabled() {

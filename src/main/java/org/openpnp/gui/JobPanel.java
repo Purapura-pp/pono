@@ -104,6 +104,7 @@ import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.PlacementsHolderLocation;
 import org.openpnp.model.Job;
+import org.openpnp.model.JobRun;
 import org.openpnp.model.Length;
 import org.openpnp.model.Location;
 import org.openpnp.model.Panel;
@@ -154,6 +155,9 @@ public class JobPanel extends JPanel {
     private PlacementsHolderLocationsTableModel jobTableModel;
     private JTable jobTable;
     private DockPanel dock;
+    private JPanel pnlBoards;
+    private DockPanel.Tab boardsTab;
+    private DockPanel.Tab placementsTab;
     private Chip currentBoardChip;
 
     private PlacementsHolderLocationViewerDialog jobViewer;
@@ -254,7 +258,6 @@ public class JobPanel extends JPanel {
         jobTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         jobTable.setDefaultEditor(Side.class, new DefaultCellEditor(sidesComboBox));
         jobTable.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer());
-        jobTable.getColumnModel().getColumn(0).setCellRenderer(new CustomPlacementsHolderRenderer());
         jobTable.setDefaultRenderer(LengthCellValue.class, new MonospacedFontWithAffineStatusTableCellRenderer());
         jobTable.setDefaultRenderer(RotationCellValue.class, new MonospacedFontWithAffineStatusTableCellRenderer());
         jobTable.getColumnModel().getColumn(2).setCellRenderer(new MonospacedFontTableCellRenderer());
@@ -262,6 +265,16 @@ public class JobPanel extends JPanel {
         jobTable.setAutoResizeMode(JTable.AUTO_RESIZE_NEXT_COLUMN);
         
         TableUtils.setColumnAlignment(jobTableModel, jobTable);
+        // After the alignment, which puts a renderer of its own on every column: the id with
+        // what it is and how deep it sits never showed.
+        jobTable.getColumnModel().getColumn(0).setCellRenderer(new CustomPlacementsHolderRenderer());
+        // The tables' order - enabled, what it is, where it is, its size - in the view only, so
+        // that the widths saved by the model's columns still fit.
+        java.util.List<Object> order = new java.util.ArrayList<>();
+        for (int column : new int[] { 9, 0, 1, 4, 5, 6, 7, 8, 2, 3, 10 }) {
+            order.add(jobTableModel.getColumnName(column));
+        }
+        org.openpnp.gui.components.AutoSelectTextTable.reorderColumns(jobTable, order.toArray());
         
         TableUtils.installColumnWidthSavers(jobTable, prefs, "JobPanel.jobTable.columnWidth");  //$NON-NLS-1$
         
@@ -356,6 +369,9 @@ public class JobPanel extends JPanel {
                         if (jobViewer != null) {
                             jobViewer.setPlacementsHolder(job.getRootPanelLocation().getPlacementsHolder(), getSelections());
                         }
+                        // Last: moving the placements to the new board clears what they had put
+                        // in the properties column.
+                        inspectBoard();
                     }
                 });
 
@@ -363,7 +379,7 @@ public class JobPanel extends JPanel {
 
         // The stylesheet's dock: the boards and the placements are tabs of one card, with the
         // running log as a third, rather than two tables stacked behind a divider.
-        JPanel pnlBoards = new JPanel();
+        pnlBoards = new JPanel();
         pnlBoards.setOpaque(false);
         pnlBoards.setLayout(new BorderLayout(0, 0));
 
@@ -388,18 +404,15 @@ public class JobPanel extends JPanel {
         });
         toolBarBoards.iconButton(removeBoardAction, "trash"); //$NON-NLS-1$
         toolBarBoards.separator();
+        // The ones used on every board, named, as the placements' toolbar has them; the rest
+        // behind "...", where fourteen controls used to be, most of them icons alone.
         toolBarBoards.button(moveCameraToBoardLocationAction, "camera", "Dock.Action.MoveCamera"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolBarBoards.iconButton(moveCameraToBoardLocationNextAction, "chevright"); //$NON-NLS-1$
-        toolBarBoards.button(moveToolToBoardLocationAction, "nozzle", "Dock.Action.MoveTool"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolBarBoards.separator();
         toolBarBoards.button(captureCameraBoardLocationAction, "target", "Dock.Action.CaptureCamera"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolBarBoards.iconButton(captureToolBoardLocationAction, "pin"); //$NON-NLS-1$
         toolBarBoards.separator();
         toolBarBoards.button(twoPointLocateBoardLocationAction, "move", "Dock.Action.TwoPoint"); //$NON-NLS-1$ //$NON-NLS-2$
         toolBarBoards.button(fiducialCheckAction, "crosshair", "Dock.Action.FiducialCheck"); //$NON-NLS-1$ //$NON-NLS-2$
-        toolBarBoards.separator();
-        toolBarBoards.iconButton(deferErrorsAction, "zap"); //$NON-NLS-1$
-        toolBarBoards.iconButton(viewerAction, "eye"); //$NON-NLS-1$
+        toolBarBoards.more(moveCameraToBoardLocationNextAction, moveToolToBoardLocationAction,
+                captureToolBoardLocationAction, null, deferErrorsAction, viewerAction);
 
         pnlBoards.add(DockPanel.table(jobTable), BorderLayout.CENTER);
         jobTable.setDefaultRenderer(Boolean.class, DockRenderers.check());
@@ -408,12 +421,24 @@ public class JobPanel extends JPanel {
         jobPlacementsPanel = new JobPlacementsPanel(this);
 
         dock = new DockPanel();
-        DockPanel.Tab boardsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("board"), //$NON-NLS-1$
+        boardsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("board"), //$NON-NLS-1$
                 Translations.getString("JobPanel.Tab.Boards"), pnlBoards); //$NON-NLS-1$
-        DockPanel.Tab placementsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("parts"), //$NON-NLS-1$
+        placementsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("parts"), //$NON-NLS-1$
                 Translations.getString("JobPlacementsPanel.Border.title"), jobPlacementsPanel); //$NON-NLS-1$
+        // This run's own events: a second copy of the global log, as it was, set the whole
+        // program's log level from its settings.
         dock.addTab(org.openpnp.gui.shell.Ui.iconSm("log"), //$NON-NLS-1$
-                Translations.getString("JobPanel.Tab.RunLog"), new LogPanel()); //$NON-NLS-1$
+                Translations.getString("JobPanel.Tab.RunLog"), runLogPanel); //$NON-NLS-1$
+        runRefresh.setRepeats(false);
+        // The properties column shows what is selected on the tab in front.
+        dock.addChangeListener(e -> {
+            if (dock.getSelectedTab() == boardsTab) {
+                inspectBoard();
+            }
+            else if (dock.getSelectedTab() == placementsTab) {
+                jobPlacementsPanel.inspectSelection();
+            }
+        });
         // Counted after the event: a model notifies its newest listener first, so the table's
         // own view has not caught up when this runs, and the view is what the user sees - the
         // boards model has a root row the table hides.
@@ -602,6 +627,7 @@ public class JobPanel extends JPanel {
         if (this.job != null) {
             this.job.removePropertyChangeListener("dirty", titlePropertyChangeListener); //$NON-NLS-1$
             this.job.removePropertyChangeListener("file", titlePropertyChangeListener); //$NON-NLS-1$
+            this.job.getRun().removePropertyChangeListener(JobRun.PROPERTY_RUN, runListener);
             this.job.getRootPanelLocation().getPanel().removeAllChildren();
         }
         this.job = job;
@@ -609,6 +635,9 @@ public class JobPanel extends JPanel {
         jobTableModel.setJob(job);
         job.addPropertyChangeListener("dirty", titlePropertyChangeListener); //$NON-NLS-1$
         job.addPropertyChangeListener("file", titlePropertyChangeListener); //$NON-NLS-1$
+        job.getRun().addPropertyChangeListener(JobRun.PROPERTY_RUN, runListener);
+        runLogPanel.setRun(job.getRun());
+        showRun();
         updateTitle();
         updateJobActions();
         jobPlacementsPanel.updateActivePlacements();
@@ -620,6 +649,93 @@ public class JobPanel extends JPanel {
 
     public JobPlacementsPanel getJobPlacementsPanel() {
         return jobPlacementsPanel;
+    }
+
+    /**
+     * The selected board or panel in the properties column, on the boards tab: it showed nothing
+     * for one, while a placement showed its whole form.
+     */
+    void inspectBoard() {
+        MainFrame frame = MainFrame.get();
+        if (frame == null || frame.getInspector() == null || dock == null
+                || dock.getSelectedTab() != boardsTab) {
+            return;
+        }
+        List<PlacementsHolderLocation<?>> selections = getSelections();
+        if (selections.size() != 1) {
+            frame.getInspector().show(this, null);
+            return;
+        }
+        PlacementsHolderLocation<?> location = selections.get(0);
+        boolean topLevel = location.getParent() == job.getRootPanelLocation();
+        frame.getInspector().show(this, location, boardInspectorContainer, location.getUniqueId(),
+                BoardLocationInspector.subtitle(location),
+                org.openpnp.gui.shell.Ui.icon(location instanceof org.openpnp.model.BoardLocation ? "board" : "panel", //$NON-NLS-1$ //$NON-NLS-2$
+                        16, org.openpnp.gui.shell.Ui.accent()),
+                () -> java.util.List.of(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                        BoardLocationInspector.build(location, topLevel))));
+    }
+
+    /** After an Apply: the table, the placements under it and the job's unsaved mark follow. */
+    private final org.openpnp.gui.support.WizardContainer boardInspectorContainer =
+            new org.openpnp.gui.support.WizardContainer() {
+                @Override
+                public void wizardCompleted(org.openpnp.gui.support.Wizard wizard) {
+                    jobTableModel.fireTableDataChanged();
+                    jobPlacementsPanel.refresh();
+                    job.setDirty(true);
+                }
+
+                @Override
+                public void wizardCancelled(org.openpnp.gui.support.Wizard wizard) {
+                }
+            };
+
+    private final JobRunLogPanel runLogPanel = new JobRunLogPanel();
+    /** Gathers a burst of run changes - a cycle places several parts at once - into one refresh. */
+    private final javax.swing.Timer runRefresh = new javax.swing.Timer(250, e -> showRun());
+    /** Heard on the machine task thread, whose changes the timer carries to the event thread. */
+    private final java.beans.PropertyChangeListener runListener = e -> {
+        if (!runRefresh.isRunning()) {
+            runRefresh.start();
+        }
+    };
+
+    /**
+     * What the run has done, where it is shown: the status pills of the placements, the run log,
+     * and in the status bar the last placement with how long it took and the time left at the
+     * run's pace - which the status bar had room for and nothing filled.
+     */
+    private void showRun() {
+        if (job == null) {
+            return;
+        }
+        JobRun run = job.getRun();
+        jobPlacementsPanel.getTable().repaint();
+        jobPlacementsPanel.refreshInspectedRun();
+        runLogPanel.refresh();
+        MainFrame frame = MainFrame.get();
+        if (frame == null || frame.getStatusBar() == null) {
+            return;
+        }
+        JobRun.PlacementRun last = run.getLastPlacedRun();
+        frame.getStatusBar().setLastPlacement(last == null ? null
+                : String.format(Translations.getString("StatusBar.LastPlacement"), //$NON-NLS-1$
+                        last.getPlacementId(), last.getDurationMillis() / 1000.0));
+        double remaining = run.getRemainingSeconds(job.getActivePlacements(job.getRootPanelLocation()));
+        frame.getStatusBar().setRemaining(isJobRunning() && !Double.isNaN(remaining) ? duration(remaining) : null);
+    }
+
+    /** A time left as a person says it: seconds, minutes and seconds, or hours and minutes. */
+    static String duration(double seconds) {
+        long total = Math.round(seconds);
+        if (total < 60) {
+            return String.format(Translations.getString("StatusBar.Duration.Seconds"), total); //$NON-NLS-1$
+        }
+        if (total < 3600) {
+            return String.format(Translations.getString("StatusBar.Duration.Minutes"), total / 60, total % 60); //$NON-NLS-1$
+        }
+        return String.format(Translations.getString("StatusBar.Duration.Hours"), total / 3600, (total % 3600) / 60); //$NON-NLS-1$
     }
 
     /** The chip at the right of the tab row: which board the placements belong to. */
@@ -1449,7 +1565,19 @@ public class JobPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            for (PlacementsHolderLocation<?> selection : getSelections()) {
+            List<PlacementsHolderLocation<?>> selections = getSelections();
+            List<String> names = new ArrayList<>();
+            for (PlacementsHolderLocation<?> selection : selections) {
+                names.add(selection.getUniqueId() + (selection.getPlacementsHolder() == null ? "" //$NON-NLS-1$
+                        : " \u00b7 " + selection.getPlacementsHolder().getName())); //$NON-NLS-1$
+            }
+            // The one delete that did not ask. The board files stay; only their place in the
+            // job goes, with its position and its placed status.
+            if (selections.isEmpty() || !org.openpnp.gui.shell.Dialogs.confirmDelete(mainFrame,
+                    "Dialogs.Kind.BoardsInJob", names)) { //$NON-NLS-1$
+                return;
+            }
+            for (PlacementsHolderLocation<?> selection : selections) {
                 job.removeBoardOrPanelLocation(selection);
             }
             jobTableModel.fireTableDataChanged();

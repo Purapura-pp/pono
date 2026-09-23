@@ -39,20 +39,30 @@ import javax.swing.UIManager;
  */
 @SuppressWarnings("serial")
 public final class ThemeColor extends Color {
+    /**
+     * How much of a status colour gives way to black when it is written on a light theme: the
+     * stylesheet's green, amber and red are bright enough to read on the dark theme's surfaces
+     * and too bright on white, where they come to about 2:1.
+     */
+    private static final double TEXT_SHADE_ON_LIGHT = 0.38;
+
     private final String key;
     private final int fallback;
     /** The alpha to paint with, 0 to 1, or negative for the theme colour's own. */
     private final double alpha;
+    /** Darkened on a light theme, for writing in rather than filling with. */
+    private final boolean text;
 
     public ThemeColor(String key, int fallbackArgb) {
-        this(key, fallbackArgb, -1);
+        this(key, fallbackArgb, -1, false);
     }
 
-    private ThemeColor(String key, int fallbackArgb, double alpha) {
+    private ThemeColor(String key, int fallbackArgb, double alpha, boolean text) {
         super(fallbackArgb, true);
         this.key = key;
         this.fallback = fallbackArgb;
         this.alpha = alpha;
+        this.text = text;
     }
 
     public String getKey() {
@@ -61,23 +71,32 @@ public final class ThemeColor extends Color {
 
     /** The same theme colour at another opacity, still following the theme. */
     public ThemeColor withAlpha(double alpha) {
-        return new ThemeColor(key, fallback, alpha);
+        return new ThemeColor(key, fallback, alpha, text);
+    }
+
+    /**
+     * The colour for text written in it: itself on a dark theme, darkened on a light one so that
+     * it reads on white and on its own soft tint.
+     */
+    public ThemeColor asText() {
+        return new ThemeColor(key, fallback, alpha, true);
     }
 
     /** The colour as the current theme defines it, as a plain Color. */
     public Color resolve() {
-        Color color = UIManager.getColor(key);
-        int argb = color == null ? fallback : color.getRGB();
-        if (alpha >= 0) {
-            argb = (argb & 0xffffff) | ((int) Math.round(alpha * 255) << 24);
-        }
-        return new Color(argb, true);
+        return new Color(getRGB(), true);
     }
 
     @Override
     public int getRGB() {
         Color color = UIManager.getColor(key);
         int argb = color == null ? fallback : color.getRGB();
+        if (text && !com.formdev.flatlaf.FlatLaf.isLafDark()) {
+            double keep = 1 - TEXT_SHADE_ON_LIGHT;
+            argb = (argb & 0xff000000) | ((int) Math.round(((argb >> 16) & 0xff) * keep) << 16)
+                    | ((int) Math.round(((argb >> 8) & 0xff) * keep) << 8)
+                    | (int) Math.round((argb & 0xff) * keep);
+        }
         if (alpha >= 0) {
             argb = (argb & 0xffffff) | ((int) Math.round(alpha * 255) << 24);
         }
@@ -164,12 +183,12 @@ public final class ThemeColor extends Color {
     @Override
     public boolean equals(Object other) {
         return other instanceof ThemeColor && ((ThemeColor) other).key.equals(key)
-                && ((ThemeColor) other).alpha == alpha;
+                && ((ThemeColor) other).alpha == alpha && ((ThemeColor) other).text == text;
     }
 
     @Override
     public int hashCode() {
-        return key.hashCode() * 31 + Double.hashCode(alpha);
+        return (key.hashCode() * 31 + Double.hashCode(alpha)) * 31 + Boolean.hashCode(text);
     }
 
     @Override

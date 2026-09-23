@@ -94,15 +94,24 @@ public class Chip extends JLabel {
 
     private static Color foregroundFor(Tone tone) {
         switch (tone) {
-            case Ok: return Ui.ok();
-            case Warn: return Ui.warn();
-            case Err: return Ui.err();
+            case Ok: return Ui.okText();
+            case Warn: return Ui.warnText();
+            case Err: return Ui.errText();
             case Run: return Ui.accent();
             case Accent: return Ui.accent();
             case Pending: return Ui.text2();
             case Skip: return Ui.muted();
             case Neutral:
             default: return Ui.text2();
+        }
+    }
+
+    private Color ledFor(Tone tone) {
+        switch (tone) {
+            case Ok: return Ui.ok();
+            case Warn: return Ui.warn();
+            case Err: return Ui.err();
+            default: return getForeground();
         }
     }
 
@@ -179,12 +188,14 @@ public class Chip extends JLabel {
                 int x = shape == Shape.Chip ? 10 : 8;
                 int y = (h - d) / 2;
                 g2.setStroke(new BasicStroke(1f));
-                g2.setColor(getForeground());
+                // The light keeps the bright status colour the words give up on a light theme.
+                Color light = ledFor(tone);
+                g2.setColor(light);
                 if (shape == Shape.Chip && tone == Tone.Ok) {
                     // The stylesheet's glow.
-                    g2.setColor(Ui.alpha(getForeground(), 0.35));
+                    g2.setColor(Ui.alpha(light, 0.35));
                     g2.fillOval(x - 3, y - 3, d + 6, d + 6);
-                    g2.setColor(getForeground());
+                    g2.setColor(light);
                 }
                 g2.fillOval(x, y, d, d);
             }

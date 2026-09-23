@@ -151,7 +151,9 @@ public abstract class AbstractFeeder extends AbstractMachineElement implements F
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {new PropertySheetWizardAdapter(getConfigurationWizard(),
-                Translations.getString("AbstractFeeder.ConfigurationWizard.title"))}; //$NON-NLS-1$
+                Translations.getString("AbstractFeeder.ConfigurationWizard.title")), //$NON-NLS-1$
+                new PropertySheetWizardAdapter(org.openpnp.gui.support.FeederStockForm.build(this),
+                        Translations.getString("AbstractFeeder.Stock.title"))}; //$NON-NLS-1$
     }
     
     public void postPick(Nozzle nozzle) throws Exception { }
@@ -179,4 +181,117 @@ public abstract class AbstractFeeder extends AbstractMachineElement implements F
     @Attribute(required=false)
     protected Priority priority = Priority.Normal;
 
+    /** Where the feeder sits on the machine as the people at it name the place: "A3", "B2". */
+    @Attribute(required = false)
+    protected String slotName;
+
+    @Attribute(required = false)
+    protected long lastPickMillis;
+
+    /**
+     * Parts loaded at the last refill, for a feeder that does not count its parts from its own
+     * geometry: 0 is not known.
+     */
+    @Attribute(required = false)
+    protected int loadedCount;
+
+    @Attribute(required = false)
+    protected int pickedSinceRefill;
+
+    @Attribute(required = false)
+    protected int lowCount;
+
+    /**
+     * Parts left counted from what was loaded at the last refill. A feeder that knows its
+     * capacity from its geometry, a strip's maximum feed count say, answers from that instead.
+     */
+    @Override
+    public Integer getPartsLeft() {
+        return loadedCount > 0 ? Math.max(0, loadedCount - pickedSinceRefill) : null;
+    }
+
+    /**
+     * The feeder works its parts left out from its own geometry and feed count, a tray's say,
+     * rather than from a count of the parts loaded.
+     */
+    public boolean isCountedFromGeometry() {
+        return false;
+    }
+
+    public String getSlotName() {
+        return slotName;
+    }
+
+    public void setSlotName(String slotName) {
+        String oldValue = this.slotName;
+        this.slotName = slotName == null || slotName.trim().isEmpty() ? null : slotName.trim();
+        firePropertyChange("slotName", oldValue, this.slotName);
+    }
+
+    @Override
+    public long getLastPickMillis() {
+        return lastPickMillis;
+    }
+
+    /** For a feeder brought over from elsewhere, and for pictures of a machine at work. */
+    public void setLastPickMillis(long lastPickMillis) {
+        long oldValue = this.lastPickMillis;
+        this.lastPickMillis = lastPickMillis;
+        firePropertyChange("lastPickMillis", oldValue, lastPickMillis);
+    }
+
+    public int getLoadedCount() {
+        return loadedCount;
+    }
+
+    public void setLoadedCount(int loadedCount) {
+        Integer oldLeft = getPartsLeft();
+        this.loadedCount = Math.max(0, loadedCount);
+        firePropertyChange("loadedCount", null, this.loadedCount);
+        firePartsLeft(oldLeft);
+    }
+
+    public int getPickedSinceRefill() {
+        return pickedSinceRefill;
+    }
+
+    @Override
+    public int getLowCount() {
+        return lowCount;
+    }
+
+    public void setLowCount(int lowCount) {
+        int oldValue = this.lowCount;
+        this.lowCount = Math.max(0, lowCount);
+        firePropertyChange("lowCount", oldValue, this.lowCount);
+    }
+
+    @Override
+    public void recordPick() {
+        Integer oldLeft = getPartsLeft();
+        long oldValue = lastPickMillis;
+        lastPickMillis = System.currentTimeMillis();
+        pickedSinceRefill++;
+        firePropertyChange("lastPickMillis", oldValue, lastPickMillis);
+        firePartsLeft(oldLeft);
+    }
+
+    @Override
+    public void refill(Integer partsLoaded) {
+        Integer oldLeft = getPartsLeft();
+        if (partsLoaded != null) {
+            loadedCount = Math.max(0, partsLoaded);
+            firePropertyChange("loadedCount", null, loadedCount);
+        }
+        pickedSinceRefill = 0;
+        firePartsLeft(oldLeft);
+    }
+
+    /**
+     * Tells listeners that the parts left may have changed; also for subclasses whose own
+     * counters it is worked out from.
+     */
+    protected void firePartsLeft(Integer oldLeft) {
+        firePropertyChange("partsLeft", oldLeft, getPartsLeft());
+    }
 }

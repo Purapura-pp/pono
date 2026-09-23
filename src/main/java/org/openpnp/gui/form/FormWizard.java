@@ -52,6 +52,8 @@ import org.openpnp.gui.support.DoubleConverter;
 import org.openpnp.gui.support.IntegerConverter;
 import org.openpnp.gui.support.LengthConverter;
 import org.openpnp.gui.support.MutableLocationProxy;
+import org.openpnp.model.Length;
+import org.openpnp.model.LengthUnit;
 
 import com.formdev.flatlaf.FlatClientProperties;
 
@@ -92,6 +94,9 @@ public class FormWizard extends AbstractConfigurationWizard {
             contentPanel.add(section);
         }
         contentPanel.add(Box.createVerticalGlue());
+        // Held at the column's width, where the fields give way down to their minimum and a
+        // pipeline's stages wrap, rather than scrolling sideways in a narrow column.
+        getScrollPane().setViewportView(new LegacyWizardAdapter.WidthTracking(contentPanel));
         refresh();
     }
 
@@ -249,16 +254,136 @@ public class FormWizard extends AbstractConfigurationWizard {
             }
         });
         controls.put(field, input);
-        if (field.note == null) {
+        List<JComponent> parts = new ArrayList<>();
+        parts.add(input);
+        if (field.presets != null) {
+            parts.add(presets(field, input));
+        }
+        if (field.probeLocation != null) {
+            parts.add(probeButton(field, input));
+        }
+        if (field.button != null) {
+            JButton button = Ui.button(field.buttonLabel,
+                    field.buttonIcon == null ? null : Ui.iconSm(field.buttonIcon), Ui.Size.Sm, Ui.Variant.Default);
+            button.addActionListener(e -> field.button.accept(this));
+            parts.add(button);
+        }
+        if (field.note != null) {
+            parts.add(Ui.t2(field.note));
+        }
+        if (parts.size() == 1) {
             return input;
         }
-        JPanel row = Forms.row(input, Ui.t2(field.note));
+        JPanel row = Forms.row(parts.toArray(new JComponent[0]));
+        row.add(Box.createHorizontalGlue());
         return row;
+    }
+
+    /** The segments beside a number: a click puts the value in, and the one it holds is marked. */
+    private JComponent presets(Field field, JTextField input) {
+        Forms.Segmented segments = new Forms.Segmented(field.presets, v -> presetText((Number) v)).tight();
+        segments.onChange(() -> input.setText(presetValue(field, (Number) segments.getSelectedItem())));
+        Runnable follow = () -> segments.setSelectedItem(matchingPreset(field, input.getText()));
+        input.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                follow.run();
+            }
+
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                follow.run();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                follow.run();
+            }
+        });
+        return segments;
+    }
+
+    private static String presetText(Number value) {
+        double v = value.doubleValue();
+        return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v);
+    }
+
+    private String presetValue(Field field, Number value) {
+        if (field.kind == Kind.Length) {
+            return new LengthConverter(getDisplayPreferences())
+                    .convertForward(new Length(value.doubleValue(), LengthUnit.Millimeters));
+        }
+        return presetText(value);
+    }
+
+    private Number matchingPreset(Field field, String text) {
+        try {
+            double v = field.kind == Kind.Length
+                    ? new LengthConverter(getDisplayPreferences()).convertReverse(text)
+                            .convertToUnits(LengthUnit.Millimeters).getValue()
+                    : Double.parseDouble(text.trim());
+            for (Number preset : field.presets) {
+                if (Math.abs(preset.doubleValue() - v) < 1e-4) {
+                    return preset;
+                }
+            }
+        }
+        catch (Exception e) {
+            // Not a number yet: nothing is marked.
+        }
+        return null;
+    }
+
+    /**
+     * Probes the height at the named location's X and Y with a contact probe nozzle, or takes the
+     * selected nozzle's height: into the field, for Apply to write.
+     */
+    private JComponent probeButton(Field field, JTextField z) {
+        JButton button = Ui.button(org.openpnp.Translations.getString("Form.Probe"), //$NON-NLS-1$
+                Ui.iconSm("nozzle"), Ui.Size.Sm, Ui.Variant.Default); //$NON-NLS-1$
+        button.setToolTipText(org.openpnp.Translations.getString("Form.Probe.ToolTip")); //$NON-NLS-1$
+        button.addActionListener(e -> {
+            Field location = byProperty.get(field.probeLocation);
+            List<JTextField> xy = location == null ? null
+                    : (List<JTextField>) controls.get(location).getClientProperty("Pono.form.fields"); //$NON-NLS-1$
+            org.openpnp.gui.MainFrame frame = org.openpnp.gui.MainFrame.get();
+            Object tool = frame == null || frame.getMachineControls() == null ? null
+                    : frame.getMachineControls().getSelectedTool();
+            javax.swing.Action action;
+            if (tool instanceof org.openpnp.machine.reference.ContactProbeNozzle && xy != null) {
+                action = new org.openpnp.gui.components.LocationButtonsPanel(xy.get(0), xy.get(1), z, null)
+                        .getContactProbeAction();
+            }
+            else {
+                action = new org.openpnp.gui.components.LocationButtonsPanel(null, null, z, null)
+                        .getCaptureToolAction();
+            }
+            action.actionPerformed(e);
+        });
+        return Ui.movesMachine(button);
+    }
+
+    /**
+     * Puts a value on screen as if typed, for Apply to write: what a button beside a field
+     * worked out.
+     */
+    public void setValue(String property, String text) {
+        Field field = byProperty.get(property);
+        JComponent control = field == null ? null : controls.get(field);
+        if (control instanceof JTextField) {
+            ((JTextField) control).setText(text);
+        }
+    }
+
+    /** Shows what the object holds now, after something other than the form changed it. */
+    public void reload() {
+        loadFromModel();
     }
 
     private JComponent location(Field field) {
         List<JComponent> fields = new ArrayList<>();
-        String[] axes = field.withRotation ? new String[] { "X", "Y", "Z", "C" } : new String[] { "X", "Y" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+        String[] axes = field.planar ? new String[] { "X", "Y", "C" } //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                : field.withRotation ? new String[] { "X", "Y", "Z", "C" } : new String[] { "X", "Y" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
         for (String axis : axes) {
             JTextField input = Forms.input(new JTextField(), true, axis);
             input.getDocument().addDocumentListener(new DocumentListener() {
@@ -283,8 +408,36 @@ public class FormWizard extends AbstractConfigurationWizard {
         JPanel panel = new JPanel();
         panel.setOpaque(false);
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        panel.add(Forms.row(fields.get(0), fields.get(1)));
-        if (field.withRotation) {
+        if (field.capture) {
+            org.openpnp.gui.components.LocationButtonsPanel buttons =
+                    new org.openpnp.gui.components.LocationButtonsPanel((JTextField) fields.get(0),
+                            (JTextField) fields.get(1), null, null);
+            panel.add(Forms.row(fields.get(0), fields.get(1),
+                    captureButton(buttons.getCaptureCameraAction(), "camera", "Form.Capture.Camera"))); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        else {
+            panel.add(Forms.row(fields.get(0), fields.get(1)));
+        }
+        if (field.planar) {
+            // The mockups' placement: X and Y, then the angle, 120 wide, with the camera's and
+            // the nozzle's capture and the move of the camera to it as three icon buttons.
+            JTextField angle = (JTextField) fields.get(2);
+            JComponent angleField = Forms.inputWithUnit(angle, "\u00b0"); //$NON-NLS-1$
+            java.awt.Dimension width = new java.awt.Dimension(120, angleField.getPreferredSize().height);
+            angleField.setPreferredSize(width);
+            angleField.setMaximumSize(width);
+            org.openpnp.gui.components.LocationButtonsPanel buttons =
+                    new org.openpnp.gui.components.LocationButtonsPanel((JTextField) fields.get(0),
+                            (JTextField) fields.get(1), null, angle);
+            JPanel row = Forms.row(angleField,
+                    captureButton(buttons.getCaptureCameraAction(), "camera", "Form.Capture.Camera"), //$NON-NLS-1$ //$NON-NLS-2$
+                    captureButton(buttons.getCaptureToolAction(), "nozzle", "Form.Capture.Tool"), //$NON-NLS-1$ //$NON-NLS-2$
+                    captureButton(buttons.getPositionCameraAction(), "target", "Form.Capture.MoveCamera")); //$NON-NLS-1$ //$NON-NLS-2$
+            row.add(Box.createHorizontalGlue());
+            panel.add(Box.createVerticalStrut(6));
+            panel.add(row);
+        }
+        else if (field.withRotation) {
             panel.add(Box.createVerticalStrut(6));
             panel.add(Forms.row(fields.get(2), fields.get(3)));
         }
@@ -305,6 +458,19 @@ public class FormWizard extends AbstractConfigurationWizard {
         return panel;
     }
 
+    /** One of the three icon buttons of a planar location: the action's own, with the mockups' icon. */
+    private static JComponent captureButton(javax.swing.Action action, String icon, String toolTip) {
+        javax.swing.JButton button = Ui.iconButton(Ui.iconSm(icon), Ui.Size.Sm, Ui.Variant.Default,
+                Form.resolve(toolTip));
+        button.addActionListener(action);
+        action.addPropertyChangeListener(e -> button.setEnabled(action.isEnabled()));
+        button.setEnabled(action.isEnabled());
+        if (!"Form.Capture.MoveCamera".equals(toolTip)) { //$NON-NLS-1$
+            return button;
+        }
+        return Ui.movesMachine(button);
+    }
+
     /** The pipeline's stages as they are now, with its Edit and Reset buttons. */
     private void showPipeline(Field field) {
         JPanel holder = pipelines.get(field);
@@ -315,8 +481,10 @@ public class FormWizard extends AbstractConfigurationWizard {
             field.action.run();
             showPipeline(field);
         });
-        JButton reset = Ui.button(org.openpnp.Translations.getString("Form.Pipeline.Reset"), //$NON-NLS-1$
-                Ui.iconSm("undo"), Ui.Size.Sm, Ui.Variant.Ghost); //$NON-NLS-1$
+        // Only the icon, its words in the tooltip: the mockup's row has Edit alone, and the row
+        // with both named was wider than the properties column.
+        JButton reset = Ui.iconButton(Ui.iconSm("undo"), Ui.Size.Sm, Ui.Variant.Ghost, //$NON-NLS-1$
+                org.openpnp.Translations.getString("Form.Pipeline.Reset")); //$NON-NLS-1$
         reset.setEnabled(field.reset != null);
         reset.addActionListener(e -> {
             field.reset.run();
@@ -337,6 +505,11 @@ public class FormWizard extends AbstractConfigurationWizard {
             combo.setRenderer(Forms.described(DisplayNames::of, v -> null));
         }
         combo.addActionListener(e -> edited());
+        // As wide as the row, not as the longest item: a part list's longest name and note made
+        // the properties column scroll sideways.
+        java.awt.Dimension size = combo.getPreferredSize();
+        combo.setPreferredSize(new java.awt.Dimension(Math.min(size.width, 160), size.height));
+        combo.setMinimumSize(new java.awt.Dimension(60, size.height));
         controls.put(field, combo);
         return combo;
     }
@@ -411,6 +584,17 @@ public class FormWizard extends AbstractConfigurationWizard {
 
     @Override
     protected void loadFromModel() {
+        // A location reaches its fields through a proxy that hears of the object's changes only
+        // when the object tells: one the machine changed behind the form, as an automatic setup
+        // does, is read again here.
+        for (Map.Entry<Field, MutableLocationProxy> entry : locations.entrySet()) {
+            Object value = org.jdesktop.beansbinding.BeanProperty.create(entry.getKey().property)
+                    .getValue(spec.bean);
+            if (value instanceof org.openpnp.model.Location
+                    && !value.equals(entry.getValue().getLocation())) {
+                entry.getValue().setLocation((org.openpnp.model.Location) value);
+            }
+        }
         super.loadFromModel();
         for (Field field : pipelines.keySet()) {
             showPipeline(field);
@@ -457,8 +641,17 @@ public class FormWizard extends AbstractConfigurationWizard {
         if (!valid) {
             getApplyAction().setEnabled(false);
         }
+        if (spec.onChange != null) {
+            spec.onChange.accept(this);
+        }
         contentPanel.revalidate();
         contentPanel.repaint();
+    }
+
+    /** What the form is about is not the machine's configuration: a placement is the job's. */
+    @Override
+    protected boolean modifiesConfiguration() {
+        return spec.modifiesConfiguration;
     }
 
     private String failure(Field field) {

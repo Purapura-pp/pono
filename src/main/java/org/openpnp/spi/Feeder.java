@@ -148,6 +148,47 @@ public interface Feeder extends Identifiable, Named, WizardConfigurable, Propert
 
     public void setPriority(Priority priority);
 
+    /**
+     * Parts left in the feeder, or null when the feeder does not know: a strip without a
+     * maximum feed count, say, that has not been told how many parts were loaded.
+     */
+    default Integer getPartsLeft() {
+        return null;
+    }
+
+    /** When a part was last picked from the feeder, in milliseconds since 1970, or 0 for never. */
+    default long getLastPickMillis() {
+        return 0;
+    }
+
+    /** At this many parts left or fewer the feeder is low: 0 for never. */
+    default int getLowCount() {
+        return 0;
+    }
+
+    /**
+     * Called once a part picked from the feeder is on the nozzle, as far as the machine can tell.
+     */
+    default void recordPick() {
+    }
+
+    /**
+     * The feeder has been refilled; parts loaded, when not null, is what it now holds, for a
+     * feeder that does not count its parts from its own geometry.
+     */
+    default void refill(Integer partsLoaded) {
+    }
+
+    default boolean isEmpty() {
+        Integer left = getPartsLeft();
+        return left != null && left <= 0;
+    }
+
+    default boolean isLow() {
+        Integer left = getPartsLeft();
+        return left != null && left > 0 && left <= getLowCount();
+    }
+
 
     public static class FeederEmptyException extends Exception {
         public FeederEmptyException(String s) {

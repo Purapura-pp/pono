@@ -225,6 +225,7 @@ public class ReferenceRotatedTrayFeeder extends ReferenceFeeder {
     }
 
     public void setFeedCount(int feedCount) {
+        Integer oldLeft = getPartsLeft();
         int oldValue = this.feedCount;
         this.feedCount = feedCount;
         if (feedCount == 0) {
@@ -233,11 +234,28 @@ public class ReferenceRotatedTrayFeeder extends ReferenceFeeder {
         firePropertyChange("feedCount", oldValue, feedCount);
         firePropertyChange("remainingCount", getEffectiveTrayCountRows()*getEffectiveTrayCountCols() - oldValue,
                 getEffectiveTrayCountRows()*getEffectiveTrayCountCols() - feedCount);
+        firePartsLeft(oldLeft);
         Logger.debug("{}.setFeedCount(): feedCount {}, pickLocation {}", getName(), feedCount, getPickLocation());
     }
 
     public int getRemainingCount() {
         return getEffectiveTrayCountRows()*getEffectiveTrayCountCols() - feedCount;
+    }
+
+    @Override
+    public Integer getPartsLeft() {
+        return Math.max(0, getRemainingCount());
+    }
+
+    @Override
+    public boolean isCountedFromGeometry() {
+        return true;
+    }
+
+    @Override
+    public void refill(Integer partsLoaded) {
+        setFeedCount(0);
+        super.refill(partsLoaded);
     }
 
     public double getComponentRotationInTray() {

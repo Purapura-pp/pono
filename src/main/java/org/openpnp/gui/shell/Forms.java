@@ -502,6 +502,18 @@ public final class Forms {
         public void onChange(Runnable listener) {
             listeners.add(listener);
         }
+
+        /**
+         * The stylesheet's {@code .seg.tight}, for the values beside a field: 30 pixel segments
+         * with 6 pixel padding, in the mono figures.
+         */
+        public Segmented tight() {
+            for (javax.swing.JToggleButton button : buttons) {
+                Ui.segTight(button);
+            }
+            setMaximumSize(getPreferredSize());
+            return this;
+        }
     }
 
     /** A status capsule standing in a form row. */
@@ -629,25 +641,53 @@ public final class Forms {
      * arrows between them, and its buttons at the right.
      */
     public static JPanel pipeline(java.util.List<String> stages, JComponent... buttons) {
-        JPanel row = new JPanel();
-        row.setOpaque(false);
-        row.setLayout(new BoxLayout(row, BoxLayout.X_AXIS));
+        // The stages go on to a second line in a narrow column, each with the arrow before it;
+        // the buttons stay at the right. In one line the row was wider than the column at 1366.
+        JPanel chips = new JPanel(new org.openpnp.gui.support.WrapLayout(java.awt.FlowLayout.LEFT, 0, 0)) {
+            /** As narrow as its widest stage: what it takes to wrap rather than be cut. */
+            @Override
+            public Dimension getMinimumSize() {
+                int widest = 0;
+                for (java.awt.Component c : getComponents()) {
+                    widest = Math.max(widest, c.getPreferredSize().width);
+                }
+                return new Dimension(widest, super.getMinimumSize().height);
+            }
+        };
+        chips.setOpaque(false);
         for (int i = 0; i < stages.size(); i++) {
+            JPanel item = new JPanel();
+            item.setOpaque(false);
+            item.setLayout(new BoxLayout(item, BoxLayout.X_AXIS));
             if (i > 0) {
-                row.add(Box.createHorizontalStrut(6));
-                JLabel arrow = Ui.muted("\u203a"); //$NON-NLS-1$
-                row.add(arrow);
-                row.add(Box.createHorizontalStrut(6));
+                item.add(Box.createHorizontalStrut(6));
+                item.add(Ui.muted("\u203a")); //$NON-NLS-1$
+                item.add(Box.createHorizontalStrut(6));
             }
             Chip stage = new Chip(stages.get(i), Chip.Tone.Pending, Chip.Shape.Status).withLed(false);
             stage.setFont(Ui.font(Tokens.FS_TAG));
-            row.add(stage);
+            item.add(stage);
+            chips.add(item);
         }
-        row.add(Box.createHorizontalGlue());
+        JPanel tools = new JPanel();
+        tools.setOpaque(false);
+        tools.setLayout(new BoxLayout(tools, BoxLayout.X_AXIS));
         for (JComponent button : buttons) {
-            row.add(Box.createHorizontalStrut(6));
-            row.add(button);
+            tools.add(Box.createHorizontalStrut(6));
+            tools.add(button);
         }
+        // As wide as the row leaves, and in the middle of its height, as the buttons are.
+        JPanel middle = new JPanel(new java.awt.GridBagLayout());
+        middle.setOpaque(false);
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.weightx = 1;
+        gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        gc.anchor = java.awt.GridBagConstraints.WEST;
+        middle.add(chips, gc);
+        JPanel row = new JPanel(new java.awt.BorderLayout());
+        row.setOpaque(false);
+        row.add(middle, java.awt.BorderLayout.CENTER);
+        row.add(tools, java.awt.BorderLayout.EAST);
         return row;
     }
 }

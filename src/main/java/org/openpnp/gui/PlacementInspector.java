@@ -1,234 +1,254 @@
 /*
- * Copyright (C) 2026 Pono contributors
+ * Copyright (C) 2026 Pono
  * 
- * This file is part of Pono, a modified version of OpenPnP.
+ * This file is part of OpenPnP.
  * 
- * Pono is free software: you can redistribute it and/or modify it under the terms of the GNU
+ * OpenPnP is free software: you can redistribute it and/or modify it under the terms of the GNU
  * General Public License as published by the Free Software Foundation, either version 3 of the
  * License, or (at your option) any later version.
  * 
- * Pono is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+ * OpenPnP is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
  * the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
  * Public License for more details.
  * 
- * You should have received a copy of the GNU General Public License along with Pono. If not, see
+ * You should have received a copy of the GNU General Public License along with OpenPnP. If not, see
  * <http://www.gnu.org/licenses/>.
+ * 
+ * For more information about OpenPnP visit http://openpnp.org
  */
 
 package org.openpnp.gui;
 
-import java.awt.BorderLayout;
-import java.awt.Component;
-import java.awt.Dimension;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
-import javax.swing.Box;
-import javax.swing.BoxLayout;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JTextField;
 
-import org.jdesktop.beansbinding.AutoBinding.UpdateStrategy;
 import org.openpnp.Translations;
-import org.openpnp.gui.components.ComponentDecorators;
+import org.openpnp.gui.form.Form;
+import org.openpnp.gui.form.FormWizard;
 import org.openpnp.gui.shell.Chip;
 import org.openpnp.gui.shell.Forms;
 import org.openpnp.gui.shell.Ui;
-import org.openpnp.gui.support.AbstractConfigurationWizard;
-import org.openpnp.gui.support.DoubleConverter;
-import org.openpnp.gui.support.LengthConverter;
-import org.openpnp.gui.support.MutableLocationProxy;
-import org.openpnp.gui.support.PartsComboBoxModel;
+import org.openpnp.gui.support.FeederDescriptions;
+import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel.PlacementStatus;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.Configuration;
+import org.openpnp.model.Job;
+import org.openpnp.model.JobRun;
+import org.openpnp.model.Location;
+import org.openpnp.model.Part;
 import org.openpnp.model.Placement;
 import org.openpnp.model.Placement.ErrorHandling;
-import org.openpnp.model.Placement.Type;
 import org.openpnp.model.PlacementsHolderLocation;
 import org.openpnp.spi.Feeder;
 
 /**
- * The properties of one placement, as the mockups draw them: position, part, options, this run,
- * and notes, each a section that folds.
+ * The properties of one placement, as the mockup draws them: its position with the camera's and
+ * the nozzle's capture beside the angle, its part with the package and the feeder that carries
+ * it, its options, what this run did with it, and its notes, folded.
  * <p>
- * A wizard like any other underneath - wrapped bindings, dirty state, Apply and Reset - so the
- * properties column treats it exactly as it treats a feeder's sheets. The table used to be the
- * only place a placement could be edited, one cell at a time.
+ * A declarative form. It reads and writes where the table does: the board's definition when the
+ * board is edited as a whole - a top-level board used once in the job - and the placement of this
+ * instance otherwise, where only whether it is enabled and how its errors are handled belong to
+ * the instance and the rest is shown as it is. The form it replaces wrote the instance's copy
+ * and the board never heard of the change.
  */
-@SuppressWarnings("serial")
-public class PlacementInspector extends AbstractConfigurationWizard {
-    private final Configuration configuration;
-    private final JobPlacementsPanel owner;
-    private final Placement placement;
-    private final PlacementsHolderLocation<?> location;
+public final class PlacementInspector {
+    private PlacementInspector() {
+    }
 
-    private final JTextField x = new JTextField();
-    private final JTextField y = new JTextField();
-    private final JTextField rotation = new JTextField();
-    private final JComboBox<Side> side = new JComboBox<>(Side.values());
-    private final JComboBox<Object> part = new JComboBox<>(new PartsComboBoxModel());
-    private final JLabel packageLabel = new JLabel();
-    private final Chip feederChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Status); //$NON-NLS-1$
-    private final JLabel feederNote = Ui.t2(""); //$NON-NLS-1$
-    private final JComboBox<Type> type = new JComboBox<>(Type.values());
-    private final JComboBox<ErrorHandling> errorHandling = new JComboBox<>(ErrorHandling.values());
-    private final Forms.Toggle enabled = new Forms.Toggle();
-    private final Chip placedChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Status); //$NON-NLS-1$
-    private final JTextField comments = new JTextField();
+    /** What the form edits, read and written where the placements table reads and writes it. */
+    public static final class Bean {
+        private final Placement instance;
+        private final Placement definition;
+        private final boolean editDefinition;
 
-    public PlacementInspector(Configuration configuration, JobPlacementsPanel owner,
-            PlacementsHolderLocation<?> location, Placement placement) {
-        this.configuration = configuration;
-        this.owner = owner;
-        this.location = location;
-        this.placement = placement;
+        Bean(Placement instance, boolean editDefinition) {
+            this.instance = instance;
+            Object definition = instance.getDefinition();
+            this.definition = definition instanceof Placement ? (Placement) definition : instance;
+            this.editDefinition = editDefinition;
+        }
 
-        contentPanel.setOpaque(false);
-        getScrollPane().setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        getScrollPane().setViewportView(new WidthTrackingPanel(contentPanel));
-        part.setRenderer(new javax.swing.DefaultListCellRenderer() {
-            @Override
-            public Component getListCellRendererComponent(javax.swing.JList<?> list, Object value,
-                    int index, boolean isSelected, boolean cellHasFocus) {
-                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-                if (value instanceof org.openpnp.model.Part) {
-                    setText(((org.openpnp.model.Part) value).getId());
-                }
-                return this;
-            }
+        public Location getLocation() {
+            return instance.getLocation();
+        }
+
+        public void setLocation(Location location) {
+            definition.setLocation(location);
+        }
+
+        public Side getSide() {
+            return instance.getSide();
+        }
+
+        public void setSide(Side side) {
+            definition.setSide(side);
+        }
+
+        public Part getPart() {
+            return instance.getPart();
+        }
+
+        public void setPart(Part part) {
+            definition.setPart(part);
+        }
+
+        public Placement.Type getType() {
+            return instance.getType();
+        }
+
+        public void setType(Placement.Type type) {
+            definition.setType(type);
+        }
+
+        public String getComments() {
+            return instance.getComments();
+        }
+
+        public void setComments(String comments) {
+            definition.setComments(comments);
+        }
+
+        public boolean isEnabled() {
+            return instance.isEnabled();
+        }
+
+        public void setEnabled(boolean enabled) {
+            (editDefinition ? definition : instance).setEnabled(enabled);
+        }
+
+        public ErrorHandling getErrorHandling() {
+            return instance.getErrorHandling();
+        }
+
+        public void setErrorHandling(ErrorHandling errorHandling) {
+            (editDefinition ? definition : instance).setErrorHandling(errorHandling);
+        }
+
+        /** Where it is, for a board that is not edited here. */
+        public String getPositionText() {
+            Location l = instance.getLocation();
+            return String.format(java.util.Locale.ROOT, "X %.3f \u00b7 Y %.3f \u00b7 %.1f\u00b0", l.getX(), l.getY(), //$NON-NLS-1$
+                    l.getRotation());
+        }
+    }
+
+    /** A built form, and what keeps what the run did with the placement current in it. */
+    public static final class Built {
+        private final FormWizard wizard;
+        private final Runnable refreshRun;
+
+        Built(FormWizard wizard, Runnable refreshRun) {
+            this.wizard = wizard;
+            this.refreshRun = refreshRun;
+        }
+
+        public FormWizard getWizard() {
+            return wizard;
+        }
+
+        /** Called when the run changes. */
+        public void refreshRun() {
+            refreshRun.run();
+        }
+    }
+
+    public static Built build(Configuration configuration, JobPlacementsPanel owner,
+            PlacementsHolderLocation<?> location, Placement placement, boolean editDefinition) {
+        Bean bean = new Bean(placement, editDefinition);
+        JLabel packageLabel = Ui.t2(""); //$NON-NLS-1$
+        Chip feederChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Status).withHeight(18); //$NON-NLS-1$
+        JLabel feederNote = Ui.t2(""); //$NON-NLS-1$
+        JPanel feederRow = Forms.row(feederChip, feederNote);
+        Chip runChip = new Chip("", Chip.Tone.Neutral, Chip.Shape.Status); //$NON-NLS-1$
+        JLabel alignment = Ui.mono("", 12f); //$NON-NLS-1$
+        JLabel duration = Ui.mono("", 12f); //$NON-NLS-1$
+
+        Form.Builder form = Form.of(bean).named(placement.getId()).ownedByJob();
+        form.section("PlacementInspector.Position", "move") //$NON-NLS-1$ //$NON-NLS-2$
+                .note(String.format(Translations.getString("PlacementInspector.BoardCoordinates"), //$NON-NLS-1$
+                        configuration.getSystemUnits().getShortName()));
+        if (editDefinition) {
+            form.location("location", "PlacementInspector.Coordinates", false).planar(); //$NON-NLS-1$ //$NON-NLS-2$
+            form.segmented("side", "PlacementInspector.Side", List.of(Side.Top, Side.Bottom)); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        else {
+            form.readOnly("positionText", "PlacementInspector.Coordinates"); //$NON-NLS-1$ //$NON-NLS-2$
+            form.readOnly("side", "PlacementInspector.Side"); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        form.section("PlacementInspector.PartSection", "parts"); //$NON-NLS-1$ //$NON-NLS-2$
+        if (editDefinition) {
+            List<Part> parts = new ArrayList<>(configuration.getParts());
+            parts.sort(Comparator.comparing(Part::getId, String.CASE_INSENSITIVE_ORDER));
+            form.choice("part", "PlacementInspector.Part", parts, Part::getName); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        else {
+            form.readOnly("part", "PlacementInspector.Part"); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        form.custom("PlacementInspector.Package", packageLabel); //$NON-NLS-1$
+        form.custom("PlacementInspector.Feeder", feederRow); //$NON-NLS-1$
+        form.section("PlacementInspector.Options", "gear"); //$NON-NLS-1$ //$NON-NLS-2$
+        if (editDefinition) {
+            form.choice("type", "PlacementInspector.Type", Placement.Type.class); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        else {
+            form.readOnly("type", "PlacementInspector.Type"); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        form.choice("errorHandling", "PlacementInspector.ErrorHandling", ErrorHandling.class); //$NON-NLS-1$ //$NON-NLS-2$
+        form.toggle("enabled", "PlacementInspector.Enabled", "PlacementInspector.EnabledNote"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        form.section("PlacementInspector.ThisRun", "clock").note("PlacementInspector.Live"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        form.custom("PlacementInspector.Status", Forms.row(runChip)); //$NON-NLS-1$
+        form.custom("PlacementInspector.Alignment", alignment); //$NON-NLS-1$
+        form.custom("PlacementInspector.Duration", duration); //$NON-NLS-1$
+        String comments = placement.getComments();
+        form.section("PlacementInspector.Notes", "info").collapsed() //$NON-NLS-1$ //$NON-NLS-2$
+                .note(comments == null || comments.isBlank() ? "" //$NON-NLS-1$
+                        : Translations.getString("PlacementInspector.NotesOne")); //$NON-NLS-1$
+        if (editDefinition) {
+            form.text("comments", "PlacementInspector.Comments"); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        else {
+            form.readOnly("comments", "PlacementInspector.Comments"); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        // The package and the feeder follow the part as it is chosen, before it is applied.
+        form.onChange(wizard -> {
+            Object chosen = editDefinition ? wizard.value("part") : bean.getPart(); //$NON-NLS-1$
+            describePart(configuration, chosen instanceof Part ? (Part) chosen : null, packageLabel,
+                    feederChip, feederNote);
         });
-        part.setPrototypeDisplayValue("R0805-1K"); //$NON-NLS-1$
-        contentPanel.add(positionSection());
-        contentPanel.add(partSection());
-        contentPanel.add(optionsSection());
-        contentPanel.add(runSection());
-        contentPanel.add(notesSection());
-        contentPanel.add(Box.createVerticalGlue());
+        Runnable refreshRun = () -> describeRun(owner, location, placement, runChip, alignment, duration);
+        FormWizard wizard = form.build();
+        describePart(configuration, placement.getPart(), packageLabel, feederChip, feederNote);
+        refreshRun.run();
+        return new Built(wizard, refreshRun);
     }
 
-    private Component positionSection() {
-        String units = configuration.getSystemUnits().getShortName();
-        Forms.Grid grid = new Forms.Grid();
-        grid.row(Translations.getString("PlacementInspector.Coordinates"), //$NON-NLS-1$
-                Forms.row(Forms.input(x, true, "X"), Forms.input(y, true, "Y"))); //$NON-NLS-1$ //$NON-NLS-2$
-        grid.row(Translations.getString("PlacementInspector.Rotation"), //$NON-NLS-1$
-                Forms.inputWithUnit(rotation, "\u00b0")); //$NON-NLS-1$
-        grid.row(Translations.getString("PlacementInspector.Side"), Forms.dropdown(side)); //$NON-NLS-1$
-
-        JPanel buttons = new JPanel();
-        buttons.setOpaque(false);
-        buttons.setLayout(new BoxLayout(buttons, BoxLayout.X_AXIS));
-        JButton camera = Ui.button(owner.moveCameraToPlacementLocation, Ui.Size.Sm, Ui.Variant.Default);
-        camera.setText(Translations.getString("Dock.Action.MoveCamera")); //$NON-NLS-1$
-        camera.setIcon(Ui.iconSm("camera")); //$NON-NLS-1$
-        camera.setPreferredSize(null);
-        JButton capture = Ui.button(owner.captureCameraPlacementLocation, Ui.Size.Sm, Ui.Variant.Default);
-        capture.setText(Translations.getString("PlacementInspector.Capture")); //$NON-NLS-1$
-        capture.setIcon(Ui.iconSm("target")); //$NON-NLS-1$
-        capture.setPreferredSize(null);
-        buttons.add(camera);
-        buttons.add(Box.createHorizontalStrut(6));
-        buttons.add(capture);
-        buttons.add(Box.createHorizontalGlue());
-        grid.row("", buttons); //$NON-NLS-1$
-
-        return new Forms.Section("move", Translations.getString("PlacementInspector.Position")) //$NON-NLS-1$ //$NON-NLS-2$
-                .withRight(units).content(grid);
-    }
-
-    private Component partSection() {
-        Forms.Grid grid = new Forms.Grid();
-        grid.row(Translations.getString("PlacementInspector.Part"), Forms.dropdown(part)); //$NON-NLS-1$
-        grid.row(Translations.getString("PlacementInspector.Package"), Forms.readOnly(packageLabel)); //$NON-NLS-1$
-        grid.row(Translations.getString("PlacementInspector.Feeder"), Forms.statusRow(feederChip, null)); //$NON-NLS-1$
-        ((JPanel) grid.getComponent(grid.getComponentCount() - 1)).add(feederNote);
-        part.addActionListener(e -> describePart());
-        return new Forms.Section("parts", Translations.getString("PlacementInspector.PartSection")) //$NON-NLS-1$ //$NON-NLS-2$
-                .content(grid);
-    }
-
-    private Component optionsSection() {
-        Forms.Grid grid = new Forms.Grid();
-        grid.row(Translations.getString("PlacementInspector.Type"), Forms.dropdown(type)); //$NON-NLS-1$
-        grid.row(Translations.getString("PlacementInspector.ErrorHandling"), Forms.dropdown(errorHandling)); //$NON-NLS-1$
-        grid.row(Translations.getString("PlacementInspector.Enabled"), //$NON-NLS-1$
-                Forms.toggleRow(enabled, Translations.getString("PlacementInspector.EnabledNote"))); //$NON-NLS-1$
-        return new Forms.Section("gear", Translations.getString("PlacementInspector.Options")) //$NON-NLS-1$ //$NON-NLS-2$
-                .content(grid);
-    }
-
-    private Component runSection() {
-        Forms.Grid grid = new Forms.Grid();
-        grid.row(Translations.getString("PlacementInspector.Status"), Forms.statusRow(placedChip, null)); //$NON-NLS-1$
-        return new Forms.Section("play", Translations.getString("PlacementInspector.ThisRun")) //$NON-NLS-1$ //$NON-NLS-2$
-                .content(grid);
-    }
-
-    private Component notesSection() {
-        Forms.Grid grid = new Forms.Grid();
-        grid.row(Translations.getString("PlacementInspector.Comments"), Forms.input(comments, false)); //$NON-NLS-1$
-        return new Forms.Section("info", Translations.getString("PlacementInspector.Notes")) //$NON-NLS-1$ //$NON-NLS-2$
-                .content(grid);
-    }
-
-    /** A placement belongs to the job, which has its own unsaved mark and its own Save. */
-    @Override
-    protected boolean modifiesConfiguration() {
-        return false;
-    }
-
-    @Override
-    public void createBindings() {
-        LengthConverter lengthConverter = new LengthConverter();
-        DoubleConverter doubleConverter = new DoubleConverter(configuration.getLengthDisplayFormat());
-
-        MutableLocationProxy proxy = new MutableLocationProxy();
-        bind(UpdateStrategy.READ_WRITE, placement, "location", proxy, "location"); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(proxy, "lengthX", x, "text", lengthConverter); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(proxy, "lengthY", y, "text", lengthConverter); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(proxy, "rotation", rotation, "text", doubleConverter); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(placement, "side", side, "selectedItem"); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(placement, "part", part, "selectedItem"); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(placement, "type", type, "selectedItem"); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(placement, "errorHandling", errorHandling, "selectedItem"); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(placement, "enabled", enabled, "selected"); //$NON-NLS-1$ //$NON-NLS-2$
-        addWrappedBinding(placement, "comments", comments, "text"); //$NON-NLS-1$ //$NON-NLS-2$
-
-        ComponentDecorators.decorateWithAutoSelectAndLengthConversion(x);
-        ComponentDecorators.decorateWithAutoSelectAndLengthConversion(y);
-        ComponentDecorators.decorateWithAutoSelect(rotation);
-        ComponentDecorators.decorateWithAutoSelect(comments);
-    }
-
-    @Override
-    protected void loadFromModel() {
-        super.loadFromModel();
-        describePart();
-        describeRun();
-    }
-
-    @Override
-    protected void saveToModel() {
-        super.saveToModel();
-        owner.refresh();
-    }
-
-    /** The package and the feeder follow the part chosen, before it is applied. */
-    private void describePart() {
-        Object chosen = part.getSelectedItem();
-        org.openpnp.model.Part p = chosen instanceof org.openpnp.model.Part ? (org.openpnp.model.Part) chosen : null;
-        packageLabel.setText(p == null || p.getPackage() == null ? "\u2014" : p.getPackage().getId()); //$NON-NLS-1$
+    /** The package with its height, and the feeder that carries the part with what it has left. */
+    static void describePart(Configuration configuration, Part part, JLabel packageLabel, Chip feederChip,
+            JLabel feederNote) {
+        if (part == null || part.getPackage() == null) {
+            packageLabel.setText("\u2014"); //$NON-NLS-1$
+        }
+        else {
+            packageLabel.setText(part.getPackage().getId() + (part.isPartHeightUnknown() ? "" //$NON-NLS-1$
+                    : "  " + String.format(Translations.getString("PlacementInspector.PackageHeight"), //$NON-NLS-1$ //$NON-NLS-2$
+                            FeederDescriptions.length(part.getHeight()))));
+        }
         Feeder found = null;
-        if (p != null) {
+        if (part != null) {
             for (Feeder feeder : configuration.getMachine().getFeeders()) {
-                if (feeder.isEnabled() && feeder.getPart() == p) {
+                if (feeder.isEnabled() && feeder.getPart() == part) {
                     found = feeder;
                     break;
                 }
             }
         }
-        if (p == null) {
+        feederNote.setBorder(new javax.swing.border.EmptyBorder(0, 8, 0, 0));
+        if (part == null) {
             feederChip.setText(Translations.getString("PlacementInspector.Feeder.NoPart")); //$NON-NLS-1$
             feederChip.setTone(Chip.Tone.Neutral);
             feederNote.setText(""); //$NON-NLS-1$
@@ -239,25 +259,51 @@ public class PlacementInspector extends AbstractConfigurationWizard {
             feederNote.setText(""); //$NON-NLS-1$
         }
         else {
-            feederChip.setText(Translations.getString("PlacementInspector.Feeder.Ready")); //$NON-NLS-1$
+            feederChip.setText(found.getName());
             feederChip.setTone(Chip.Tone.Ok);
-            feederNote.setText(found.getName());
+            feederNote.setText(FeederDescriptions.summary(found));
         }
-        feederNote.setBorder(new javax.swing.border.EmptyBorder(0, 8, 0, 0));
     }
 
-    private void describeRun() {
-        boolean placed = owner.getJobPanel().getJob() != null
-                && owner.getJobPanel().getJob().retrievePlacedStatus(location, placement.getId());
-        placedChip.setText(Translations.getString(placed ? "PlacementInspector.Placed" //$NON-NLS-1$
-                : "PlacementInspector.NotPlaced")); //$NON-NLS-1$
-        placedChip.setTone(placed ? Chip.Tone.Ok : Chip.Tone.Neutral);
+    /** What the current run did with the placement: its status, its alignment and how long it took. */
+    static void describeRun(JobPlacementsPanel owner, PlacementsHolderLocation<?> location, Placement placement,
+            Chip runChip, JLabel alignment, JLabel duration) {
+        Job job = owner.getJobPanel().getJob();
+        JobRun.PlacementRun run = job == null ? null : job.getRun().get(JobRun.key(location, placement.getId()));
+        boolean placed = job != null && job.retrievePlacedStatus(location, placement.getId());
+        PlacementStatus status = new PlacementStatus(placement.getType(), null, run, placed);
+        JobRun.State state = status.getState();
+        if (state == null) {
+            runChip.setText(Translations.getString("PlacementInspector.NotPlaced")); //$NON-NLS-1$
+            runChip.setTone(Chip.Tone.Neutral);
+        }
+        else {
+            runChip.setText(state == JobRun.State.Placing
+                    ? String.format(Translations.getString("PlacementInspector.PlacingOn"), run.getNozzle()) //$NON-NLS-1$
+                    : status.getText());
+            runChip.setTone(tone(state));
+        }
+        Location offsets = run == null ? null : run.getAlignment();
+        alignment.setText(offsets == null ? "\u2014" //$NON-NLS-1$
+                : String.format(java.util.Locale.ROOT, "\u0394x %+.3f  \u0394y %+.3f  \u0394\u03b8 %+.1f\u00b0", //$NON-NLS-1$
+                        offsets.getX(), offsets.getY(), offsets.getRotation()));
+        duration.setText(run == null || run.getDurationMillis() <= 0 ? "\u2014" //$NON-NLS-1$
+                : String.format(java.util.Locale.ROOT, "%.2f s", run.getDurationMillis() / 1000.0)); //$NON-NLS-1$
     }
 
-    @Override
-    public Dimension getPreferredSize() {
-        Dimension size = super.getPreferredSize();
-        return new Dimension(Math.max(size.width, 300), size.height);
+    private static Chip.Tone tone(JobRun.State state) {
+        switch (state) {
+            case Placed:
+                return Chip.Tone.Ok;
+            case Placing:
+                return Chip.Tone.Run;
+            case WaitingForFeeder:
+                return Chip.Tone.Warn;
+            case Error:
+                return Chip.Tone.Err;
+            default:
+                return Chip.Tone.Skip;
+        }
     }
 
     /** The heading for the properties column: the placement's id over where it sits. */
@@ -267,45 +313,5 @@ public class PlacementInspector extends AbstractConfigurationWizard {
         }
         return Translations.getString("JobPlacementsPanel.Border.title") + " \u00b7 " //$NON-NLS-1$ //$NON-NLS-2$
                 + location.getPlacementsHolder().getName() + " \u00b7 " + location.getGlobalSide(); //$NON-NLS-1$
-    }
-
-    /** The properties column shows this instead of the wizard's own layout. */
-    @Override
-    public JPanel getWizardPanel() {
-        return this;
-    }
-
-    /** Makes the form as wide as the column and no wider, so the fields shrink rather than scroll. */
-    private static final class WidthTrackingPanel extends JPanel implements javax.swing.Scrollable {
-        WidthTrackingPanel(Component content) {
-            super(new BorderLayout());
-            setOpaque(false);
-            add(content, BorderLayout.CENTER);
-        }
-
-        @Override
-        public Dimension getPreferredScrollableViewportSize() {
-            return getPreferredSize();
-        }
-
-        @Override
-        public int getScrollableUnitIncrement(java.awt.Rectangle visibleRect, int orientation, int direction) {
-            return 16;
-        }
-
-        @Override
-        public int getScrollableBlockIncrement(java.awt.Rectangle visibleRect, int orientation, int direction) {
-            return visibleRect.height;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportWidth() {
-            return true;
-        }
-
-        @Override
-        public boolean getScrollableTracksViewportHeight() {
-            return false;
-        }
     }
 }

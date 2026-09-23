@@ -163,16 +163,23 @@ public final class DockRenderers {
     /** A board side as the stylesheet's badge: a T in accent or a B in amber, then the word. */
     public static TableCellRenderer side() {
         return new TableCellRenderer() {
-            private final JPanel cell = new JPanel(new BorderLayout(6, 0));
+            // Centred in the row: a flow layout put the badge and the word at the top of it.
+            private final JPanel cell = new JPanel(new java.awt.GridBagLayout());
             private final SideBadge badge = new SideBadge();
             private final JLabel word = new JLabel();
             {
                 cell.setBorder(new EmptyBorder(0, 10, 0, 10));
-                JPanel holder = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 0));
+                JPanel holder = new JPanel();
                 holder.setOpaque(false);
+                holder.setLayout(new javax.swing.BoxLayout(holder, javax.swing.BoxLayout.X_AXIS));
+                badge.setMaximumSize(badge.getPreferredSize());
                 holder.add(badge);
+                holder.add(javax.swing.Box.createHorizontalStrut(6));
                 holder.add(word);
-                cell.add(holder, BorderLayout.WEST);
+                java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+                gc.anchor = java.awt.GridBagConstraints.WEST;
+                gc.weightx = 1;
+                cell.add(holder, gc);
                 word.setFont(Ui.font(12.5f));
             }
 
