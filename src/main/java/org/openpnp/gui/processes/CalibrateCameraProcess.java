@@ -37,6 +37,8 @@ import java.util.Random;
 import java.util.Set;
 
 import javax.swing.SwingUtilities;
+
+import org.openpnp.Translations;
 import javax.swing.SwingWorker;
 
 import org.opencv.core.KeyPoint;
@@ -280,7 +282,7 @@ public abstract class CalibrateCameraProcess {
                     return true;
                 }
             }
-            setInstructionsAndProceedAction("Using the jog controls on the Machine Controls panel, jog the camera so that the calibration fiducial at Z = %s is approximately centered in the green circle.  Click Next when ready to proceed.", 
+            setInstructionsAndProceedAction(Translations.getString("CalibrateCameraProcess.JogToFiducial"), //$NON-NLS-1$ 
                     ()->requestOperatorToAdjustDiameterAction(),
                     calibrationLocations.get(calibrationHeightIndex).getLengthZ().toString());
         }
@@ -291,7 +293,7 @@ public abstract class CalibrateCameraProcess {
                 requestOperatorToCenterNozzleTipAction();
                 return true;
             }
-            setInstructionsAndProceedAction("Select a nozzle and load it with the smallest available nozzle tip. Click Next when ready to proceed.",
+            setInstructionsAndProceedAction(Translations.getString("CalibrateCameraProcess.LoadSmallestTip"), //$NON-NLS-1$
                     ()->requestOperatorToCenterNozzleTipAction());
         }
         return true;
@@ -411,7 +413,7 @@ public abstract class CalibrateCameraProcess {
             }
         };
 
-        setInstructionsAndProceedAction("Use the mouse scroll wheel to zoom in on the fiducial/nozzle tip and then adjust the Detection Diameter spinner until the red circle turns green with a + at its center and is sized to just fit the fiducial/nozzle tip with the + centered on the fiducial/nozzle tip. When ready, click Next to begin the automated calibration collection sequence.", 
+        setInstructionsAndProceedAction(Translations.getString("CalibrateCameraProcess.AdjustDiameter"), //$NON-NLS-1$ 
                 ()->fiducialDiameterIsSetAction());
 
         swingWorker.execute();
@@ -784,7 +786,7 @@ public abstract class CalibrateCameraProcess {
                 }
             }
             
-            setInstructionsAndProceedAction("Using the jog controls on the Machine Controls panel, jog the camera so that the calibration fiducial at Z = %s is approximately centered in the green circle.  Click Next when ready to proceed.", 
+            setInstructionsAndProceedAction(Translations.getString("CalibrateCameraProcess.JogToFiducial"), //$NON-NLS-1$ 
                     ()->requestOperatorToAdjustDiameterAction(),
                     calibrationLocations.get(calibrationHeightIndex).getLengthZ().toString()); 
         }
@@ -842,7 +844,7 @@ public abstract class CalibrateCameraProcess {
                 return true;
             }
         }
-        setInstructionsAndProceedAction("Using the jog controls on the Machine Controls panel, jog the nozzle tip so that it is approximately in the center of the green circle. When ready, click Next to lower/raise the nozzle tip to the calibration height.", 
+        setInstructionsAndProceedAction(Translations.getString("CalibrateCameraProcess.JogTipToCircle"), //$NON-NLS-1$ 
                 ()->captureCentralLocationAction());
         return true;
     }
@@ -903,7 +905,7 @@ public abstract class CalibrateCameraProcess {
             captureVerifiedCentralLocationAction();
             return true;
         }
-        setInstructionsAndProceedAction("Using the jog controls on the Machine Controls panel, rotate the nozzle tip through 360 degrees and verify it stays within the green circle. If necessary, jog it in X and/or Y so that it remains within the circle when it is rotated. Click Next when ready.", 
+        setInstructionsAndProceedAction(Translations.getString("CalibrateCameraProcess.RotateTip"), //$NON-NLS-1$ 
                 ()->captureVerifiedCentralLocationAction());
         return true;
     }

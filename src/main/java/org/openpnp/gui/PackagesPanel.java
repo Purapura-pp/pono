@@ -75,8 +75,6 @@ import org.openpnp.gui.support.VisionSettingsComboBoxModel;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.gui.tablemodel.PackagesTableModel;
-import org.openpnp.gui.wizards.PackageCompositingWizard;
-import org.openpnp.gui.wizards.PackageVisionWizard;
 import org.openpnp.model.AbstractVisionSettings;
 import org.openpnp.model.BottomVisionSettings;
 import org.openpnp.model.Configuration;
@@ -254,7 +252,7 @@ public class PackagesPanel extends JPanel implements WizardContainer {
                     if (cameraView == null) {
                         return;
                     }
-                    cameraView.removeReticle(PackageVisionWizard.class.getName());
+                    cameraView.removeReticle(PackageVisionForm.class.getName());
                 }
                 catch (Exception e1) {
                     Logger.debug(e1, "Failed to remove the package vision reticle from the camera view.");
@@ -506,12 +504,12 @@ public class PackagesPanel extends JPanel implements WizardContainer {
             built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
                     PackageForm.build(configuration, shownPackage),
                     Translations.getString("PackagesPanel.SettingsTab.title"))); //$NON-NLS-1$
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PackagesPanel.VisionTab.title"), //$NON-NLS-1$
-                    new PackageVisionWizard(shownPackage)));
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PackagesPanel.VisionCompositingTab.title"), //$NON-NLS-1$
-                    new PackageCompositingWizard(shownPackage)));
+            built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                    PackageVisionForm.build(configuration, shownPackage),
+                    Translations.getString("PackagesPanel.VisionTab.title"))); //$NON-NLS-1$
+            built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                    PackageCompositingForm.build(configuration, shownPackage),
+                    Translations.getString("PackagesPanel.VisionCompositingTab.title"))); //$NON-NLS-1$
             Machine machine = configuration.getMachine();
             for (PartAlignment partAlignment : machine.getPartAlignments()) {
                 Wizard wizard = partAlignment.getPartConfigurationWizard(shownPackage);
