@@ -1239,7 +1239,7 @@ public class MainFrame extends JFrame {
         addNavigation("IssuesAndSolutions", org.openpnp.gui.shell.Ui.icon("alert", 20), issuesAndSolutionsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         calibrationPanel = new CalibrationPanel(configuration, this);
         addNavigation("Calibration", org.openpnp.gui.shell.Ui.icon("target", 20), calibrationPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        logPanel = new LogPanel();
+        logPanel = new LogPanel(configuration);
         addNavigation("Log", org.openpnp.gui.shell.Ui.icon("log", 20), logPanel); //$NON-NLS-1$ //$NON-NLS-2$
         // Settings is a page of its own at the foot of the rail: appearance, language and units,
         // the operator, saving - which were an appearance dialog and scattered menu items.

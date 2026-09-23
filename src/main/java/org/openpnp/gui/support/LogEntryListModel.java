@@ -85,7 +85,9 @@ public class LogEntryListModel extends AbstractListModel<LogEntry> implements Wr
 
     @Override
     public Set<LogEntryValue> getRequiredLogEntryValues() {
-        return EnumSet.of(LogEntryValue.RENDERED_LOG_ENTRY);
+        // The fields the log page shows in columns, as well as the line the copy takes.
+        return EnumSet.of(LogEntryValue.RENDERED_LOG_ENTRY, LogEntryValue.DATE, LogEntryValue.LEVEL,
+                LogEntryValue.CLASS, LogEntryValue.MESSAGE, LogEntryValue.EXCEPTION);
     }
 
     @Override
