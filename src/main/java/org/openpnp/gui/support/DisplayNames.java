@@ -64,6 +64,10 @@ public final class DisplayNames {
                 return Translations.getString(key);
             }
         }
+        // A vision setting by its name: its id is a generated one nobody chose.
+        if (value instanceof org.openpnp.model.AbstractVisionSettings) {
+            return visionSettingsName(((org.openpnp.model.AbstractVisionSettings) value).getName());
+        }
         // A part, a package, a feeder: by the id the user gave it. Their toString is for the
         // log, "id R0603-10K, name ..., heightUnits ...".
         if (value instanceof org.openpnp.model.Identifiable && ((org.openpnp.model.Identifiable) value).getId() != null) {

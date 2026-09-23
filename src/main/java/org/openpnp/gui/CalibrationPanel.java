@@ -135,6 +135,7 @@ public class CalibrationPanel extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
         setBorder(new EmptyBorder(0, 10, 10, 10));
+        putClientProperty(MainFrame.DOCK_PAGE, Boolean.TRUE);
 
         DockPanel.Toolbar toolbar = new DockPanel.Toolbar();
         oneClick = Ui.button("", Ui.iconSm("play"), Ui.Size.Sm, Ui.Variant.Primary); //$NON-NLS-1$ //$NON-NLS-2$

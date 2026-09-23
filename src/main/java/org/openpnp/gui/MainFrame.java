@@ -439,12 +439,16 @@ public class MainFrame extends JFrame {
     /**
      * One rail item, labelled from its own short key and explained by the tab title it replaces.
      */
+    /** A page that is a dock of tabs itself, which is its card already: it is not put in another. */
+    public static final String DOCK_PAGE = "Pono.dockPage"; //$NON-NLS-1$
+
     private void addNavigation(String key, Icon icon, Component page) {
         // A page is a card of its own below the camera. The job and feeders pages are a dock,
         // which is that card already; the others are put in one.
         Component view = page;
-        if (page != jobPanel && page != feedersPanel && !(page instanceof IssuesAndSolutionsPanel)
-                && !(page instanceof CalibrationPanel)) {
+        boolean dock = page instanceof javax.swing.JComponent
+                && Boolean.TRUE.equals(((javax.swing.JComponent) page).getClientProperty(DOCK_PAGE));
+        if (page != jobPanel && page != feedersPanel && !dock) {
             org.openpnp.gui.shell.RoundedPanel card = org.openpnp.gui.shell.RoundedPanel.card();
             card.setLayout(new BorderLayout());
             card.add(page, BorderLayout.CENTER);

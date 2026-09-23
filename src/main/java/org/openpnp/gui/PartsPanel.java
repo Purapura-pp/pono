@@ -77,7 +77,6 @@ import org.openpnp.gui.support.VisionSettingsComboBoxModel;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.gui.tablemodel.PartsTableModel;
-import org.openpnp.gui.wizards.PartSettingsWizard;
 import org.openpnp.model.AbstractVisionSettings;
 import org.openpnp.model.BottomVisionSettings;
 import org.openpnp.model.Configuration;
@@ -110,6 +109,11 @@ public class PartsPanel extends JPanel implements WizardContainer {
     private ActionGroup multiSelectionActionGroup;
     private Part selectedPart;
     private int priorRowIndex = -1;
+    private final org.openpnp.gui.shell.DockPanel dock = new org.openpnp.gui.shell.DockPanel();
+    private org.openpnp.gui.shell.DockPanel.Tab partsTab;
+    private org.openpnp.gui.shell.DockPanel.Tab unusedTab;
+    /** Where the note on a part just made goes, over the table. */
+    private final JPanel bannerHolder = new JPanel(new BorderLayout());
     private HashMap<Class, Integer> lastSelectedTabIndex = new HashMap<>();
 
     public PartsPanel(Configuration configuration, Frame frame) {
@@ -122,24 +126,24 @@ public class PartsPanel extends JPanel implements WizardContainer {
         multiSelectionActionGroup.setEnabled(false);
 
         setLayout(new BorderLayout(0, 0));
+        setOpaque(false);
+        setBorder(new javax.swing.border.EmptyBorder(0, 10, 10, 10));
+        putClientProperty(MainFrame.DOCK_PAGE, Boolean.TRUE);
         tableModel = new PartsTableModel(configuration);
         tableSorter = new TableRowSorter<>(tableModel);
 
-        JPanel toolbarAndSearch = new JPanel();
-        add(toolbarAndSearch, BorderLayout.NORTH);
-        toolbarAndSearch.setLayout(new BorderLayout(0, 0));
-
-        JToolBar toolBar = new JToolBar();
-        toolBar.setFloatable(false);
-        toolbarAndSearch.add(toolBar);
-
-        JPanel panel_1 = new JPanel();
-        toolbarAndSearch.add(panel_1, BorderLayout.EAST);
-
-        JLabel lblSearch = new JLabel(Translations.getString("PartsPanel.SearchLabel.text")); //$NON-NLS-1$
-        panel_1.add(lblSearch);
-
-        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
+        // The mockup's toolbar: New part in the accent, delete, copy and paste, the pick that
+        // moves the machine, and the filter at the right end.
+        org.openpnp.gui.shell.DockPanel.Toolbar toolBar = new org.openpnp.gui.shell.DockPanel.Toolbar();
+        toolBar.button(newPartAction, "plus", "Dock.Action.NewPart", org.openpnp.gui.shell.Ui.Variant.Primary); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.iconButton(deletePartAction, "trash"); //$NON-NLS-1$
+        toolBar.separator();
+        toolBar.button(copyPartToClipboardAction, "copy", "Dock.Action.Copy"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.button(pastePartToClipboardAction, "upload", "Dock.Action.Paste"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.separator();
+        org.openpnp.gui.shell.Ui.movesMachine(toolBar.button(pickPartAction, "nozzle", "Dock.Action.PickPart")); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.glue();
+        searchTextField = toolBar.filter(Translations.getString("PartsPanel.Filter.Placeholder")); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -156,9 +160,6 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 search();
             }
         });
-        panel_1.add(searchTextField);
-        searchTextField.setColumns(15);
-
         JComboBox packagesCombo = new JComboBox(new PackagesComboBoxModel());
         packagesCombo.setMaximumRowCount(20);
         packagesCombo.setRenderer(new IdentifiableListCellRenderer<org.openpnp.model.Package>());
@@ -200,23 +201,52 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 new NamedTableCellRenderer<AbstractVisionSettings>());
 
         table.setRowSorter(tableSorter);
-        table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
+        installRenderers();
+        org.openpnp.gui.support.TableUtils.installColumnWidthSavers(table,
+                java.util.prefs.Preferences.userNodeForPackage(PartsPanel.class), "PartsPanel.partsTable"); //$NON-NLS-1$
+        // The mockup's order: ID, name, package, height, speed, the two visions, feeders,
+        // placements. The through-board depth is in the part's form.
+        int[] order = { 0, 1, 4, 2, 5, 6, 7, 9, 8 };
+        for (int i = 0; i < order.length; i++) {
+            int view = table.convertColumnIndexToView(order[i]);
+            if (view >= 0 && view != i) {
+                table.getColumnModel().moveColumn(view, i);
+            }
+        }
+
         // The wizards of the selected part are shown by the window's one properties column now.
-        add(new JScrollPane(table), BorderLayout.CENTER);
-        
-        toolBar.add(newPartAction);
-        toolBar.add(deletePartAction);
-        toolBar.addSeparator();
-        toolBar.add(pickPartAction);
-        
-        toolBar.addSeparator();
-        JButton btnNewButton = new JButton(copyPartToClipboardAction);
-        btnNewButton.setHideActionText(true);
-        toolBar.add(btnNewButton);
-        
-        JButton btnNewButton_1 = new JButton(pastePartToClipboardAction);
-        btnNewButton_1.setHideActionText(true);
-        toolBar.add(btnNewButton_1);
+        // The table and its toolbar are the dock's first tab; the second shows only the parts no
+        // placement uses, and the table moves between the two holders as the tabs change.
+        JPanel page = new JPanel(new BorderLayout());
+        page.setOpaque(false);
+        page.add(toolBar, BorderLayout.NORTH);
+        bannerHolder.setOpaque(false);
+        JPanel center = new JPanel(new BorderLayout());
+        center.setOpaque(false);
+        center.add(bannerHolder, BorderLayout.NORTH);
+        center.add(org.openpnp.gui.shell.DockPanel.table(table), BorderLayout.CENTER);
+        page.add(center, BorderLayout.CENTER);
+        JPanel allHolder = new JPanel(new BorderLayout());
+        allHolder.setOpaque(false);
+        allHolder.add(page, BorderLayout.CENTER);
+        JPanel unusedHolder = new JPanel(new BorderLayout());
+        unusedHolder.setOpaque(false);
+        partsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("parts"), //$NON-NLS-1$
+                Translations.getString("PartsPanel.Tab.Parts"), allHolder); //$NON-NLS-1$
+        unusedTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("alert"), //$NON-NLS-1$
+                Translations.getString("PartsPanel.Tab.Unused"), unusedHolder); //$NON-NLS-1$
+        dock.addChangeListener(e -> {
+            JPanel holder = dock.getSelectedTab() == unusedTab ? unusedHolder : allHolder;
+            if (page.getParent() != holder) {
+                holder.add(page, BorderLayout.CENTER);
+            }
+            search();
+            dock.revalidate();
+            dock.repaint();
+        });
+        dock.setMaximize(() -> MainFrame.get().toggleDockMaximised());
+        tableModel.addTableModelListener(e -> countTabs());
+        add(dock, BorderLayout.CENTER);
 
         table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
             @Override
@@ -277,17 +307,124 @@ public class PartsPanel extends JPanel implements WizardContainer {
         return selections;
     }
 
+    /**
+     * The filter matches the text as typed: it was read as a regular expression, so "(" matched
+     * nothing and said nothing. The unused tab shows the parts no placement uses.
+     */
     private void search() {
-        RowFilter<PartsTableModel, Object> rf = null;
-        // If current expression doesn't parse, don't update.
-        try {
-            rf = RowFilter.regexFilter("(?i)" + searchTextField.getText().trim());
+        String text = searchTextField.getText().trim();
+        List<RowFilter<PartsTableModel, Object>> filters = new ArrayList<>();
+        if (!text.isEmpty()) {
+            filters.add(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text))); //$NON-NLS-1$
         }
-        catch (PatternSyntaxException e) {
-            Logger.warn(e, "Search failed");
+        if (dock.getSelectedTab() == unusedTab) {
+            filters.add(new RowFilter<PartsTableModel, Object>() {
+                @Override
+                public boolean include(Entry<? extends PartsTableModel, ? extends Object> entry) {
+                    return entry.getModel().getRowObjectAt((Integer) entry.getIdentifier()).getPlacementCount() == 0;
+                }
+            });
+        }
+        tableSorter.setRowFilter(filters.isEmpty() ? null : RowFilter.andFilter(filters));
+    }
+
+    private Part lastSelected;
+
+    /** "已新建元件 NEW-1 · 封装沿用了上次选的 R0603，高度 0.45 mm", with the undo. */
+    private void showNewPartBanner(Part part, boolean fromSelection) {
+        bannerHolder.removeAll();
+        org.openpnp.gui.shell.RoundedPanel banner = new org.openpnp.gui.shell.RoundedPanel(10,
+                org.openpnp.gui.shell.Ui::accentSoft, org.openpnp.gui.shell.Ui::border);
+        banner.setLayout(new BorderLayout(10, 0));
+        banner.setBorder(new javax.swing.border.EmptyBorder(8, 12, 8, 8));
+        JLabel icon = new JLabel(org.openpnp.gui.shell.Ui.icon("info", 16, org.openpnp.gui.shell.Ui.accent())); //$NON-NLS-1$
+        JPanel text = new JPanel();
+        text.setOpaque(false);
+        text.setLayout(new javax.swing.BoxLayout(text, javax.swing.BoxLayout.Y_AXIS));
+        JLabel title = new JLabel(String.format(Translations.getString("PartsPanel.NewPart.Banner.Title"), part.getId())); //$NON-NLS-1$
+        title.setFont(org.openpnp.gui.shell.Ui.weighted(org.openpnp.gui.shell.Ui.BASE, 600));
+        String height = part.getHeight() == null ? "\u2014" //$NON-NLS-1$
+                : String.format(java.util.Locale.ROOT, "%.2f mm", //$NON-NLS-1$
+                        part.getHeight().convertToUnits(org.openpnp.model.LengthUnit.Millimeters).getValue());
+        text.add(title);
+        text.add(org.openpnp.gui.shell.Ui.t2(String.format(Translations.getString(fromSelection
+                ? "PartsPanel.NewPart.Banner.FromSelection" : "PartsPanel.NewPart.Banner.First"), //$NON-NLS-1$ //$NON-NLS-2$
+                part.getPackage().getId(), height)));
+        JPanel actions = new JPanel();
+        actions.setOpaque(false);
+        actions.setLayout(new javax.swing.BoxLayout(actions, javax.swing.BoxLayout.X_AXIS));
+        JButton undo = org.openpnp.gui.shell.Ui.button(Translations.getString("PartsPanel.NewPart.Banner.Undo"), //$NON-NLS-1$
+                null, org.openpnp.gui.shell.Ui.Size.Xs, org.openpnp.gui.shell.Ui.Variant.Ghost);
+        undo.addActionListener(e -> {
+            configuration.removePart(part);
+            tableModel.fireTableDataChanged();
+            hideBanner();
+        });
+        JButton close = org.openpnp.gui.shell.Ui.iconButton(org.openpnp.gui.shell.Ui.iconSm("x"), //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.Size.Xs, org.openpnp.gui.shell.Ui.Variant.Ghost,
+                Translations.getString("PartsPanel.NewPart.Banner.Close")); //$NON-NLS-1$
+        close.addActionListener(e -> hideBanner());
+        actions.add(undo);
+        actions.add(close);
+        banner.add(icon, BorderLayout.WEST);
+        banner.add(text, BorderLayout.CENTER);
+        banner.add(actions, BorderLayout.EAST);
+        bannerHolder.setBorder(new javax.swing.border.EmptyBorder(8, 10, 0, 10));
+        bannerHolder.add(banner, BorderLayout.CENTER);
+        bannerHolder.revalidate();
+        bannerHolder.repaint();
+    }
+
+    private void hideBanner() {
+        bannerHolder.removeAll();
+        bannerHolder.setBorder(null);
+        bannerHolder.revalidate();
+        bannerHolder.repaint();
+    }
+
+    private void countTabs() {
+        if (partsTab == null) {
             return;
         }
-        tableSorter.setRowFilter(rf);
+        int unused = 0;
+        for (int row = 0; row < tableModel.getRowCount(); row++) {
+            if (tableModel.getRowObjectAt(row).getPlacementCount() == 0) {
+                unused++;
+            }
+        }
+        partsTab.setCount(tableModel.getRowCount());
+        unusedTab.setCount(unused);
+    }
+
+    /** The mockup's cells: the ID in bold, the name in the secondary colour, numbers in mono. */
+    private void installRenderers() {
+        javax.swing.table.DefaultTableCellRenderer bold = new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setFont(table.getFont().deriveFont(java.awt.Font.BOLD));
+                return this;
+            }
+        };
+        javax.swing.table.DefaultTableCellRenderer secondary = new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                if (!isSelected) {
+                    setForeground(org.openpnp.gui.shell.Ui.text2());
+                }
+                return this;
+            }
+        };
+        table.getColumnModel().getColumn(0).setCellRenderer(bold);
+        table.getColumnModel().getColumn(1).setCellRenderer(secondary);
+        org.openpnp.gui.support.MonospacedFontTableCellRenderer mono = new org.openpnp.gui.support.MonospacedFontTableCellRenderer();
+        mono.setHorizontalAlignment(javax.swing.SwingConstants.RIGHT);
+        for (int column : new int[] { 2, 3, 5, 8, 9 }) {
+            table.getColumnModel().getColumn(column).setCellRenderer(mono);
+        }
     }
 
     public final Action newPartAction = new AbstractAction() {
@@ -319,12 +456,20 @@ public class PartsPanel extends JPanel implements WizardContainer {
                     continue;
                 }
                 Part part = new Part(id);
-
-                part.setPackage(configuration.getPackages().get(0));
+                // The package of the part selected before, and its height with it, rather than
+                // silently the first package there is.
+                Part template = getSelectedPart() != null ? getSelectedPart() : lastSelected;
+                org.openpnp.model.Package pkg = template != null && template.getPackage() != null
+                        ? template.getPackage() : configuration.getPackages().get(0);
+                part.setPackage(pkg);
+                if (template != null && template.getPackage() == pkg && template.getHeight() != null) {
+                    part.setHeight(template.getHeight());
+                }
 
                 configuration.addPart(part);
                 tableModel.fireTableDataChanged();
                 Helpers.selectObjectTableRow(table, part);
+                showNewPartBanner(part, template != null);
                 break;
             }
         }
@@ -466,14 +611,17 @@ public class PartsPanel extends JPanel implements WizardContainer {
 
         Part selectedPart = getSelectedPart();
         this.selectedPart = selectedPart;
+        if (selectedPart != null) {
+            lastSelected = selectedPart;
+        }
 
         // A part reports no property sheets of its own: its wizards come from the machine's part
         // alignments and its fiducial locator, so they are assembled here and handed over.
         Supplier<List<PropertySheet>> sheets = () -> {
             List<PropertySheet> built = new ArrayList<>();
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PartsPanel.SettingsTab.title"), //$NON-NLS-1$
-                    (JPanel) new PartSettingsWizard(selectedPart)));
+            built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                    PartForm.build(configuration, selectedPart),
+                    Translations.getString("PartsPanel.SettingsTab.title"))); //$NON-NLS-1$
             for (PartAlignment partAlignment : configuration.getMachine().getPartAlignments()) {
                 Wizard wizard = partAlignment.getPartConfigurationWizard(selectedPart);
                 if (wizard != null) {

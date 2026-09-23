@@ -116,6 +116,7 @@ public class IssuesAndSolutionsPanel extends JPanel {
         setLayout(new BorderLayout());
         setOpaque(false);
         setBorder(new EmptyBorder(0, 10, 10, 10));
+        putClientProperty(MainFrame.DOCK_PAGE, Boolean.TRUE);
 
         DockPanel.Toolbar toolbar = new DockPanel.Toolbar();
         findButton = Ui.button(Translations.getString("IssuesAndSolutionsPanel.Action.FindSolution"), //$NON-NLS-1$
