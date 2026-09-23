@@ -514,7 +514,13 @@ public class JogCard extends OverlayCard {
         button.addActionListener(e -> action.actionPerformed(e));
         action.addPropertyChangeListener(e -> button.setEnabled(action.isEnabled()));
         button.setEnabled(action.isEnabled());
-        return Ui.whyDisabled(button, this::machineReason);
+        // What the machine lacks first; with nothing lacking, the action's own reason: Recycle
+        // wants a part on the nozzle and a feeder to take it back.
+        return Ui.whyDisabled(button, () -> {
+            String reason = machineReason();
+            Object own = action.getValue(Ui.WHY_DISABLED);
+            return reason != null ? reason : own == null ? null : own.toString();
+        });
     }
 
     private static String escape(String text) {

@@ -259,6 +259,11 @@ public class InspectorPanel extends RoundedPanel {
         }
         resetButton.setEnabled(dirty);
         applyButton.setEnabled(dirty);
+        if (resetButton.getClientProperty(Ui.WHY_DISABLED) == null) {
+            java.util.function.Supplier<String> none = () -> Translations.getString("InspectorPanel.Disabled.NoChanges"); //$NON-NLS-1$
+            Ui.whyDisabled(resetButton, none);
+            Ui.whyDisabled(applyButton, none);
+        }
     }
 
     /** The "..." menu in the header: the page's actions on the thing shown, such as delete. */

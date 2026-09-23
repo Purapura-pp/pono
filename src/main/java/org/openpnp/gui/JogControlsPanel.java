@@ -477,6 +477,8 @@ public class JogControlsPanel extends JPanel {
         panelSpecial.add(btnDiscard);
 
         JButton btnRecycle = new JButton(recycleAction);
+        recycleAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED,
+                Translations.getString("JogControlsPanel.Disabled.NoPart")); //$NON-NLS-1$
         recycleAction.setEnabled(false);
         btnRecycle.setToolTipText(Translations.getString("JogControlsPanel.btnRecycle.toolTipText")); //$NON-NLS-1$
         btnRecycle.setText(Translations.getString("JogControlsPanel.btnRecycle.text")); //$NON-NLS-1$
@@ -876,6 +878,9 @@ public class JogControlsPanel extends JPanel {
                                 }
                             }
                         }
+                        recycleAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, Translations.getString(
+                                part == null ? "JogControlsPanel.Disabled.NoPart" //$NON-NLS-1$
+                                        : "JogControlsPanel.Disabled.NoFeederTakesBack")); //$NON-NLS-1$
                         recycleAction.setEnabled(canTakeBack);
                     }
                 };
