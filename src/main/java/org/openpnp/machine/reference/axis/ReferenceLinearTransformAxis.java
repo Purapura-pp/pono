@@ -24,7 +24,6 @@ package org.openpnp.machine.reference.axis;
 import java.util.Arrays;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.axis.wizards.ReferenceLinearTransformAxisConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -362,6 +361,6 @@ public class ReferenceLinearTransformAxis extends AbstractTransformedAxis implem
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceLinearTransformAxisConfigurationWizard(getMachine(), this);
+        return org.openpnp.machine.reference.axis.wizards.AxisForm.linearTransform(this);
     }
 }

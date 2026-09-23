@@ -65,8 +65,8 @@ public final class Form {
 
     /** What a field edits, and so which control it gets and how its text is converted. */
     enum Kind {
-        Text, TextArea, Integer, Decimal, Length, Angle, Location, Choice, Segmented, Toggle, ReadOnly,
-        Checklist, Pipeline, Action, Custom
+        Text, TextArea, Integer, Decimal, Percent, Length, Angle, Location, Choice, Segmented, Toggle,
+        ReadOnly, Checklist, Pipeline, Action, Custom
     }
 
     /** One field, as the builder collected it. */
@@ -77,6 +77,8 @@ public final class Form {
         String unit;
         String note;
         String hint;
+        java.util.function.Function<FormWizard, String> liveHint;
+        String format;
         int width;
         boolean movesMachine;
         boolean withRotation;
@@ -87,9 +89,7 @@ public final class Form {
         org.openpnp.spi.HeadMountable locationTool;
         List<? extends Number> presets;
         String probeLocation;
-        String buttonLabel;
-        String buttonIcon;
-        java.util.function.Consumer<FormWizard> button;
+        final List<Button> buttons = new ArrayList<>();
         String icon;
         Runnable action;
         Runnable reset;
@@ -99,6 +99,7 @@ public final class Form {
         Function<Object, String> itemNote;
         String visibleProperty;
         Predicate<Object> visibleWhen;
+        Predicate<FormWizard> visibleIf;
         final List<Predicate<Object>> checks = new ArrayList<>();
         final List<String> messages = new ArrayList<>();
 
@@ -106,6 +107,22 @@ public final class Form {
             this.kind = kind;
             this.property = property;
             this.label = label;
+        }
+    }
+
+    /** A button beside a field: worded, or an icon with its words on hover. */
+    static final class Button {
+        final String label;
+        final String icon;
+        final String toolTip;
+        final java.util.function.Consumer<FormWizard> action;
+        boolean movesMachine;
+
+        Button(String label, String icon, String toolTip, java.util.function.Consumer<FormWizard> action) {
+            this.label = label;
+            this.icon = icon;
+            this.toolTip = toolTip;
+            this.action = action;
         }
     }
 
@@ -235,9 +252,13 @@ public final class Form {
          * screen with {@link FormWizard#setValue(String, String)}, for Apply to write.
          */
         public Builder button(String label, String icon, java.util.function.Consumer<FormWizard> action) {
-            requireLast().buttonLabel = resolve(label);
-            last.buttonIcon = icon;
-            last.button = action;
+            requireLast().buttons.add(new Button(resolve(label), icon, null, action));
+            return this;
+        }
+
+        /** An icon button beside the last field, its words on hover: capturing a position, say. */
+        public Builder iconButton(String icon, String toolTip, java.util.function.Consumer<FormWizard> action) {
+            requireLast().buttons.add(new Button(null, icon, resolve(toolTip), action));
             return this;
         }
 
@@ -306,11 +327,20 @@ public final class Form {
             return this;
         }
 
+        /**
+         * Words under the last field worked out from what the form shows as it is edited: a
+         * feed rate per minute under the one per second, say. Nothing is shown for null.
+         */
+        public Builder liveHint(java.util.function.Function<FormWizard, String> text) {
+            requireLast().liveHint = text;
+            return this;
+        }
+
         private static final int SHORT_NOTE = 10;
 
         private static boolean isTyped(Kind kind) {
             return kind == Kind.Text || kind == Kind.Integer || kind == Kind.Decimal
-                    || kind == Kind.Length || kind == Kind.Angle;
+                    || kind == Kind.Percent || kind == Kind.Length || kind == Kind.Angle;
         }
 
         public Builder text(String property, String label) {
@@ -335,6 +365,11 @@ public final class Form {
         /** A Length, shown in the display units, with the unit in the field. */
         public Builder length(String property, String label) {
             return add(Kind.Length, property, label);
+        }
+
+        /** A fraction shown as a percentage: 0.05 is "5.0 %". */
+        public Builder percent(String property, String label) {
+            return add(Kind.Percent, property, label).unit("%"); //$NON-NLS-1$
         }
 
         /** An angle in degrees. */
@@ -460,6 +495,16 @@ public final class Form {
         }
 
         /**
+         * The last field is shown only while the form, as it stands on screen, satisfies the
+         * condition: one that depends on more than one field, a soft limit on an axis that is
+         * linear or limited to a range.
+         */
+        public Builder visibleIf(Predicate<FormWizard> condition) {
+            requireLast().visibleIf = condition;
+            return this;
+        }
+
+        /**
          * The last field is shown only while another field's value, as it stands on screen,
          * satisfies the condition: a method choice deciding which of its settings mean anything.
          */
@@ -484,6 +529,18 @@ public final class Form {
             return this;
         }
 
+        /**
+         * The last decimal's format, where the lengths' three places are too few: an axis's
+         * resolution of 0.0001 showed as 0.000.
+         */
+        public Builder format(String format) {
+            if (requireLast().kind != Kind.Decimal) {
+                throw new IllegalStateException("a format belongs to a decimal"); //$NON-NLS-1$
+            }
+            last.format = format;
+            return this;
+        }
+
         /** A fixed field width in pixels, for a short number that should not span the row. */
         public Builder width(int pixels) {
             requireLast().width = pixels;
@@ -492,7 +549,13 @@ public final class Form {
 
         /** The last button moves the machine, and is marked so. */
         public Builder movesMachine() {
-            requireLast().movesMachine = true;
+            // The last button beside a field when there is one, the action otherwise.
+            if (requireLast().kind != Kind.Action && !last.buttons.isEmpty()) {
+                last.buttons.get(last.buttons.size() - 1).movesMachine = true;
+            }
+            else {
+                last.movesMachine = true;
+            }
             return this;
         }
 

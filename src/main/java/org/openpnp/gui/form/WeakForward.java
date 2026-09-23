@@ -17,7 +17,7 @@
  * For more information about OpenPnP visit http://openpnp.org
  */
 
-package org.openpnp.machine.reference.wizards;
+package org.openpnp.gui.form;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -33,12 +33,12 @@ import org.openpnp.model.AbstractModelObject;
  * A form is built each time its sheet is shown: a listener that held on to it kept every one of
  * them, with its controls, for as long as the machine object lived.
  */
-final class WeakForward {
+public final class WeakForward {
     private WeakForward() {
     }
 
     /** The action, on the event thread, with the owner, while the owner is still there. */
-    static <T> void listen(AbstractModelObject source, T owner, BiConsumer<T, PropertyChangeEvent> action) {
+    public static <T> void listen(AbstractModelObject source, T owner, BiConsumer<T, PropertyChangeEvent> action) {
         WeakReference<T> reference = new WeakReference<>(owner);
         PropertyChangeListener[] self = new PropertyChangeListener[1];
         self[0] = e -> {

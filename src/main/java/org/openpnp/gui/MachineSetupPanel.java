@@ -345,14 +345,15 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         return true;
     }
 
-    private void select(PropertySheetHolder holder) {
+    private boolean select(PropertySheetHolder holder) {
         for (int i = 0; i < model.rows.size(); i++) {
             if (model.rows.get(i).node.getPropertySheetHolder() == holder) {
                 table.setRowSelectionInterval(i, i);
                 table.scrollRectToVisible(table.getCellRect(i, 0, true));
-                return;
+                return true;
             }
         }
+        return false;
     }
 
     private PropertySheetHolderTreeNode find(PropertySheetHolderTreeNode node, PropertySheetHolder holder) {
@@ -744,15 +745,19 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
                 }
             }
             rows = built;
-            fireTableDataChanged();
-            if (selected != null) {
-                revertingSelection = true;
-                try {
-                    select(selected);
-                }
-                finally {
-                    revertingSelection = false;
-                }
+            // The table drops its selection with the change: heard, that emptied the properties
+            // column, and the selection put back unheard left the row selected with nothing shown.
+            boolean kept = false;
+            revertingSelection = true;
+            try {
+                fireTableDataChanged();
+                kept = selected != null && select(selected);
+            }
+            finally {
+                revertingSelection = false;
+            }
+            if (selected != null && !kept) {
+                selectCurrentTreePath();
             }
         }
 

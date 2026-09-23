@@ -22,7 +22,6 @@
 package org.openpnp.machine.reference.axis;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.axis.wizards.ReferenceCamClockwiseAxisConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.spi.Locatable.LocationOption;
 import org.openpnp.spi.base.AbstractSingleTransformedAxis;
@@ -39,7 +38,7 @@ public class ReferenceCamClockwiseAxis extends AbstractSingleTransformedAxis {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceCamClockwiseAxisConfigurationWizard(getMachine(), this);
+        return org.openpnp.machine.reference.axis.wizards.AxisForm.camClockwise(this);
     }
 
     public ReferenceCamCounterClockwiseAxis getCounterClockwiseAxis() {

@@ -75,6 +75,8 @@ public class FormWizard extends AbstractConfigurationWizard {
     private static final int LONG_TOGGLE_WORDS = 18;
 
     private final Map<Field, MutableLocationProxy> locations = new LinkedHashMap<>();
+    private final Map<Field, javax.swing.JTextArea> liveHints = new LinkedHashMap<>();
+    private final Map<Forms.Section, List<Field>> sectionFields = new LinkedHashMap<>();
     private final Map<Field, JPanel> pipelines = new LinkedHashMap<>();
 
     FormWizard(Form.Builder spec) {
@@ -98,6 +100,7 @@ public class FormWizard extends AbstractConfigurationWizard {
             section.setCollapsed(s.collapsed);
             section.setAlignmentX(Component.LEFT_ALIGNMENT);
             contentPanel.add(section);
+            sectionFields.put(section, s.fields);
         }
         contentPanel.add(Box.createVerticalGlue());
         // Held at the column's width, where the fields give way down to their minimum and a
@@ -121,6 +124,21 @@ public class FormWizard extends AbstractConfigurationWizard {
     @Override
     public String getWizardName() {
         return spec.name;
+    }
+
+    /** A button beside a field, worded or an icon with its words on hover, marked when it moves the machine. */
+    private JButton fieldButton(Form.Button spec) {
+        JButton button = spec.label == null
+                ? Ui.iconButton(Ui.iconSm(spec.icon), Ui.Size.Sm, Ui.Variant.Default, spec.toolTip)
+                : Ui.button(spec.label, spec.icon == null ? null : Ui.iconSm(spec.icon), Ui.Size.Sm, Ui.Variant.Default);
+        if (spec.label != null && spec.toolTip != null) {
+            button.setToolTipText(spec.toolTip);
+        }
+        if (spec.movesMachine) {
+            Ui.movesMachine(button);
+        }
+        button.addActionListener(e -> spec.action.accept(this));
+        return button;
     }
 
     /** "Calibration · the step", at the right of a heading, opening the step on the calibration page. */
@@ -249,7 +267,8 @@ public class FormWizard extends AbstractConfigurationWizard {
         int firstLine = field.kind == Kind.Checklist ? 0 : 7;
         gc.anchor = tall ? GridBagConstraints.NORTHWEST : GridBagConstraints.WEST;
         gc.insets = new Insets((row == 0 ? 0 : 8) + (tall ? firstLine : 0), 0, 0, 10);
-        JLabel label = Forms.Grid.label(field.label, Tokens.FORM_LABEL);
+        // A button's own words say what it does: its row has no label, as the mockups draw it.
+        JLabel label = Forms.Grid.label(field.kind == Kind.Action ? "" : field.label, Tokens.FORM_LABEL); //$NON-NLS-1$
         boolean fullWidth = field.kind == Kind.Custom && (field.label == null || field.label.isEmpty());
         if (!fullWidth) {
             grid.add(label, gc);
@@ -261,8 +280,11 @@ public class FormWizard extends AbstractConfigurationWizard {
         gc.insets = new Insets(row == 0 ? 0 : 8, 0, 0, 0);
         grid.add(content, gc);
         JComponent hint = null;
-        if (field.hint != null && !field.hint.isEmpty()) {
-            hint = hint(field.hint);
+        if ((field.hint != null && !field.hint.isEmpty()) || field.liveHint != null) {
+            hint = hint(field.hint == null ? "" : field.hint); //$NON-NLS-1$
+            if (field.liveHint != null) {
+                liveHints.put(field, (javax.swing.JTextArea) hint);
+            }
             GridBagConstraints gh = new GridBagConstraints();
             gh.gridy = row + 1;
             gh.gridx = fullWidth ? 0 : 1;
@@ -361,6 +383,7 @@ public class FormWizard extends AbstractConfigurationWizard {
             }
             case Integer:
             case Decimal:
+            case Percent:
             case Angle:
             case Length:
                 return text(field, true);
@@ -478,11 +501,8 @@ public class FormWizard extends AbstractConfigurationWizard {
         if (field.probeLocation != null) {
             parts.add(probeButton(field, input));
         }
-        if (field.button != null) {
-            JButton button = Ui.button(field.buttonLabel,
-                    field.buttonIcon == null ? null : Ui.iconSm(field.buttonIcon), Ui.Size.Sm, Ui.Variant.Default);
-            button.addActionListener(e -> field.button.accept(this));
-            parts.add(button);
+        for (Form.Button spec : field.buttons) {
+            parts.add(fieldButton(spec));
         }
         if (field.note != null) {
             parts.add(Ui.t2(field.note));
@@ -754,11 +774,12 @@ public class FormWizard extends AbstractConfigurationWizard {
             panel.add(Box.createVerticalStrut(6));
             panel.add(row);
         }
-        if (field.button != null) {
-            JButton button = Ui.button(field.buttonLabel,
-                    field.buttonIcon == null ? null : Ui.iconSm(field.buttonIcon), Ui.Size.Sm, Ui.Variant.Default);
-            button.addActionListener(e -> field.button.accept(this));
-            JPanel row = Forms.row(button);
+        if (!field.buttons.isEmpty()) {
+            List<JComponent> buttons = new ArrayList<>();
+            for (Form.Button spec : field.buttons) {
+                buttons.add(fieldButton(spec));
+            }
+            JPanel row = Forms.row(buttons.toArray(new JComponent[0]));
             row.add(Box.createHorizontalGlue());
             panel.add(Box.createVerticalStrut(6));
             panel.add(row);
@@ -875,7 +896,11 @@ public class FormWizard extends AbstractConfigurationWizard {
                 }
                 case Decimal:
                 case Angle:
-                    addWrappedBinding(spec.bean, field.property, control, "text", decimal); //$NON-NLS-1$
+                    addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
+                            field.format == null ? decimal : new DoubleConverter(field.format));
+                    break;
+                case Percent:
+                    addWrappedBinding(spec.bean, field.property, control, "text", PERCENT); //$NON-NLS-1$
                     break;
                 case Length:
                     addWrappedBinding(spec.bean, field.property, control, "text", length); //$NON-NLS-1$
@@ -913,6 +938,19 @@ public class FormWizard extends AbstractConfigurationWizard {
             }
         }
     }
+
+    /** A fraction as a percentage, the unit beside the field: 0.05 is "5.0". */
+    private static final Converter<Double, String> PERCENT = new Converter<Double, String>() {
+        @Override
+        public String convertForward(Double value) {
+            return value == null ? "" : String.format(java.util.Locale.US, "%.1f", value * 100); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+
+        @Override
+        public Double convertReverse(String text) {
+            return Double.parseDouble(text.replace("%", "").trim()) / 100; //$NON-NLS-1$ //$NON-NLS-2$
+        }
+    };
 
     /** What a read-only field shows: enums by their display names, anything else as it prints. */
     private static final Converter<Object, String> TO_TEXT = new Converter<Object, String>() {
@@ -974,15 +1012,33 @@ public class FormWizard extends AbstractConfigurationWizard {
         boolean valid = true;
         for (Map.Entry<Field, JComponent[]> entry : rows.entrySet()) {
             Field field = entry.getKey();
-            boolean visible = field.visibleWhen == null
-                    || field.visibleWhen.test(value(field.visibleProperty));
+            boolean visible = (field.visibleWhen == null
+                    || field.visibleWhen.test(value(field.visibleProperty)))
+                    && (field.visibleIf == null || field.visibleIf.test(this));
             String message = visible ? failure(field) : null;
             JComponent[] parts = entry.getValue();
             parts[0].setVisible(visible);
             parts[1].setVisible(visible);
             parts[2].setVisible(message != null);
             if (parts[3] != null) {
-                parts[3].setVisible(visible);
+                javax.swing.JTextArea live = liveHints.get(field);
+                if (live != null) {
+                    String text;
+                    try {
+                        text = visible ? field.liveHint.apply(this) : null;
+                    }
+                    catch (Exception e) {
+                        // What is typed is not a number yet: nothing to work out.
+                        text = null;
+                    }
+                    if (text != null && !text.equals(live.getText())) {
+                        live.setText(text);
+                    }
+                    parts[3].setVisible(visible && text != null && !text.isEmpty());
+                }
+                else {
+                    parts[3].setVisible(visible);
+                }
             }
             ((JLabel) parts[2]).setText(message == null ? "" : message); //$NON-NLS-1$
             if (parts[1] instanceof JTextField) {
@@ -990,6 +1046,16 @@ public class FormWizard extends AbstractConfigurationWizard {
                         message == null ? null : FlatClientProperties.OUTLINE_ERROR);
             }
             valid &= message == null;
+        }
+        // A section none of whose fields mean anything now goes too: a linear axis's Rotation
+        // was a heading over nothing.
+        for (Map.Entry<Forms.Section, List<Field>> entry : sectionFields.entrySet()) {
+            boolean any = entry.getValue().isEmpty();
+            for (Field field : entry.getValue()) {
+                JComponent[] parts = rows.get(field);
+                any |= parts != null && parts[1].isVisible();
+            }
+            entry.getKey().setVisible(any);
         }
         if (!valid) {
             getApplyAction().setEnabled(false);

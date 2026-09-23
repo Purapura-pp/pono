@@ -32,8 +32,6 @@ import javax.swing.UIManager;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
-import org.openpnp.machine.reference.driver.wizards.ReferenceAdvancedMotionPlannerConfigurationWizard;
-import org.openpnp.machine.reference.driver.wizards.ReferenceAdvancedMotionPlannerDiagnosticsWizard;
 import org.openpnp.model.AbstractMotionPath;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.LengthUnit;
@@ -942,14 +940,14 @@ public class ReferenceAdvancedMotionPlanner extends AbstractMotionPlanner {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceAdvancedMotionPlannerConfigurationWizard(this);
+        return org.openpnp.machine.reference.driver.wizards.MotionPlannerForm.settings(this);
     }
 
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
                 new PropertySheetWizardAdapter(getConfigurationWizard(), Translations.getString("ReferenceAdvancedMotionPlanner.MotionPlanner.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new ReferenceAdvancedMotionPlannerDiagnosticsWizard(this), Translations.getString("ReferenceAdvancedMotionPlanner.MotionPlannerDiagnostics.title")), //$NON-NLS-1$
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.driver.wizards.MotionPlannerForm.diagnostics(this)),
         };
     }
 

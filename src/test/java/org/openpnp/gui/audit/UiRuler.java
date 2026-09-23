@@ -444,6 +444,12 @@ public class UiRuler {
             { "nozzletip-background", "\u5438\u5634\u5934 NT1 \u80cc\u666f", "NT1", "\u80cc\u666f" },
             { "nozzletip-detect", "\u5438\u5634\u5934 NT1 \u5143\u4ef6\u68c0\u6d4b", "NT1", "\u5143\u4ef6\u68c0\u6d4b" },
             { "nozzletip-changer", "\u5438\u5634\u5934 NT1 \u6362\u5634", "NT1", "\u6362\u5634" },
+            { "axis-x", "\u8f74 x", "x", null },
+            { "axis-x-backlash", "\u8f74 x \u53cd\u5411\u95f4\u9699", "x", "\u53cd\u5411\u95f4\u9699" },
+            { "axis-rotation", "\u8f74 rotationN1", "rotationN1", null },
+            { "axis-virtual", "\u8f74 zTop", "zTop", null },
+            { "machine-planner", "\u8fd0\u52a8\u89c4\u5212", "#machine", "\u8fd0\u52a8\u89c4\u5212" },
+            { "machine-planner-diag", "\u8fd0\u52a8\u89c4\u5212\u8bca\u65ad", "#machine", "\u8bca\u65ad" },
     };
 
     private static String[] machineScene(String id) {
@@ -461,6 +467,14 @@ public class UiRuler {
         String[] extra = machineScene(scene.id);
         if (extra != null && extra[3] != null) {
             expect(missed, selectTab(frame.getInspector(), extra[3]), "\u300c" + extra[3] + "\u300d\u9875\u7b7e");
+        }
+        else if (extra != null) {
+            // The inspector reopens the tab last open for this kind: the element's own is the first.
+            for (javax.swing.JTabbedPane tabs : showing(frame.getInspector(), javax.swing.JTabbedPane.class)) {
+                if (tabs.getTabCount() > 0) {
+                    tabs.setSelectedIndex(0);
+                }
+            }
         }
         return missed;
     }
@@ -551,7 +565,7 @@ public class UiRuler {
             findings.add(new UiAudit.Finding(UiAudit.Check.SceneSetup, scene.label, label,
                     scene.label + "\u9875", "\u6ca1\u627e\u5230" + what));
         }
-        if (machineScene(scene.id) != null && machineScene(scene.id)[3] != null) {
+        if (machineScene(scene.id) != null) {
             settle(1000);
         }
         closeStrayDialogs(scene.label);
@@ -909,7 +923,7 @@ public class UiRuler {
         if (name.equals("#jobs")) {
             return setup.selectPropertySheetHolder(machine.getPnpJobProcessor());
         }
-        java.util.List<org.openpnp.spi.PropertySheetHolder> holders = new ArrayList<>();
+        java.util.List<org.openpnp.spi.PropertySheetHolder> holders = new ArrayList<>(machine.getAxes());
         for (org.openpnp.spi.Head head : machine.getHeads()) {
             holders.add(head);
             holders.addAll(head.getNozzles());

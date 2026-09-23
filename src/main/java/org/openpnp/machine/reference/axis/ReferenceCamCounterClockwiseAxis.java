@@ -22,7 +22,6 @@
 package org.openpnp.machine.reference.axis;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.axis.wizards.ReferenceCamCounterClockwiseAxisConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -82,7 +81,7 @@ public class ReferenceCamCounterClockwiseAxis extends AbstractSingleTransformedA
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceCamCounterClockwiseAxisConfigurationWizard(getMachine(), this);
+        return org.openpnp.machine.reference.axis.wizards.AxisForm.camCounterClockwise(this);
     }
 
     @Override
