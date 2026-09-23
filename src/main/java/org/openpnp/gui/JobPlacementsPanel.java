@@ -198,6 +198,10 @@ public class JobPlacementsPanel extends JPanel {
                 return null;
             }
         };
+        // Enter edits the cell, Delete removes the selected placements, which asks first.
+        org.openpnp.gui.support.TableUtils.bindKeys(table, removeAction);
+        org.openpnp.gui.components.AutoSelectTextTable.setEmptyText(table,
+                Translations.getString("JobPlacementsPanel.Empty")); //$NON-NLS-1$
         table.setRowSorter(tableSorter);
         table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
@@ -358,7 +362,7 @@ public class JobPlacementsPanel extends JPanel {
         toolbar.iconButton(editPlacementFeederAction, "feeder"); //$NON-NLS-1$
         toolbar.glue();
         searchTextField = toolbar.filter(
-                Translations.getString("JobPlacementsPanel.Filter.Placeholder"), this); //$NON-NLS-1$
+                Translations.getString("JobPlacementsPanel.Filter.Placeholder")); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -630,7 +634,13 @@ public class JobPlacementsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            for (Placement placement : getSelections()) {
+            List<Placement> selections = getSelections();
+            if (selections.isEmpty() || !org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
+                    "Dialogs.Kind.Placements", //$NON-NLS-1$
+                    selections.stream().map(Placement::getId).collect(java.util.stream.Collectors.toList()))) {
+                return;
+            }
+            for (Placement placement : selections) {
                 boardOrPanelLocation.getPlacementsHolder().getDefinition().removePlacement((Placement) placement.getDefinition());
             }
             configuration.getBus()

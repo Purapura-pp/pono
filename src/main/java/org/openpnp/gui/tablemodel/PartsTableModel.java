@@ -34,7 +34,6 @@ import org.openpnp.model.Length;
 import org.openpnp.model.Package;
 import org.openpnp.model.Part;
 import org.openpnp.util.Collect;
-import org.pmw.tinylog.Logger;
 
 @SuppressWarnings("serial")
 public class PartsTableModel extends AbstractObjectTableModel implements PropertyChangeListener {
@@ -139,9 +138,7 @@ public class PartsTableModel extends AbstractObjectTableModel implements Propert
             configuration.setDirty(true);
         }
         catch (Exception e) {
-            // TODO: dialog, bad input
-            Logger.warn(e, "Failed to apply the edit of column {}, the value was discarded.",
-                    getColumnName(columnIndex));
+            org.openpnp.gui.support.TableUtils.rejected(this, columnIndex, aValue, e);
         }
     }
 

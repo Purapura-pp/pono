@@ -20,8 +20,11 @@
 package org.openpnp.gui.support;
 
 import java.awt.Component;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeEvent;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -31,12 +34,18 @@ import java.util.Map;
 import java.util.Set;
 import java.util.prefs.Preferences;
 
+import javax.swing.BorderFactory;
 import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
+import javax.swing.KeyStroke;
+import javax.swing.Popup;
+import javax.swing.PopupFactory;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.TableModelEvent;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.JTableHeader;
@@ -44,9 +53,12 @@ import javax.swing.table.TableCellRenderer;
 import javax.swing.table.TableColumn;
 import javax.swing.table.TableColumnModel;
 
+import org.openpnp.Translations;
+import org.openpnp.gui.shell.ErrorMessages;
 import org.openpnp.gui.shell.Tokens;
 import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.tablemodel.ColumnAlignable;
+import org.pmw.tinylog.Logger;
 
 /**
  * The tables' common behaviour: alignment, the header, widths by content, hidden columns.
@@ -247,6 +259,123 @@ public class TableUtils {
         });
         table.addPropertyChangeListener("model", (PropertyChangeEvent e) -> SwingUtilities.invokeLater(fit)); //$NON-NLS-1$
         SwingUtilities.invokeLater(fit);
+    }
+
+    /**
+     * The keys a table is worked with: Enter edits the selected cell where it can be edited,
+     * Delete runs the page's delete, which asks first. Enter used to move to the next row and
+     * Delete did nothing.
+     * 
+     * @param delete The page's delete action, or null for a table nothing is deleted from.
+     */
+    public static void bindKeys(JTable table, javax.swing.Action delete) {
+        javax.swing.InputMap keys = table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+        javax.swing.Action nextRow = table.getActionMap().get(keys.get(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0)));
+        keys.put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "pono.edit"); //$NON-NLS-1$
+        table.getActionMap().put("pono.edit", new javax.swing.AbstractAction() { //$NON-NLS-1$
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                int row = table.getSelectedRow();
+                int column = table.getColumnModel().getSelectionModel().getLeadSelectionIndex();
+                if (row >= 0 && (column < 0 || column >= table.getColumnCount()
+                        || !table.isCellEditable(row, column))) {
+                    // The cell selected cannot be edited: the first one along the row that can.
+                    column = -1;
+                    for (int c = 0; c < table.getColumnCount() && column < 0; c++) {
+                        if (table.isCellEditable(row, c)) {
+                            column = c;
+                        }
+                    }
+                }
+                if (row >= 0 && column >= 0) {
+                    table.editCellAt(row, column, e);
+                    Component editor = table.getEditorComponent();
+                    if (editor != null) {
+                        editor.requestFocusInWindow();
+                    }
+                }
+                else if (nextRow != null) {
+                    nextRow.actionPerformed(e);
+                }
+            }
+        });
+        if (delete != null) {
+            keys.put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "pono.delete"); //$NON-NLS-1$
+            table.getActionMap().put("pono.delete", new javax.swing.AbstractAction() { //$NON-NLS-1$
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    if (delete.isEnabled() && table.getSelectedRowCount() > 0 && !table.isEditing()) {
+                        delete.actionPerformed(e);
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * For a table model whose setValueAt refused a value. The value used to be dropped with only a
+     * line in the log, so the cell went back to what it was and nobody knew why; now the cell
+     * says so, under itself, for a few seconds.
+     */
+    public static void rejected(javax.swing.table.TableModel model, int column, Object value, Exception e) {
+        Logger.warn(e, "Failed to apply the edit of column {}, the value was discarded.", //$NON-NLS-1$
+                model.getColumnName(column));
+        String reason = rejection(value, e);
+        Component focus = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        JTable table = focus instanceof JTable ? (JTable) focus
+                : (JTable) SwingUtilities.getAncestorOfClass(JTable.class, focus);
+        // The table edits the cell until setValueAt returns, so it still knows which cell it was.
+        if (table != null && table.getModel() == model && table.isEditing()) {
+            int row = table.getEditingRow();
+            int viewColumn = table.getEditingColumn();
+            SwingUtilities.invokeLater(() -> showRejection(table, row, viewColumn, reason));
+        }
+        else {
+            java.awt.Toolkit.getDefaultToolkit().beep();
+        }
+    }
+
+    /** Why a value was refused, in the words the user needs: a number, mostly. */
+    static String rejection(Object value, Throwable e) {
+        if (e instanceof NumberFormatException) {
+            return String.format(Translations.getString("Table.InvalidValue.Number"), value); //$NON-NLS-1$
+        }
+        String message = e.getMessage();
+        if (message == null || message.trim().isEmpty()) {
+            message = e.getClass().getSimpleName();
+        }
+        return String.format(Translations.getString("Table.InvalidValue"), //$NON-NLS-1$
+                ErrorMessages.explain(null, message).what);
+    }
+
+    private static Popup rejectionPopup;
+    private static final Timer rejectionTimer = new Timer(4000, e -> hideRejection());
+
+    private static void showRejection(JTable table, int row, int column, String reason) {
+        hideRejection();
+        if (!table.isShowing() || row >= table.getRowCount() || column >= table.getColumnCount()) {
+            return;
+        }
+        JLabel label = new JLabel(reason, Ui.iconSm("alert"), SwingConstants.LEADING); //$NON-NLS-1$
+        label.setOpaque(true);
+        label.setBackground(Ui.surface());
+        label.setForeground(Ui.text());
+        label.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Ui.err()), BorderFactory.createEmptyBorder(5, 8, 5, 8)));
+        Rectangle cell = table.getCellRect(row, column, true);
+        Point at = new Point(cell.x, cell.y + cell.height + 2);
+        SwingUtilities.convertPointToScreen(at, table);
+        rejectionPopup = PopupFactory.getSharedInstance().getPopup(table, label, at.x, at.y);
+        rejectionPopup.show();
+        rejectionTimer.setRepeats(false);
+        rejectionTimer.restart();
+    }
+
+    private static void hideRejection() {
+        if (rejectionPopup != null) {
+            rejectionPopup.hide();
+            rejectionPopup = null;
+        }
     }
 
     /** As installColumnWidthSavers, unless the table already has its widths looked after. */

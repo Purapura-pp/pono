@@ -108,7 +108,7 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         JLabel lblSearch = new JLabel(Translations.getString("MachineSetupPanel.SearchLabel.text")); //$NON-NLS-1$
         panel_1.add(lblSearch);
 
-        searchTextField = new JTextField();
+        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {

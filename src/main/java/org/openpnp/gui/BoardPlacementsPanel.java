@@ -359,7 +359,7 @@ public class BoardPlacementsPanel extends JPanel {
         JLabel lblNewLabel = new JLabel(Translations.getString("BoardsPanel.BoardPlacements.Placements.Search")); //$NON-NLS-1$
         panel_1.add(lblNewLabel);
 
-        searchTextField = new JTextField();
+        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -530,7 +530,13 @@ public class BoardPlacementsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            for (Placement placement : getSelections()) {
+            List<Placement> selections = getSelections();
+            if (selections.isEmpty() || !org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
+                    "Dialogs.Kind.Placements", //$NON-NLS-1$
+                    selections.stream().map(Placement::getId).collect(java.util.stream.Collectors.toList()))) {
+                return;
+            }
+            for (Placement placement : selections) {
                 board.removePlacement(placement);
             }
             tableModel.fireTableDataChanged();
@@ -569,19 +575,16 @@ public class BoardPlacementsPanel extends JPanel {
                     //          don't match any in the existing set are added 
                     //Option 1: Import after deleting all existing placements
                     //Option 2: Cancel the import
-                    Object[] options = {
-                            Translations.getString("BoardsPanel.BoardPlacements.Importer.OptionsBox.Merge"), //$NON-NLS-1$
-                            Translations.getString("BoardsPanel.BoardPlacements.Importer.OptionsBox.Replace"), //$NON-NLS-1$
-                            Translations.getString("General.Cancel")}; //$NON-NLS-1$
-                    importOption = JOptionPane.showOptionDialog((Frame) getTopLevelAncestor(),
-                            Translations.getString("BoardsPanel.BoardPlacements.Importer.OptionsBox.Question"), //$NON-NLS-1$
-                            Translations.getString("BoardsPanel.BoardPlacements.Importer.OptionsBox.Title"), //$NON-NLS-1$
-                            JOptionPane.YES_NO_CANCEL_OPTION,
-                            JOptionPane.QUESTION_MESSAGE,
-                            null,
-                            options,
-                            options[2]);
-                    if (importOption == 2 || importOption == JOptionPane.CLOSED_OPTION) {
+                    importOption = org.openpnp.gui.shell.Dialogs.ask(getTopLevelAncestor(),
+                            org.openpnp.gui.shell.Dialogs.Tone.Warn, "alert", //$NON-NLS-1$
+                            Translations.getString("BoardsPanel.BoardPlacements.Importer.Ask.Title"), //$NON-NLS-1$
+                            Translations.getString("BoardsPanel.BoardPlacements.Importer.Ask.What"), //$NON-NLS-1$
+                            Translations.getString("BoardsPanel.BoardPlacements.Importer.Ask.More"), //$NON-NLS-1$
+                            org.openpnp.gui.shell.Dialogs.Choice.plain(
+                                    Translations.getString("BoardsPanel.BoardPlacements.Importer.OptionsBox.Merge")), //$NON-NLS-1$
+                            org.openpnp.gui.shell.Dialogs.Choice.danger(
+                                    Translations.getString("BoardsPanel.BoardPlacements.Importer.Ask.Replace"))); //$NON-NLS-1$
+                    if (importOption < 0) {
                         return;
                     }
                 }

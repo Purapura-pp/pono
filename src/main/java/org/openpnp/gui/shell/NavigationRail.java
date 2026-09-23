@@ -142,6 +142,17 @@ public class NavigationRail extends JPanel {
         }
     }
 
+    /** A page whose item stands at the foot of the rail, as settings does. */
+    public void addFootPage(String label, String toolTip, Icon icon, Component page, Component view) {
+        RailButton button = new RailButton(label, toolTip, icon, page);
+        button.card = String.valueOf(buttons.size());
+        buttons.put(page, button);
+        group.add(button);
+        foot.add(button);
+        add(button);
+        pages.add(view, button.card);
+    }
+
     /** The stylesheet's {@code .sep}: a 32 pixel rule between the groups above and below it. */
     public void addGap() {
         JComponent rule = new Rule();

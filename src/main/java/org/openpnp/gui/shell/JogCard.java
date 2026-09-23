@@ -219,6 +219,7 @@ public class JogCard extends OverlayCard {
         home.addActionListener(e -> controls.homeAction.actionPerformed(e));
         controls.homeAction.addPropertyChangeListener(e -> home.setEnabled(controls.homeAction.isEnabled()));
         home.setEnabled(controls.homeAction.isEnabled());
+        Ui.whyDisabled(home, this::machineReason);
         head.add(home);
         JButton moreButton = Ui.iconButton(Ui.icon("more"), Ui.Size.Sm, Ui.Variant.Default, //$NON-NLS-1$
                 Translations.getString("JogCard.More")); //$NON-NLS-1$
@@ -415,9 +416,14 @@ public class JogCard extends OverlayCard {
         return row;
     }
 
+    /** Why the keys are greyed: what the machine lacks for moving. */
+    private String machineReason() {
+        return Ui.machineReason(configuration.getMachine());
+    }
+
     /** A 40 pixel jog key: 9 pixel arc, surface-2 on a strong border, one icon. */
-    private static JButton key(Action action, String icon) {
-        JButton key = new JButton(action);
+    private JButton key(Action action, String icon) {
+        JButton key = Ui.whyDisabled(new Ui.Button(action), this::machineReason);
         key.setHideActionText(true);
         key.setIcon(Ui.icon(icon));
         key.setFocusable(false);
@@ -448,8 +454,8 @@ public class JogCard extends OverlayCard {
     }
 
     /** The "P" key between an axis's two arrows: park it. 26 high, as the stylesheet's. */
-    private static JButton parkKey(Action action) {
-        JButton key = new JButton(action);
+    private JButton parkKey(Action action) {
+        JButton key = Ui.whyDisabled(new Ui.Button(action), this::machineReason);
         key.setHideActionText(true);
         key.setIcon(null);
         key.setText("P"); //$NON-NLS-1$
@@ -497,8 +503,10 @@ public class JogCard extends OverlayCard {
         return column;
     }
 
-    private static JButton footButton(String text, Action action) {
+    private JButton footButton(String text, Action action) {
         JButton button = Ui.button(text, null, Ui.Size.Xs, Ui.Variant.Default);
+        // They move the machine: no focus stop for a stray space bar.
+        button.setFocusable(false);
         // Five across 320 pixels leaves 59 each; the sheet's 8 pixel padding does not fit CJK text.
         button.putClientProperty(FlatClientProperties.STYLE,
                 button.getClientProperty(FlatClientProperties.STYLE) + "; margin: 0,3,0,3"); //$NON-NLS-1$
@@ -506,7 +514,7 @@ public class JogCard extends OverlayCard {
         button.addActionListener(e -> action.actionPerformed(e));
         action.addPropertyChangeListener(e -> button.setEnabled(action.isEnabled()));
         button.setEnabled(action.isEnabled());
-        return button;
+        return Ui.whyDisabled(button, this::machineReason);
     }
 
     private static String escape(String text) {

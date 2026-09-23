@@ -61,11 +61,18 @@ public class CommandPalette extends JDialog {
         final String path;
         final String name;
         final Runnable run;
+        /** Null while the command can be run; otherwise why not, shown greyed after its name. */
+        final String unavailable;
 
         public Command(String path, String name, Runnable run) {
+            this(path, name, run, null);
+        }
+
+        public Command(String path, String name, Runnable run, String unavailable) {
             this.path = path;
             this.name = name;
             this.run = run;
+            this.unavailable = unavailable;
         }
 
         @Override
@@ -132,6 +139,39 @@ public class CommandPalette extends JDialog {
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setVisibleRowCount(10);
         list.setFont(Ui.font(Ui.BASE));
+        // A command that cannot run now is listed greyed, with why, rather than left out: leaving
+        // it out made it look as if the program had no such command.
+        list.setCellRenderer(new javax.swing.DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> l, Object value, int index,
+                    boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(l, value, index, isSelected, cellHasFocus);
+                Command command = (Command) value;
+                if (command.unavailable != null) {
+                    java.awt.Color muted = Ui.muted();
+                    setText("<html>" + escape(command.toString()) + "&nbsp;&nbsp;<span style='color:" //$NON-NLS-1$ //$NON-NLS-2$
+                            + String.format("#%06x", muted.getRGB() & 0xffffff) + "'>" //$NON-NLS-1$ //$NON-NLS-2$
+                            + escape(command.unavailable) + "</span></html>"); //$NON-NLS-1$
+                    setForeground(isSelected ? getForeground() : Ui.muted());
+                }
+                return this;
+            }
+        });
+        // Escape closes wherever the focus is, and so does going to another window.
+        getRootPane().getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "pono.close"); //$NON-NLS-1$
+        getRootPane().getActionMap().put("pono.close", new javax.swing.AbstractAction() { //$NON-NLS-1$
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dispose();
+            }
+        });
+        addWindowFocusListener(new java.awt.event.WindowAdapter() {
+            @Override
+            public void windowLostFocus(java.awt.event.WindowEvent e) {
+                dispose();
+            }
+        });
         list.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -164,10 +204,19 @@ public class CommandPalette extends JDialog {
 
     private void runSelected() {
         Command command = list.getSelectedValue();
+        if (command != null && command.unavailable != null) {
+            // Greyed: stays open, the reason already on the line.
+            java.awt.Toolkit.getDefaultToolkit().beep();
+            return;
+        }
         dispose();
         if (command != null) {
             command.run.run();
         }
+    }
+
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
     }
 
     /** Every enabled item of the menu bar, named by its menu path. */
@@ -189,8 +238,14 @@ public class CommandPalette extends JDialog {
             }
             else if (child instanceof JMenuItem) {
                 JMenuItem item = (JMenuItem) child;
-                if (item.getText() != null && !item.getText().isEmpty() && item.isEnabled()) {
-                    into.add(new Command(path, item.getText(), () -> item.doClick()));
+                if (item.getText() != null && !item.getText().isEmpty()) {
+                    String reason = null;
+                    if (!item.isEnabled()) {
+                        reason = item.getToolTipText() != null && !item.getToolTipText().isEmpty()
+                                ? item.getToolTipText()
+                                : Translations.getString("CommandPalette.Unavailable"); //$NON-NLS-1$
+                    }
+                    into.add(new Command(path, item.getText(), () -> item.doClick(), reason));
                 }
             }
         }

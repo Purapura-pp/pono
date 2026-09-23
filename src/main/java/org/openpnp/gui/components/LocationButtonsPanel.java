@@ -467,10 +467,15 @@ public class LocationButtonsPanel extends JPanel {
             int result = JOptionPane.YES_OPTION;
             if (isContactProbeReference()) {
                 /// Warn the user.
-                result = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                        Translations.getString( //$NON-NLS-1$
-                                "LocationButtonsPanel.OverwriteZReference.Confirm"),
-                                null, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                result = org.openpnp.gui.shell.Dialogs.ask(getTopLevelAncestor(),
+                        org.openpnp.gui.shell.Dialogs.Tone.Warn, "alert", //$NON-NLS-1$
+                        Translations.getString("LocationButtonsPanel.OverwriteZReference.Title"), //$NON-NLS-1$
+                        Translations.getString("LocationButtonsPanel.OverwriteZReference.What"), //$NON-NLS-1$
+                        Translations.getString("LocationButtonsPanel.OverwriteZReference.More"), //$NON-NLS-1$
+                        new org.openpnp.gui.shell.Dialogs.Choice(
+                                Translations.getString("LocationButtonsPanel.OverwriteZReference.Action"), //$NON-NLS-1$
+                                null, org.openpnp.gui.shell.Ui.Variant.SolidDanger).movesMachine()) == 0
+                        ? JOptionPane.YES_OPTION : JOptionPane.NO_OPTION;
             }
             if (result == JOptionPane.YES_OPTION) {
                 UiUtils.submitUiMachineTask(() -> {

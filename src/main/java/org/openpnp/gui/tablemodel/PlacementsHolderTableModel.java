@@ -31,7 +31,6 @@ import org.openpnp.model.PlacementsHolder;
 import org.openpnp.model.Length;
 import org.openpnp.model.Location;
 import org.openpnp.model.Panel;
-import org.pmw.tinylog.Logger;
 
 @SuppressWarnings("serial")
 public class PlacementsHolderTableModel extends AbstractObjectTableModel implements ColumnAlignable, ColumnWidthSaveable {
@@ -131,9 +130,7 @@ public class PlacementsHolderTableModel extends AbstractObjectTableModel impleme
             }
         }
         catch (Exception e) {
-            // TODO: dialog, bad input
-            Logger.warn(e, "Failed to apply the edit of column {}, the value was discarded.",
-                    getColumnName(columnIndex));
+            org.openpnp.gui.support.TableUtils.rejected(this, columnIndex, aValue, e);
         }
     }
 

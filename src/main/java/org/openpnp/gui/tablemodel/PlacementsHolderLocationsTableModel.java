@@ -30,7 +30,6 @@ import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.model.Abstract2DLocatable;
 import org.openpnp.model.Abstract2DLocatable.Side;
-import org.pmw.tinylog.Logger;
 
 import com.google.common.eventbus.Subscribe;
 
@@ -319,9 +318,7 @@ public class PlacementsHolderLocationsTableModel extends AbstractObjectTableMode
             }
         }
         catch (Exception e) {
-            // TODO: dialog, bad input
-            Logger.warn(e, "Failed to apply the edit of column {}, the value was discarded.",
-                    getColumnName(columnIndex));
+            org.openpnp.gui.support.TableUtils.rejected(this, columnIndex, aValue, e);
         }
     }
 

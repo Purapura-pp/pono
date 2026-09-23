@@ -728,19 +728,17 @@ public class JobPanel extends JPanel {
             String name = (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName());
             // The buttons say what they do. Yes / No / Cancel made No the button that throws the
             // changes away, one place over from the one that keeps them.
-            String save = Translations.getString("Dialog.Save"); //$NON-NLS-1$
-            String discard = Translations.getString("Dialog.DontSave"); //$NON-NLS-1$
-            String cancel = Translations.getString("Dialog.Cancel"); //$NON-NLS-1$
-            int result = JOptionPane.showOptionDialog(mainFrame,
-                    Translations.getString("JobPanel.CheckForModifications.Dialog.Question") + "\n" //$NON-NLS-1$ //$NON-NLS-2$
-                            + Translations.getString("JobPanel.CheckForModifications.Dialog.Message"), //$NON-NLS-1$
-                    Translations.getString("JobPanel.CheckForModifications.Dialog.Title") //$NON-NLS-1$
-                    + " - " + name, JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, //$NON-NLS-1$
-                    null, new Object[] { save, discard, cancel }, save);
-            if (result == 0) {
+            int result = org.openpnp.gui.shell.Dialogs.ask(mainFrame, org.openpnp.gui.shell.Dialogs.Tone.Warn,
+                    "save", //$NON-NLS-1$
+                    Translations.getString("JobPanel.CheckForModifications.Dialog.Title") + " \u00b7 " + name, //$NON-NLS-1$ //$NON-NLS-2$
+                    Translations.getString("JobPanel.CheckForModifications.Dialog.Question"), //$NON-NLS-1$
+                    Translations.getString("JobPanel.CheckForModifications.Dialog.Message"), //$NON-NLS-1$
+                    org.openpnp.gui.shell.Dialogs.Choice.plain(Translations.getString("Dialog.DontSave")), //$NON-NLS-1$
+                    org.openpnp.gui.shell.Dialogs.Choice.primary(Translations.getString("Dialog.Save"))); //$NON-NLS-1$
+            if (result == 1) {
                 return saveJob();
             }
-            else if (result != 1) {
+            else if (result != 0) {
                 // Cancel, or the dialog closed.
                 return false;
             }
@@ -789,11 +787,11 @@ public class JobPanel extends JPanel {
             }
             File file = new File(new File(fileDialog.getDirectory()), filename);
             if (file.exists()) {
-                int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
+                // Overwriting a file is one of the dangerous things: named, red, Cancel first.
+                if (!org.openpnp.gui.shell.Dialogs.confirmDanger(getTopLevelAncestor(),
+                        Translations.getString("JobPanel.SaveJobAs.ConfirmDialog.Question"), //$NON-NLS-1$
                         file.getName() + Translations.getString("JobPanel.SaveJobAs.ConfirmDialog.Title"), //$NON-NLS-1$
-                        Translations.getString("JobPanel.SaveJobAs.ConfirmDialog.Question"),  //$NON-NLS-1$
-                        JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                if (ret != JOptionPane.YES_OPTION) {
+                        null, null, Translations.getString("JobPanel.SaveJobAs.Replace"))) { //$NON-NLS-1$
                     return false;
                 }
             }
@@ -863,12 +861,26 @@ public class JobPanel extends JPanel {
             deferErrorsAction.putValue(AbstractAction.SHORT_DESCRIPTION, Translations.getString("JobPanel.Action.Job.ErrorAlert.Description")); //$NON-NLS-1$
         }
 
+        // Why each is greyed, for its tooltip: the state as it stands, then the machine.
+        String stateReason = state == State.Pausing ? Translations.getString("JobPanel.Disabled.Pausing") //$NON-NLS-1$
+                : state == State.Stopping ? Translations.getString("JobPanel.Disabled.Stopping") //$NON-NLS-1$
+                : null;
+        startPauseResumeJobAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, stateReason);
+        stopJobAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, stateReason != null ? stateReason
+                : Translations.getString("JobPanel.Disabled.NotRunning")); //$NON-NLS-1$
+        stepJobAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, stateReason != null ? stateReason
+                : Translations.getString("JobPanel.Disabled.StepWhileRunning")); //$NON-NLS-1$
+
         // We allow the above to run first so that all state is represented
         // correctly even if the machine is disabled.
         if (!configuration.getMachine().isEnabled()) {
             startPauseResumeJobAction.setEnabled(false);
             stopJobAction.setEnabled(false);
             stepJobAction.setEnabled(false);
+            String machineOff = Translations.getString("Ui.Disabled.MachineOff"); //$NON-NLS-1$
+            startPauseResumeJobAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, machineOff);
+            stopJobAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, machineOff);
+            stepJobAction.putValue(org.openpnp.gui.shell.Ui.WHY_DISABLED, machineOff);
         }
     }
 
@@ -922,13 +934,8 @@ public class JobPanel extends JPanel {
             if (!checkForModifications()) {
                 return;
             }
-            FileDialog fileDialog = new FileDialog(mainFrame);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".job.xml"); //$NON-NLS-1$
-                }
-            });
+            FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(mainFrame),
+                    Translations.getString("JobPanel.OpenJob.FileDialog.Title"), ".job.xml"); //$NON-NLS-1$ //$NON-NLS-2$
             fileDialog.setVisible(true);
             try {
                 if (fileDialog.getFile() == null) {
@@ -997,11 +1004,19 @@ public class JobPanel extends JPanel {
     public void jobStart() throws Exception {
         jobProcessor = configuration.getMachine().getPnpJobProcessor();
         if (isAllPlaced()) {
-            int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                    Translations.getString("JobPanel.JobStart.ResetPlacements.ConfirmDialog.Question"), //$NON-NLS-1$
-                    Translations.getString("JobPanel.JobStart.ResetPlacements.ConfirmDIalog.Title"), JOptionPane.YES_NO_OPTION, //$NON-NLS-1$
-                    JOptionPane.WARNING_MESSAGE);
-            if (ret == JOptionPane.YES_OPTION) {
+            // Everything is placed already: start over, start as it is, or not start at all.
+            int ret = org.openpnp.gui.shell.Dialogs.ask(getTopLevelAncestor(),
+                    org.openpnp.gui.shell.Dialogs.Tone.Warn, "play", //$NON-NLS-1$
+                    Translations.getString("JobPanel.JobStart.ResetPlacements.ConfirmDIalog.Title"), //$NON-NLS-1$
+                    Translations.getString("JobPanel.JobStart.ResetPlacements.ConfirmDialog.Question"), null, //$NON-NLS-1$
+                    org.openpnp.gui.shell.Dialogs.Choice.plain(
+                            Translations.getString("JobPanel.JobStart.ResetPlacements.StartAsItIs")), //$NON-NLS-1$
+                    org.openpnp.gui.shell.Dialogs.Choice.primary(
+                            Translations.getString("JobPanel.JobStart.ResetPlacements.ResetAndStart")).movesMachine()); //$NON-NLS-1$
+            if (ret < 0) {
+                return;
+            }
+            if (ret == 1) {
                 job.removeAllPlacedStatus();
                 jobPlacementsPanel.refresh();
             }

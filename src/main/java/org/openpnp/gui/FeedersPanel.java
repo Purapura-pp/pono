@@ -162,7 +162,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         toolBar.add(scopeBox);
         toolBar.glue();
         searchTextField = toolBar.filter(
-                Translations.getString("FeedersPanel.Filter.Placeholder"), this); //$NON-NLS-1$
+                Translations.getString("FeedersPanel.Filter.Placeholder")); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -183,6 +183,12 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         JComboBox<Type> priorityComboBox = new JComboBox(ReferenceFeeder.Priority.values());
 
 		table = new AutoSelectTextTable(tableModel);
+
+		// Enter edits the cell, Delete deletes what is selected, which asks first.
+
+		org.openpnp.gui.support.TableUtils.bindKeys(table, deleteFeederAction);
+		org.openpnp.gui.components.AutoSelectTextTable.setEmptyText(table,
+		        Translations.getString("FeedersPanel.Empty")); //$NON-NLS-1$
 		table.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer() {
 			// cells are grayed if the feeder is not used by any enabled placement.
 			@Override
@@ -598,21 +604,12 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         @Override
         public void actionPerformed(ActionEvent arg0) {
             List<Feeder> selections = getSelections();
-            List<String> ids = selections.stream().map(Feeder::getName).collect(Collectors.toList());
-            String formattedIds;
-            if (ids.size() <= 3) {
-                formattedIds = String.join(", ", ids);
-            }
-            else {
-                formattedIds = String.join(", ", ids.subList(0, 3)) + ", and " + (ids.size() - 3) + " others";
-            }
-            
-            int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                    Translations.getString("DialogMessages.ConfirmDelete.text") + " " + formattedIds + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    Translations.getString("DialogMessages.ConfirmDelete.title") + " " + //$NON-NLS-1$ //$NON-NLS-2$
-                            selections.size() + " " + Translations.getString("CommonWords.feeders") + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    JOptionPane.YES_NO_OPTION);
-            if (ret == JOptionPane.YES_OPTION) {
+            // "F-13 · C0402-100N": the name, and the part it carries, which is how feeders are told apart.
+            List<String> ids = selections.stream()
+                    .map(f -> f.getPart() == null ? f.getName() : f.getName() + " \u00b7 " + f.getPart().getId()) //$NON-NLS-1$
+                    .collect(Collectors.toList());
+            if (org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
+                    "Dialogs.Kind.Feeders", ids)) { //$NON-NLS-1$
                 for (Feeder feeder : selections) {
                     configuration.getMachine().removeFeeder(feeder);
                     tableModel.refresh();

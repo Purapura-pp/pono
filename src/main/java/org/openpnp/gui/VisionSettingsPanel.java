@@ -84,6 +84,12 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
         tableSorter = new TableRowSorter<>(tableModel);
 
         table = new AutoSelectTextTable(tableModel);
+
+        // Enter edits the cell, Delete deletes what is selected, which asks first.
+
+        org.openpnp.gui.support.TableUtils.bindKeys(table, deleteSettingsAction);
+        org.openpnp.gui.components.AutoSelectTextTable.setEmptyText(table,
+                Translations.getString("VisionSettingsPanel.Empty")); //$NON-NLS-1$
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
 
         table.setRowSorter(tableSorter);
@@ -289,22 +295,11 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
                 return;
             }
 
-            List<String> names = selections.stream().map(AbstractVisionSettings::getName).collect(Collectors.toList());
-            String formattedNames;
-            if (names.size() <= 10) {
-                formattedNames = String.join(", ", names);
-            } else {
-                formattedNames = String.join(", ", names.subList(0, 5)) + ", and " + (names.size() - 5) + " others";
-            }
-
-            int ret = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                    Translations.getString("DialogMessages.ConfirmDelete.text") //$NON-NLS-1$
-                            + " " + formattedNames + "?", //$NON-NLS-1$ //$NON-NLS-2$
-                    Translations.getString("DialogMessages.ConfirmDelete.title") //$NON-NLS-1$
-                            + " " + selections.size() + " " + Translations.getString("CommonPhrases.visionSettings") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                            + "?", //$NON-NLS-1$
-                    JOptionPane.YES_NO_OPTION);
-            if (ret == JOptionPane.YES_OPTION) {
+            List<String> names = selections.stream()
+                    .map(s -> org.openpnp.gui.support.DisplayNames.visionSettingsName(s.getName()))
+                    .collect(Collectors.toList());
+            if (org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
+                    "Dialogs.Kind.VisionSettings", names)) { //$NON-NLS-1$
                 for (AbstractVisionSettings visionSettings : selections) {
                     configuration.removeVisionSettings(visionSettings);
                 }

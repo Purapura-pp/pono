@@ -257,15 +257,18 @@ public class PropertySheetPresenter {
 
         @Override
         public Choice ask(String name) {
-            int selection = JOptionPane.showConfirmDialog(parent,
+            // Buttons that say what they do, where Yes, No and Cancel left No to mean "throw away".
+            int selection = Dialogs.ask(parent, Dialogs.Tone.Warn, "edit", //$NON-NLS-1$
+                    Translations.getString("PropertySheetPresenter.ApplyChanges.Title"), //$NON-NLS-1$
                     Translations.getString("PropertySheetPresenter.ApplyChanges.Message") //$NON-NLS-1$
                             .replace("%s", String.valueOf(name)), //$NON-NLS-1$
-                    Translations.getString("PropertySheetPresenter.ApplyChanges.Title"), //$NON-NLS-1$
-                    JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null);
+                    null,
+                    Dialogs.Choice.plain(Translations.getString("PropertySheetPresenter.ApplyChanges.Discard")), //$NON-NLS-1$
+                    Dialogs.Choice.primary(Translations.getString("PropertySheetPresenter.ApplyChanges.Apply"))); //$NON-NLS-1$
             switch (selection) {
-                case JOptionPane.YES_OPTION:
+                case 1:
                     return Choice.Apply;
-                case JOptionPane.NO_OPTION:
+                case 0:
                     return Choice.Discard;
                 default:
                     return Choice.Cancel;

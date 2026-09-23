@@ -167,8 +167,26 @@ final class UiAudit {
         return findings;
     }
 
+    /**
+     * Whether the component is on show within what is audited: it and every container up to the
+     * root visible. For a window on the screen that is isShowing; it also holds for a dialog laid
+     * out and painted without being shown, which is how the ruler photographs dialogs behind
+     * whatever else is on the screen.
+     */
+    private boolean shown(Component c) {
+        for (Component p = c; p != null; p = p.getParent()) {
+            if (!p.isVisible()) {
+                return false;
+            }
+            if (p == root) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void walk(Component c) {
-        if (!c.isShowing()) {
+        if (!shown(c)) {
             return;
         }
         if (c instanceof JComponent) {
@@ -359,7 +377,7 @@ final class UiAudit {
         String where = where(table);
         font(table, "\u8868\u683c\u5185\u5bb9");
         JTableHeader header = table.getTableHeader();
-        if (header != null && header.isShowing()) {
+        if (header != null && shown(header)) {
             font(header, "\u8868\u5934");
             for (int col = 0; col < table.getColumnCount(); col++) {
                 TableColumn column = table.getColumnModel().getColumn(col);

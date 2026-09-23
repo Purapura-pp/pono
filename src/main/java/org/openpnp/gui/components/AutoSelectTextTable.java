@@ -223,6 +223,77 @@ public class AutoSelectTextTable extends JTable {
         }
     }
 
+    /** Client property: what the table says when it has no rows, instead of a blank area. */
+    public static final String EMPTY_TEXT = "Pono.emptyText"; //$NON-NLS-1$
+
+    /**
+     * What the table says when it has no rows: how to get the first one. When the rows are all
+     * filtered out it says so instead.
+     */
+    public static void setEmptyText(JTable table, String text) {
+        table.putClientProperty(EMPTY_TEXT, text);
+        // Otherwise an empty table is no higher than nothing, and there is nowhere to say it.
+        table.setFillsViewportHeight(true);
+        table.repaint();
+    }
+
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+        super.paintComponent(g);
+        Object text = getClientProperty(EMPTY_TEXT);
+        if (text == null || getRowCount() > 0) {
+            return;
+        }
+        String shown = getModel().getRowCount() > 0
+                ? org.openpnp.Translations.getString("Table.Empty.Filtered") //$NON-NLS-1$
+                : text.toString();
+        java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+        try {
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            java.awt.Color muted = javax.swing.UIManager.getColor("Pono.textMuted"); //$NON-NLS-1$
+            g2.setColor(muted != null ? muted : javax.swing.UIManager.getColor("Label.disabledForeground")); //$NON-NLS-1$
+            g2.setFont(getFont());
+            java.awt.FontMetrics fm = g2.getFontMetrics();
+            java.awt.Rectangle visible = getVisibleRect();
+            List<String> lines = wrap(shown, fm, Math.max(120, visible.width - 48));
+            int y = visible.y + 40 + fm.getAscent();
+            for (String line : lines) {
+                g2.drawString(line, visible.x + (visible.width - fm.stringWidth(line)) / 2, y);
+                y += fm.getHeight();
+            }
+        }
+        finally {
+            g2.dispose();
+        }
+    }
+
+    /** Breaks at spaces where there are any, and anywhere in Chinese, which has none. */
+    static List<String> wrap(String text, java.awt.FontMetrics fm, int width) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        int lastSpace = -1;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            line.append(c);
+            if (c == ' ') {
+                lastSpace = line.length() - 1;
+            }
+            if (fm.stringWidth(line.toString()) > width && line.length() > 1) {
+                int cut = lastSpace > 0 ? lastSpace : line.length() - 1;
+                lines.add(line.substring(0, cut).trim());
+                String rest = line.substring(cut).trim();
+                line.setLength(0);
+                line.append(rest);
+                lastSpace = -1;
+            }
+        }
+        if (line.length() > 0) {
+            lines.add(line.toString().trim());
+        }
+        return lines;
+    }
+
     //
     // Newly added methods
     //

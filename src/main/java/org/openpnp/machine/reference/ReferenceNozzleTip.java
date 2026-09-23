@@ -1117,11 +1117,8 @@ public class ReferenceNozzleTip extends AbstractNozzleTip {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            int ret = JOptionPane.showConfirmDialog(MainFrame.get(),
-                    Translations.getString("DialogMessages.ConfirmDelete.text") + " " + getName() + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-2$
-                    Translations.getString("DialogMessages.ConfirmDelete.title") + " " + getName() + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    JOptionPane.YES_NO_OPTION);
-            if (ret == JOptionPane.YES_OPTION) {
+            if (org.openpnp.gui.shell.Dialogs.confirmDelete(MainFrame.get(), "Dialogs.Kind.NozzleTips", //$NON-NLS-1$
+                    java.util.List.of(getName()))) {
                 getMachine().removeNozzleTip(ReferenceNozzleTip.this);
             }
         }

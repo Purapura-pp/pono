@@ -40,7 +40,6 @@ import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.JButton;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.SwingUtilities;
@@ -459,10 +458,15 @@ public abstract class PipelineControls extends JPanel {
         @Override
         public void actionPerformed(ActionEvent arg0) {
             try {
-                int result = JOptionPane.showConfirmDialog(getTopLevelAncestor(),
-                        Translations.getString("PipelinePanel.Action.PasteConfirmDialog.message"), //$NON-NLS-1$
-                        null, JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
-                if (result == JOptionPane.YES_OPTION) {
+                int result = org.openpnp.gui.shell.Dialogs.ask(getTopLevelAncestor(),
+                        org.openpnp.gui.shell.Dialogs.Tone.Warn, "alert", //$NON-NLS-1$
+                        Translations.getString("PipelinePanel.Action.PasteConfirm.Title"), //$NON-NLS-1$
+                        Translations.getString("PipelinePanel.Action.PasteConfirm.What"), //$NON-NLS-1$
+                        null,
+                        new org.openpnp.gui.shell.Dialogs.Choice(
+                                Translations.getString("PipelinePanel.Action.PasteConfirm.Action"), //$NON-NLS-1$
+                                null, org.openpnp.gui.shell.Ui.Variant.SolidDanger));
+                if (result == 0) {
                     Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
                     String s = (String) clipboard.getData(DataFlavor.stringFlavor);
                     CvPipeline pipeline = getPipeline();

@@ -1,18 +1,21 @@
 # The UI ruler: photograph every page of the current build in the mockups' scene, pair each with
 # its mockup, audit the screen, write report.md. Run from anywhere; it works in the repository.
 #
-#   tools\ui-ruler\ruler.ps1 [-Rounds base,small,hidpi] [-Scenes job,feeders] [-Build] [-Fixture] [-Mockups]
+#   tools\ui-ruler\ruler.ps1 [-Rounds base,small,hidpi] [-Scenes job,feeders] [-Build] [-Fixture] [-Mockups] [-Onscreen]
 #
 #   -Build     mvn package and test-compile first (otherwise the jar and test classes on disk are used)
 #   -Fixture   write E:\pono-env\ui-fixture again (it is also written when it is missing)
 #   -Mockups   render the mockups again (they are also rendered when missing)
+#   -Onscreen  put the window on the screen, to watch it; by default it is kept off every screen and
+#              the ruler runs behind whatever else is in front
 param(
     [string[]]$Rounds = @(),
     [string[]]$Scenes = @(),
     [string]$Out = "",
     [switch]$Build,
     [switch]$Fixture,
-    [switch]$Mockups
+    [switch]$Mockups,
+    [switch]$Onscreen
 )
 $ErrorActionPreference = 'Stop'
 . E:\pono-env\env.ps1 | Out-Null
@@ -45,7 +48,9 @@ if (-not $Out) {
 $rulerArgs = @('-cp', $cp, 'org.openpnp.gui.audit.UiRuler', '--out', $Out)
 if ($Rounds) { $rulerArgs += @('--rounds', ($Rounds -join ',')) }
 if ($Scenes) { $rulerArgs += @('--scenes', ($Scenes -join ',')) }
+if ($Onscreen) { $rulerArgs += @('--onscreen', 'true') }
+# No console window of its own either: nothing of the run comes to the front.
 $p = Start-Process -FilePath $java -ArgumentList ($jvm + $rulerArgs) -WorkingDirectory $repo -PassThru -Wait `
-    -RedirectStandardOutput "$env:TEMP\pono-ui-ruler.out" -RedirectStandardError "$env:TEMP\pono-ui-ruler.err"
+    -NoNewWindow -RedirectStandardOutput "$env:TEMP\pono-ui-ruler.out" -RedirectStandardError "$env:TEMP\pono-ui-ruler.err"
 Get-Content (Join-Path $Out 'ruler.log') -Tail 4
 "exit $($p.ExitCode) -> $Out\report.md"

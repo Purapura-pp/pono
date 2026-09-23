@@ -912,11 +912,8 @@ public class ReferenceNozzle extends AbstractNozzle implements HeadMountable {
                         Translations.getString("ReferenceNozzle.DeleteLast.ErrorBox.Message")); //$NON-NLS-1$
                 return;
             }
-            int ret = JOptionPane.showConfirmDialog(MainFrame.get(),
-                    Translations.getString("DialogMessages.ConfirmDelete.text") + " " + getName() + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    Translations.getString("DialogMessages.ConfirmDelete.title") + " " + getName() + "?", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                    JOptionPane.YES_NO_OPTION);
-            if (ret == JOptionPane.YES_OPTION) {
+            if (org.openpnp.gui.shell.Dialogs.confirmDelete(MainFrame.get(), "Dialogs.Kind.Nozzles", //$NON-NLS-1$
+                    java.util.List.of(getName()))) {
                 getHead().removeNozzle(ReferenceNozzle.this);
             }
         }

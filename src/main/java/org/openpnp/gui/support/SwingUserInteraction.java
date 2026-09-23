@@ -19,10 +19,9 @@
 
 package org.openpnp.gui.support;
 
-import javax.swing.JOptionPane;
-
 import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
+import org.openpnp.gui.shell.Dialogs;
 import org.openpnp.model.UserInteraction;
 
 /**
@@ -33,23 +32,20 @@ import org.openpnp.model.UserInteraction;
 public class SwingUserInteraction implements UserInteraction {
     @Override
     public boolean confirm(String title, String message) {
-        // Cancel and no both mean the same thing to every caller: do not go ahead.
-        return JOptionPane.showConfirmDialog(MainFrame.get(), message, title,
-                JOptionPane.YES_NO_CANCEL_OPTION) == JOptionPane.YES_OPTION;
+        // Go on, or not: the button says which. Cancel and closing both mean do not go ahead.
+        return Dialogs.ask(MainFrame.get(), Dialogs.Tone.Warn, "alert", title, message, null, //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("Dialogs.Continue"))) == 0; //$NON-NLS-1$
     }
 
     @Override
     public SaveChoice askToSave(String title, String message) {
-        String save = Translations.getString("Dialog.Save"); //$NON-NLS-1$
-        String discard = Translations.getString("Dialog.DontSave"); //$NON-NLS-1$
-        String cancel = Translations.getString("Dialog.Cancel"); //$NON-NLS-1$
-        int answer = JOptionPane.showOptionDialog(MainFrame.get(), message, title,
-                JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null,
-                new Object[] { save, discard, cancel }, save);
+        int answer = Dialogs.ask(MainFrame.get(), Dialogs.Tone.Warn, "save", title, message, null, //$NON-NLS-1$
+                Dialogs.Choice.plain(Translations.getString("Dialog.DontSave")), //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("Dialog.Save"))); //$NON-NLS-1$
         switch (answer) {
-            case 0:
-                return SaveChoice.Save;
             case 1:
+                return SaveChoice.Save;
+            case 0:
                 return SaveChoice.Discard;
             default:
                 // Cancel, and closing the dialog, which is the same wish.

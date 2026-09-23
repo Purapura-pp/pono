@@ -25,11 +25,9 @@ import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
-import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -44,7 +42,6 @@ import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
-import javax.swing.KeyStroke;
 import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeListener;
@@ -351,6 +348,9 @@ public class DockPanel extends RoundedPanel {
         /** A button with the action's own text, and the sprite icon named. */
         public JButton button(Action action, String icon, Ui.Variant variant) {
             JButton button = Ui.button(action, Ui.Size.Sm, variant);
+            // Several of a toolbar's buttons move the machine - the camera to a placement, a
+            // feed - and the table beside them is where the space bar is pressed.
+            button.setFocusable(false);
             if (icon != null) {
                 button.setIcon(Ui.iconSm(icon));
             }
@@ -397,6 +397,7 @@ public class DockPanel extends RoundedPanel {
         /** A ghost button with only the sprite icon, for delete and its like. */
         public JButton iconButton(Action action, String icon) {
             JButton button = Ui.iconButton(action, Ui.Size.Sm, Ui.Variant.Ghost);
+            button.setFocusable(false);
             button.setIcon(Ui.iconSm(icon));
             add(button);
             return button;
@@ -420,8 +421,8 @@ public class DockPanel extends RoundedPanel {
          * The stylesheet's {@code .filter}: 220 wide, a search icon, placeholder text, and "/" as
          * the key that focuses it.
          */
-        public JTextField filter(String placeholder, JComponent focusScope) {
-            JTextField field = new JTextField();
+        public JTextField filter(String placeholder) {
+            JTextField field = Ui.markFilter(new JTextField());
             field.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, placeholder);
             field.putClientProperty(FlatClientProperties.TEXT_FIELD_LEADING_ICON, Ui.iconSm("search")); //$NON-NLS-1$
             field.putClientProperty(FlatClientProperties.TEXT_FIELD_TRAILING_COMPONENT, Ui.kbd("/")); //$NON-NLS-1$
@@ -432,24 +433,6 @@ public class DockPanel extends RoundedPanel {
             field.setPreferredSize(size);
             field.setMinimumSize(new Dimension(120, 28));
             field.setMaximumSize(size);
-            if (focusScope != null) {
-                focusScope.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
-                        .put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, 0), "focusFilter"); //$NON-NLS-1$
-                focusScope.getActionMap().put("focusFilter", new AbstractAction() { //$NON-NLS-1$
-                    @Override
-                    public boolean isEnabled() {
-                        // A "/" typed into a cell being edited, or into any field, is text: a
-                        // disabled binding lets the key through to it.
-                        return !org.openpnp.util.UiUtils.isTextInput(java.awt.KeyboardFocusManager
-                                .getCurrentKeyboardFocusManager().getFocusOwner());
-                    }
-
-                    @Override
-                    public void actionPerformed(java.awt.event.ActionEvent e) {
-                        field.requestFocusInWindow();
-                    }
-                });
-            }
             add(field);
             return field;
         }
