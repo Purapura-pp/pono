@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 校准页（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var st = {
+  done: '<span class="status ok">已完成</span>', need: '<span class="status warn">需要</span>', run: '<span class="status run">进行中 · 2/3</span>',
+  wait: '<span class="status pending">等数据</span>', skip: '<span class="status skip">跳过</span>', you: '<span class="status warn">等你操作</span>', fail: '<span class="status err">失败 · 已回滚</span>'
+};
+var hand = '<span class="hand-tag">' + ic('hand') + '要人</span>';
+var ch = function (a, b) { return '<span class="mono t2" style="font-size:11.5px">' + a + ' <span class="muted">→</span> <span style="color:var(--text)">' + b + '</span></span>'; };
+var basis = function (t) { return '<span class="t2">' + t + '</span>'; };
+var rows = [
+  '准备 · 4 步 · 已完成 3',
+  ['<b>回零</b>', '机器', st.done, basis('—'), '<span class="muted">—</span>', '', '<span class="muted">16:38</span>'],
+  ['<b>Safe Z 示教</b>', '吸嘴 N1', st.done, basis('—'), ch('0.000', '−2.000 mm'), hand, '<span class="muted">09-20</span>'],
+  ['<b>软限位</b>', '轴 x、y', st.need, basis('问题 · 没设软限位'), '<span class="muted">待测</span>', hand, '<span class="muted">—</span>'],
+  ['<b>控制器限值</b>', '驱动', st.done, basis('测量 · 控制器 09-22'), ch('M203 X 500', '300'), '', '<span class="muted">09-22</span>'],
+  '视觉 · 9 步 · 需要 2',
+  ['<b>主基准点与相机初标</b>', '相机 Top', st.need, basis('问题 · 1 px 未测'), ch('0.0423', '0.0209 mm'), hand, '<span class="muted">—</span>'],
+  ['<b>相机延迟与稳定</b>', '相机 Top', st.need, basis('测量 · 相机稳定 09-22'), ch('250', '180 ms'), '', '<span class="muted">—</span>'],
+  '运动 · 5 步 · 需要 3',
+  ['<b>视觉归位</b>', '机器', st.need, basis('问题 · 未启用'), ch('无', '重设坐标'), '', '<span class="muted">—</span>'],
+  ['<b>XY 间隙</b>', '轴 x、y', st.need, basis('测量 · XY 定位 09-22：X 0.20 mm'), ch('无', '单侧 0.220'), '', '<span class="muted">—</span>'],
+  ['<b>旋转间隙</b>', '轴 rotationN1', st.you, basis('—'), '<span class="muted">待测</span>', hand, '<span class="muted">—</span>'],
+  '坐标系 · 1 步',
+  ['<b>基准板坐标补偿</b>', '机器', st.wait, basis('要 3 次干净读数，已有 1 次'), '<span class="muted">—</span>', '', '<span class="muted">—</span>']
+];
+
+var log = '<div class="log" style="border-top:1px solid var(--border)">'
+  + [['16:52:40', 'info', '一键校准开始：9 步，已备份为 machine.xml.before-calibration-2026-09-23_16.52'],
+     ['16:52:41', 'info', '回零 · 已完成，跳过'],
+     ['16:53:10', 'warn', '旋转间隙 · 等你操作：用 N1 吸起测试件，然后点「我已完成，继续」']]
+    .map(function (l) { return '<div class="ln"><span class="t">' + l[0] + '</span><span class="lv ' + l[1] + '">' + (l[1] === 'warn' ? '警告' : '信息') + '</span><span>' + l[2] + '</span></div>'; }).join('')
+  + '</div>';
+
+var dock = F.dock({
+  tabs: [{ icon: 'target', t: '校准步骤', n: 25 }, { icon: 'file', t: '报告' }],
+  toolbar: '<button class="btn sm primary">' + ic('play', 'sm') + '一键校准（9 项）' + ic('zap', 'moves') + '</button>' + F.btn('运行所选', 'step') + F.btn('跳过', 'chevright') + '<button class="btn sm danger">' + ic('stop', 'sm') + '停止</button>'
+    + F.sep() + F.btn('打开报告', 'external', 'ghost') + '<span class="grow"></span>' + F.seg(['全部', '需要的'], 1),
+  body: F.table([{ t: '步骤', w: 170 }, { t: '对象', w: 104 }, { t: '状态', w: 104 }, { t: '依据' }, { t: '改动', w: 170 }, { t: '要人', w: 62 }, { t: '上次', w: 56 }], rows, 10) + log
+});
+
+var instr = '<div class="glass instr" style="width:600px"><div class="step" style="background:var(--warn-soft);color:var(--warn)">' + ic('hand') + '</div><div class="txt"><b>旋转间隙 · 需要你操作</b><span>用 N1 吸起一个测试件（0805 以上），确认真空正常，再点「我已完成，继续」。</span></div><div class="acts"><button class="btn sm">跳过这一步</button><button class="btn sm primary">我已完成，继续</button></div></div>';
+
+var changes = F.table([{ t: '设置' }, { t: '现在', cls: 'num' }, { t: '改成', cls: 'num' }], [
+  ['x · 补偿方法', '无', '<b>单侧定位</b>'], ['x · 偏移', '0.000 mm', '<b>0.220 mm</b>'],
+  ['y · 补偿方法', '方向性慢进', '<b>单侧定位</b>'], ['y · 偏移', '0.084 mm', '<b>0.150 mm</b>']
+]);
+var side = F.side({
+  icon: 'target', title: 'XY 间隙', sub: '校准步骤 · 轴 x、y · 会移动机器 · 约 4 分钟',
+  body:
+    F.sec('做什么', 'info', null, { after: '<p class="note">每根轴在行程上来回走，测出换向时少走的距离，选出补偿方法并写入偏移。写完立刻复测一次，没变好就回滚。</p>' }) +
+    F.sec('为什么需要', 'activity', [
+      ['依据', '<span class="t2">测量 · XY 定位 · 09-22 14:03</span>'],
+      ['实测', '<span class="mono t2">X 0.200 mm  Y 0.048 mm</span>'],
+      ['目标', '<span class="mono t2">&lt; 0.020 mm</span>']
+    ]) +
+    F.sec('将改什么', 'edit', null, { after: '<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">' + changes + '</div>' }) +
+    F.sec('前置步骤', 'check', null, { after: '<div class="row" style="flex-wrap:wrap;gap:6px"><span class="status ok">回零</span><span class="status warn">视觉归位 · 会先做</span></div>' }),
+  foot: '<button class="btn">跳过</button><button class="btn primary" style="flex:2">运行这一步' + ic('zap', 'moves') + '</button>'
+});
+
+F.app({
+  page: 'calibration', centerClass: 'cal',
+  top: { machine: 'busy' },
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 9] },
+  center: F.camera({ instr: instr }) + dock,
+  side: side,
+  status: { chip: '<span class="status warn" style="height:18px">等你操作</span>', text: '一键校准 · 第 3 步 / 9 · 旋转间隙', right: ['已完成 <b class="mono t2">2 / 9</b>', '预计剩余 <b class="mono t2">21 分钟</b>'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

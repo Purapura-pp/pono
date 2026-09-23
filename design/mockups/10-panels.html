@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 拼板页（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+
+var cells = '';
+for (var r = 0; r < 4; r++) {
+  for (var c = 0; c < 4; c++) {
+    var n = r * 4 + c + 1, x = 80 + c * 96, y = 26 + (3 - r) * 62, on = n === 6;
+    cells += '<rect x="' + x + '" y="' + y + '" width="88" height="54" rx="4" fill="' + (on ? 'var(--accent-soft)' : 'var(--surface)') + '" stroke="' + (on ? 'var(--accent)' : 'var(--border-strong)') + '" stroke-width="' + (on ? 2 : 1) + '"/>'
+      + '<text x="' + (x + 8) + '" y="' + (y + 17) + '" fill="var(--text-2)" font-size="11" font-family="Consolas">Brd' + n + '</text>'
+      + '<rect x="' + (x + 30) + '" y="' + (y + 26) + '" width="8" height="5" fill="var(--muted)"/><rect x="' + (x + 44) + '" y="' + (y + 24) + '" width="5" height="9" fill="var(--muted)"/><rect x="' + (x + 58) + '" y="' + (y + 26) + '" width="8" height="5" fill="var(--warn)"/>';
+  }
+}
+var preview = '<section class="dock" style="margin:0 0 10px 0;flex:none;height:292px">'
+  + '<div class="tabs"><div class="tab active">' + ic('layers', 'sm') + '拼板预览</div><div class="tools">' + F.seg(['俯视', '底面'], 0) + '<button class="btn icon xs ghost">' + ic('maximize', 'sm') + '</button></div></div>'
+  + '<div class="dock-body"><svg viewBox="0 0 560 290" style="width:100%;height:100%">'
+  + '<rect x="70" y="16" width="400" height="258" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>' + cells
+  + '<circle cx="80" cy="264" r="5" fill="none" stroke="var(--ok)" stroke-width="2"/><text x="90" y="268" fill="var(--ok)" font-size="11" font-family="Segoe UI">FID-P1</text>'
+  + '<circle cx="460" cy="26" r="5" fill="none" stroke="var(--ok)" stroke-width="2"/><text x="408" y="30" fill="var(--ok)" font-size="11" font-family="Segoe UI">FID-P2</text>'
+  + '<path d="M70 274 h26 M70 274 v-26" stroke="var(--err)" stroke-width="2"/><text x="100" y="286" fill="var(--muted)" font-size="10" font-family="Segoe UI">原点</text>'
+  + '</svg></div></section>';
+
+var rows = [];
+for (var i = 1; i <= 16; i++) {
+  var col = (i - 1) % 4, row = Math.floor((i - 1) / 4);
+  rows.push(['<b>Brd' + i + '</b>', '单板', 'demo-cell', (3 + col * 42).toFixed(3), (3 + row * 32).toFixed(3), '0.0', '<span class="side-icon top">T</span>Top', '<span class="toggle' + (i === 11 ? '' : ' on') + '"></span>', '<span class="check"></span>']);
+}
+var children = F.dock({
+  style: 'flex:1;min-height:0;margin:0',
+  tabs: [{ icon: 'board', t: '子板', n: 16 }, { icon: 'target', t: '拼板基准点', n: 2 }],
+  toolbar: '<button class="btn sm">' + ic('plus', 'sm') + '添加' + ic('chevdown', 'sm') + '</button>' + F.btn('阵列生成…', 'grid') + F.btn('', 'trash', 'ghost icon', ' title="移除所选子板，会先确认"') + F.sep() + F.btn('对齐基准点 / 贴片位…', 'crosshair') + F.filter('筛选…'),
+  body: F.table([
+    { t: 'ID', w: 64 }, { t: '类型', w: 56 }, { t: '定义' }, { t: 'X', r: 1, cls: 'num', w: 74 }, { t: 'Y', r: 1, cls: 'num', w: 74 },
+    { t: '角度', r: 1, cls: 'num', w: 54 }, { t: '面', w: 76 }, { t: '启用', w: 50 }, { t: '检查基准点', w: 80 }
+  ], rows.slice(3, 11), 2)
+});
+
+var list = '<section class="dock" style="width:260px;flex:none;margin:0 10px 0 0">'
+  + '<div class="tabs"><div class="tab active">' + ic('layers', 'sm') + '拼板定义 <span class="n">1</span></div></div>'
+  + '<div class="toolbar">' + F.btn('新建', 'plus') + F.btn('打开…', 'folder') + '<span class="grow"></span>' + F.btn('', 'x', 'ghost icon', ' title="从列表移除（不删文件），会先确认"') + '</div>'
+  + '<div class="dock-body"><div class="group sel"><div class="gt"><b>demo-panel</b><span>jobs\\demo-panel.panel.xml · 174 × 134 mm</span></div><span class="mono t2" style="font-size:12px">16</span></div></div>'
+  + '<div class="dock-foot">demo-panel.job.xml 用到 1 次</div></section>';
+
+var sideBody =
+  F.sec('基本', 'info', [
+    ['名称', F.inp('demo-panel')],
+    ['文件', F.inp('jobs\\demo-panel.panel.xml', { ro: true })],
+    ['尺寸', '<div class="inp-row">' + F.inp('174.000', { mono: true, pre: 'X', u: 'mm' }) + F.inp('134.000', { mono: true, pre: 'Y', u: 'mm' }) + '</div>']
+  ]) +
+  F.sec('拼板基准点', 'target', [
+    ['FID-P1', '<div class="inp-row">' + F.inp('3.000', { mono: true, pre: 'X' }) + F.inp('3.000', { mono: true, pre: 'Y' }) + '<button class="btn sm icon" title="捕获相机位置">' + ic('camera', 'sm') + '</button></div>'],
+    ['FID-P2', '<div class="inp-row">' + F.inp('171.000', { mono: true, pre: 'X' }) + F.inp('131.000', { mono: true, pre: 'Y' }) + '<button class="btn sm icon" title="捕获相机位置">' + ic('camera', 'sm') + '</button></div>'],
+    ['检查', F.toggle(true, '贴装前先找拼板基准点')]
+  ], { rt: '拼板坐标 · mm' }) +
+  F.sec('阵列', 'grid', [
+    ['行 × 列', '<div class="inp-row">' + F.inp('4', { mono: true, w: 70 }) + F.inp('4', { mono: true, w: 70 }) + '</div>'],
+    ['间距', '<div class="inp-row">' + F.inp('42.000', { mono: true, pre: 'X', u: 'mm' }) + F.inp('32.000', { mono: true, pre: 'Y', u: 'mm' }) + '</div>'],
+    ['', '<button class="btn sm" style="justify-self:start">' + ic('refresh', 'sm') + '按阵列重新生成子板…</button>']
+  ], { rt: '由阵列生成' });
+
+F.app({
+  page: 'panels', centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 9] },
+  center: F.strip() + '<div class="duo">' + list + '<div class="stack" style="flex:1;min-width:0">' + preview + children + '</div></div>',
+  side: F.side({ icon: 'layers', title: 'demo-panel', sub: '拼板 · 16 块 demo-cell · 4 × 4', body: sideBody }),
+  status: { text: '拼板 1 · 子板 16', right: ['配置已保存 · 16:42'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

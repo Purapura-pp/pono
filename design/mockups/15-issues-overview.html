@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 问题页 · 机器概况（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var card = function (icon, title, rt, cols, rows) {
+  return '<div class="card" style="overflow:hidden;min-width:0"><div class="ch">' + ic(icon, 'sm') + title + '<span class="rt">' + rt + '</span></div>' + F.table(cols, rows) + '</div>';
+};
+var st = function (cls, t) { return '<span class="status ' + cls + '">' + t + '</span>'; };
+var axes = card('tree', '轴', '6 根 · 点行跳到机器页', [{ t: '名称' }, { t: '类型' }, { t: '间隙补偿' }, { t: '软限位' }], [
+  ['<b>x</b>', '控制器轴', st('warn', '无 · 实测 0.20'), '<span class="t2">未设置</span>'],
+  ['<b>y</b>', '控制器轴', st('ok', '单侧 0.150'), '<span class="t2">未设置</span>'],
+  ['<b>zN1</b>', '控制器轴', '<span class="t2">无</span>', '<span class="mono t2">−45 … 0</span>'],
+  ['<b>rotationN1</b>', '控制器轴', '<span class="t2">无</span>', '<span class="t2">—</span>'],
+  ['<b>zTop</b>', '虚拟轴', '<span class="t2">—</span>', '<span class="t2">—</span>']
+]);
+var drivers = card('upload', '驱动', '1 个', [{ t: '名称' }, { t: '类型' }, { t: '连接' }, { t: '状态' }], [
+  ['<b>NullDriver</b>', '模拟驱动', '<span class="t2">—</span>', st('ok', '已连接')]
+]);
+var cameras = card('camera', '相机', '2 个', [{ t: '名称' }, { t: '朝向' }, { t: '1 px =' }, { t: '标定' }], [
+  ['<b>Top</b>', '向下', '<span class="mono t2">0.0139 mm</span>', st('warn', '未标定')],
+  ['<b>Bottom</b>', '向上', '<span class="mono t2">0.0134 mm</span>', st('warn', '未标定')]
+]);
+var nozzles = card('nozzle', '吸嘴与吸嘴头', '1 个吸嘴 · 1 个吸嘴头', [{ t: '吸嘴' }, { t: '吸嘴头' }, { t: '相机偏移' }, { t: '跳动' }], [
+  ['<b>N1</b>', 'NT1', '<span class="mono t2">0.000, 0.000</span>', st('warn', '未标定')]
+]);
+var body = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px;height:100%;align-content:start">' + axes + cameras + drivers + nozzles + '</div>';
+var dock = F.dock({
+  tabs: [{ icon: 'alert', t: '问题', n: 9 }, { icon: 'activity', t: '测量' }, { icon: 'machine', t: '机器概况' }], active: 2,
+  tools: '<button class="btn xs primary">' + ic('refresh', 'sm') + '采集全部' + ic('zap', 'moves') + '</button>',
+  toolbar: '<span class="t2" style="font-size:12px">只读的一页：这台机器现在是怎么配的。黄色的格子在「问题」里有对应的条目。</span><span class="grow"></span>' + F.btn('复制为文本', 'copy', 'ghost'),
+  body: body
+});
+
+F.app({
+  page: 'issues', centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 5] },
+  center: F.strip() + dock,
+  status: { text: '机器概况 · 6 根轴 · 2 个相机 · 1 个吸嘴', right: ['上次查找 16:40'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' })
+});
+</script>
+</body>
+</html>

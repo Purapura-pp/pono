@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 视觉页（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var pipe = function (stages) { return '<span class="t2">' + stages.join(' <span class="muted">›</span> ') + '</span>'; };
+var rows = [
+  ['默认底部视觉', '底部', 1, ['阈值', '轮廓', '最小外接矩形'], '元件 6 · 封装 8', '<span class="status ok">通过 · Δ 0.012 mm</span>'],
+  ['LED 顶面识别', '底部', 1, ['阈值', '轮廓'], '元件 1', '<span class="muted">没测过</span>'],
+  ['SOIC 引脚', '底部', 1, ['阈值', '引脚', '拟合'], '元件 1', '<span class="status ok">通过 · Δ 0.030 mm</span>'],
+  ['QFN 焊盘', '底部', 0, ['阈值', '焊盘', '拟合'], '元件 1', '<span class="status err">失败 · 没找到元件</span>'],
+  ['默认基准视觉', '基准点', 1, ['模板', '圆检测'], '元件 1 · 封装 1', '<span class="status ok">通过 · Δ 0.020 mm</span>']
+].map(function (r) {
+  return ['<b>' + r[0] + '</b>', r[1] === '底部' ? '<span class="tag">底部视觉</span>' : '<span class="tag">基准视觉</span>', '<span class="toggle' + (r[2] ? ' on' : '') + '"></span>', pipe(r[3]), '<span class="t2">' + r[4] + '</span>', r[5]];
+});
+
+var dock = F.dock({
+  tabs: [{ icon: 'eye', t: '视觉配置', n: 5 }],
+  toolbar: F.btn('新建底部视觉', 'plus', 'primary') + F.btn('新建基准视觉', 'plus') + F.btn('', 'trash', 'ghost icon', ' title="删除所选配置：正在被用的不能删"') + F.sep() + F.btn('复制', 'copy') + F.btn('粘贴', 'upload') + F.filter('筛选名称 / 用在…'),
+  body: F.table([{ t: '名称', w: 150 }, { t: '类型', w: 96 }, { t: '启用', w: 50 }, { t: '流水线' }, { t: '用在', w: 130 }, { t: '上次测试', w: 160 }], rows, 0)
+});
+
+var side = F.side({
+  icon: 'eye', title: '默认底部视觉', sub: '底部视觉 · 用在 6 个元件、8 个封装',
+  body:
+    F.sec('基本', 'info', [['名称', F.inp('默认底部视觉')], ['启用', F.toggle(true, '贴装前先在底部相机上对位')]]) +
+    F.sec('流水线', 'activity', [
+      ['阶段', '<div class="pipeline"><span class="stage">阈值</span><span class="arrow">›</span><span class="stage">轮廓</span><span class="arrow">›</span><span class="stage">最小外接矩形</span><button class="btn xs" style="margin-left:auto">' + ic('edit', 'sm') + '编辑</button><button class="btn xs ghost">恢复默认</button></div>']
+    ]) +
+    F.sec('对位', 'move', [
+      ['预旋转', F.toggle(true, '先转到贴装角度再拍')],
+      ['旋转', F.inp('修正偏差', { select: true })],
+      ['最大角度偏差', F.inp('10.0', { mono: true, u: '°', w: 120 })],
+      ['最大位置偏差', F.inp('2.000', { mono: true, u: 'mm', w: 120 })]
+    ]) +
+    F.sec('尺寸检查', 'ruler', [['方法', F.inp('按封装本体', { select: true })], ['容差', F.inp('20', { mono: true, u: '%', w: 120 })]]) +
+    F.sec('测试', 'target', [
+      ['', '<div class="row"><button class="btn sm primary">' + ic('nozzle', 'sm') + '用 N1 取 R0603-10K 测试' + ic('zap', 'moves') + '</button></div>'],
+      ['上次结果', '<div class="row"><span class="status ok" style="height:18px">通过</span><span class="t2 mono" style="font-size:12px">Δx +0.008  Δy −0.009  Δθ +0.6°</span></div>']
+    ], { rt: '会移动机器' })
+});
+
+F.app({
+  page: 'vision',
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 9] },
+  center: F.camera({ bottom: true, upp: '0.0134', dro: ['118.799', '7.117', '-18.500', '0.60'] }) + dock,
+  side: side,
+  status: { text: '底部相机 Bottom · 视觉 5 个配置', right: ['配置已保存 · 16:42'] },
+  scene: Scene.nozzle()
+});
+</script>
+</body>
+</html>

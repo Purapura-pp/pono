@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 错误框与确认框（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var error = '<div class="dialog" style="left:120px;top:120px;width:600px">'
+  + '<div class="dh"><div class="di err">' + ic('alert') + '</div><div><b>没能移动到贴装位置</b></div></div>'
+  + '<div class="db"><p class="what">吸嘴 N1 要去 R12 的贴装位置，但 Y 轴会超出软限位 350.00 mm。</p>'
+  + '<p>检查单板 1 的位置是否正确；如果软限位设小了，在机器页的轴 y 里调整。任务已暂停，没有贴装这一件。</p>'
+  + '<div class="details"><div class="dsh">' + ic('chevdown', 'sm') + '详情 · 原文与堆栈</div><pre>java.lang.Exception: Location Y 350.120 is outside of the soft limit 350.000 of axis y.\n    at org.openpnp.spi.base.AbstractAxis.checkSoftLimits(AbstractAxis.java:212)\n    at org.openpnp.machine.reference.ReferenceNozzle.moveTo(ReferenceNozzle.java:431)\n    at org.openpnp.machine.reference.ReferencePnpJobProcessor$Place.step(...)</pre></div></div>'
+  + '<div class="df"><div class="left"><button class="btn sm ghost">' + ic('copy', 'sm') + '复制详情</button><button class="btn sm ghost">' + ic('log', 'sm') + '打开日志</button></div><button class="btn sm">去机器页 · 轴 y</button><button class="btn sm primary">关闭</button></div></div>';
+
+var confirm = '<div class="dialog" style="left:860px;top:150px;width:560px">'
+  + '<div class="dh"><div class="di warn">' + ic('move') + '</div><div><b>先把相机移到 F-08 再自动设置？</b></div></div>'
+  + '<div class="db"><p class="what">自动设置要从飞达当前的位置开始找料带孔，相机现在不在 F-08 上方。</p><p>移过去会先抬到 Safe Z，再走到 (312.88, 44.13)。</p></div>'
+  + '<div class="df"><button class="btn sm ghost">取消</button><button class="btn sm">不移动，直接设置</button><button class="btn sm primary">' + ic('camera', 'sm') + '移过去并设置' + ic('zap', 'moves') + '</button></div></div>';
+
+var danger = '<div class="dialog" style="left:860px;top:470px;width:560px">'
+  + '<div class="dh"><div class="di err">' + ic('trash') + '</div><div><b>删除 3 个飞达？</b></div></div>'
+  + '<div class="db"><p class="what">下面这 3 个飞达会从机器配置里删掉，它们的元件、位置和视觉设置一起删。</p>'
+  + '<div class="list mono">F-13 · C0402-100N<br>F-14 · C0603-1U<br>F-15 · C0805-10U</div>'
+  + '<p>删掉之后还能从 backups 里的备份找回。</p></div>'
+  + '<div class="df"><button class="btn sm ghost">取消</button><button class="btn sm solid-danger">' + ic('trash', 'sm') + '删除 3 个飞达</button></div></div>';
+
+var notes = '<div style="position:absolute;left:120px;top:640px;width:600px;z-index:9" class="card"><div class="ch">' + ic('info', 'sm') + '三类对话框的规则</div><div style="padding:10px 16px 14px;font-size:12px;color:var(--text-2);line-height:1.7">'
+  + '<b style="color:var(--text)">错误框</b>：中文标题说出了什么事；第一句人话说原因，第二句说怎么办和现在的状态；原文和堆栈收在「详情」里，默认收起。同一个错误 5 秒内只弹一次，其余计数在详情里。<br>'
+  + '<b style="color:var(--text)">询问框</b>：按钮写动作，不写「是 / 否」；主按钮在最右，就是标题问的那件事；会移动机器的按钮带 ' + ic('zap', 'moves') + '。<br>'
+  + '<b style="color:var(--text)">危险操作</b>：删除、终止、覆盖配置才确认；按钮用红底、写明对象和数量；「取消」是默认焦点，按 Esc 等于取消。</div></div>';
+
+F.app({
+  page: 'job', centerClass: '',
+  top: { jobDirty: true },
+  badges: { feeders: ['warn', 1], issues: ['err', 2], calibration: ['warn', 5] },
+  center: F.camera() + F.dock({ tabs: [{ icon: 'board', t: '单板', n: 2 }, { icon: 'parts', t: '贴片位', n: 48 }], active: 1, body: '<div class="empty"></div>' }),
+  status: { chip: '<span class="status err" style="height:18px">已暂停</span>', text: 'R12 没能移到贴装位置', right: ['总进度 <b class="mono t2">31 / 48</b>'] },
+  scene: Scene.pcb({ footprintLabel: 'R12 · R0603' }),
+  overlay: '<div class="scrim"></div>' + error + confirm + danger + notes
+});
+</script>
+</body>
+</html>

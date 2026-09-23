@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 欢迎与首次引导（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var step = function (n, title, text, action, state) {
+  var badge = state === 'done' ? '<span class="status ok">已完成</span>' : state === 'next' ? '<span class="status run">下一步</span>' : '<span class="status pending">之后</span>';
+  return '<div class="group" style="padding:14px 16px;align-items:center;' + (state === 'next' ? 'background:var(--accent-soft);' : '') + '">'
+    + '<div class="step" style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--surface-3);font-weight:700;flex:none">' + n + '</div>'
+    + '<div class="gt"><b>' + title + '</b><span style="font-size:12px;color:var(--text-2)">' + text + '</span></div>' + badge
+    + (action ? '<button class="btn sm' + (state === 'next' ? ' primary' : '') + '" style="margin-left:10px">' + action + '</button>' : '') + '</div>';
+};
+var welcome = '<div class="dialog" style="left:420px;top:120px;width:760px">'
+  + '<div class="dh" style="padding:22px 24px 8px"><span class="logo" style="width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#7c5cff);display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;flex:none">P</span><div><b style="font-size:18px;margin-top:2px">欢迎使用 Pono 2.6</b><span class="t2" style="font-size:12px">基于 OpenPnP 的贴片机软件。第一次用，按这三步把机器准备好。</span></div></div>'
+  + '<div style="margin:12px 24px;border:1px solid var(--border);border-radius:12px;overflow:hidden">'
+  + step(1, '启用机器', '连接控制器并归位。现在用的是模拟驱动，可以先随便点点看。', '启用并归位', 'next')
+  + step(2, '在问题页采集', '「采集全部」检查配置，并跑一遍校准要用的测量。约 15 分钟，会移动机器。', '去问题页', '')
+  + step(3, '在校准页一键校准', '按顺序执行需要的校准；放标定板、吸测试件这类要你动手的步骤会停下来给指引。', '去校准页', '')
+  + '</div>'
+  + '<div style="margin:0 24px 16px;display:flex;gap:16px;font-size:12px"><span class="link">' + ic('book', 'sm') + ' 使用说明</span><span class="link">' + ic('folder', 'sm') + ' 打开配置目录</span><span class="link">' + ic('upload', 'sm') + ' 导入 LumenPnP 配置…</span></div>'
+  + '<div class="df"><div class="left"><label class="row" style="font-size:12px;gap:6px"><span class="check"></span>启动时不再显示</label></div><button class="btn sm ghost">以后再说</button><button class="btn sm primary">开始：启用并归位</button></div>'
+  + '<div style="padding:8px 24px 10px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">Pono 以 GPL-3.0 发布 · OpenPnP © 2011–2026 Jason von Nieda 及贡献者</div></div>';
+
+F.app({
+  page: 'job',
+  top: { machine: 'off', job: '未命名任务' },
+  center: F.camera() + F.dock({ tabs: [{ icon: 'board', t: '单板', n: 0 }, { icon: 'parts', t: '贴片位', n: 0 }], body: '<div class="empty"></div>' }),
+  status: { chip: '<span class="status err" style="height:18px">已断开</span>', text: '机器没有连接', right: [] },
+  scene: Scene.pcb({ reticle: false }),
+  overlay: '<div class="scrim"></div>' + welcome
+});
+</script>
+</body>
+</html>

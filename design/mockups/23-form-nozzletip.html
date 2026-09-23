@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 表单样张 · 吸嘴头校准（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="frame.js"></script>
+<style>
+  .forms { display: flex; gap: 14px; padding: 18px 22px; }
+  .forms .side { margin: 0; width: 500px; height: 960px; flex: none; }
+  .rules { width: 500px; height: 960px; flex: none; overflow: hidden; }
+  .rules li { margin: 0 0 9px; }
+  .rules ul { margin: 0; padding: 12px 18px 12px 34px; font-size: 12px; color: var(--text-2); line-height: 1.6; }
+  .rules b { color: var(--text); }
+  .hsv { display: grid; grid-template-columns: 70px 1fr 1fr; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var head = { icon: 'nozzle', title: 'NT1', sub: '吸嘴头 · ReferenceNozzleTip · 装在 N1' };
+var tabs = ['设置', '校准', '背景', '元件检测', '更多'];
+
+var runout = '<div style="margin:2px 0 4px;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);height:176px;display:flex;align-items:center;gap:14px;padding:0 14px">'
+  + '<svg viewBox="0 0 160 160" style="width:150px;height:150px;flex:none"><circle cx="80" cy="80" r="62" fill="none" stroke="var(--border-strong)" stroke-dasharray="3 4"/>'
+  + '<circle cx="86" cy="76" r="42" fill="none" stroke="var(--accent)" stroke-width="2"/>'
+  + [[128, 76], [116, 106], [86, 118], [56, 106], [44, 76], [56, 46], [86, 34], [116, 46]].map(function (p, i) { return '<circle cx="' + (p[0] + (i % 3 - 1)) + '" cy="' + (p[1] + (i % 2)) + '" r="3.5" fill="' + (i === 5 ? 'var(--err)' : 'var(--ok)') + '"/>'; }).join('')
+  + '<line x1="76" y1="80" x2="84" y2="80" stroke="var(--muted)"/><line x1="80" y1="76" x2="80" y2="84" stroke="var(--muted)"/></svg>'
+  + '<div style="font-size:12px;line-height:1.8;color:var(--text-2)"><b style="color:var(--text)">偏心 0.042 mm</b><br>相位 −37°<br>8 个角度，1 个误检（红）<br>相机中心偏移 +0.006, −0.004 mm</div></div>';
+
+var calibration = F.side(Object.assign({ tabs: tabs, tab: 1, body:
+  F.sec('跳动校准', 'target', [
+    ['启用', F.toggle(true, '贴装时补偿吸嘴头跳动')],
+    ['何时校准', F.inp('每次归位后', { select: true })],
+    ['失败时', F.toggle(true, '让归位失败，而不是带着旧值继续')],
+    ['补偿方式', F.inp('模型（圆拟合）', { select: true })]
+  ], { rt: '校准页 · 吸嘴头跳动与背景' }) +
+  F.sec('测量', 'sliders', [
+    ['圆等分次数', F.inp('8', { mono: true, u: '个角度', w: 150 })],
+    ['允许误检', F.inp('1', { mono: true, u: '次', w: 150 })],
+    ['偏移阈值', F.inp('0.500', { mono: true, u: 'mm', w: 150 })],
+    ['特征直径', F.inp('0.900', { mono: true, u: 'mm', w: 150 })],
+    ['Z 偏移', F.inp('0.000', { mono: true, u: 'mm', w: 150 })],
+    ['流水线', '<div class="pipeline"><span class="stage">阈值</span><span class="arrow">›</span><span class="stage">圆检测</span><button class="btn xs" style="margin-left:auto">' + ic('edit', 'sm') + '编辑</button><button class="btn xs ghost">恢复默认</button></div>']
+  ]) +
+  F.sec('结果', 'activity', [
+    ['状态', '<div class="row"><span class="status ok" style="height:18px">已校准</span><span class="t2" style="font-size:12px">16:38 归位后</span></div>'],
+    [null, '<div style="grid-column:1/-1">' + runout + '</div>'],
+    [null, '<div class="row" style="grid-column:1/-1;flex-wrap:wrap"><button class="btn sm primary">' + ic('target', 'sm') + '现在校准' + ic('zap', 'moves') + '</button><button class="btn sm">' + ic('camera', 'sm') + '顺便校准相机位置和旋转' + ic('zap', 'moves') + '</button><button class="btn sm ghost" style="margin-left:auto">清除结果</button></div>']
+  ])
+}, head));
+
+var background = F.side(Object.assign({ tabs: tabs, tab: 2, body:
+  F.sec('背景校准', 'palette', [
+    ['方式', F.inp('亮度与颜色（HSV）', { select: true })],
+    ['最小细节', F.inp('0.10', { mono: true, u: 'mm', w: 150 })],
+    ['颜色范围', '<div class="hsv"><span class="muted" style="font-size:11px"></span><span class="muted" style="font-size:11px">最小</span><span class="muted" style="font-size:11px">最大</span>'
+      + '<span class="t2" style="font-size:12px">色相</span>' + F.inp('0', { mono: true }) + F.inp('179', { mono: true })
+      + '<span class="t2" style="font-size:12px">饱和度</span>' + F.inp('0', { mono: true }) + F.inp('62', { mono: true })
+      + '<span class="t2" style="font-size:12px">明亮度</span>' + F.inp('0', { mono: true }) + F.inp('48', { mono: true }) + '</div>'],
+    ['容差', F.inp('20', { mono: true, u: '%', w: 150 })]
+  ], { rt: '和跳动一起测' }) +
+  F.sec('上次结果', 'clock', [
+    ['状态', '<div class="row"><span class="status warn" style="height:18px">2 处可疑</span><button class="btn xs">显示问题</button></div>'],
+    ['说明', '<span class="t2" style="font-size:12px;line-height:1.5">吸嘴头边缘有反光，明亮度上限 48 偏低；可以放宽到 60 再测一次。</span>']
+  ])
+}, head));
+
+var rules = '<div class="card rules"><div class="ch">' + ic('list', 'sm') + '表单规则（全部 91 个表单照此）</div><ul>'
+  + '<li><b>一列、标签可换行</b>：标签列 112 px，放不下就换行，不再截成「…」；500 px 的属性栏里没有横向滚动。</li>'
+  + '<li><b>单位写在输入框里</b>：mm、°、ms、% 靠右灰色；定宽的数值框 90–150 px，不拉满整行。</li>'
+  + '<li><b>分区可折叠</b>：用得少的分区默认收起，标题右侧写一句现状（「关闭」「旋转 0° · 不翻转」）。</li>'
+  + '<li><b>按条件显示</b>：只显示当前选项下有意义的字段，比如「补偿方式」「稳定方法」决定下面有哪些格子。</li>'
+  + '<li><b>就地校验</b>：错误写在字段下方，红框；有错时「应用」不可点，并说明是哪一格。</li>'
+  + '<li><b>改完点「应用」才生效</b>：所有表单一致；「重置」回到上次应用的值。</li>'
+  + '<li><b>会动机器的按钮带 ' + ic('zap', 'moves') + '</b>：捕获类按钮只读位置不动机器，不带。</li>'
+  + '<li><b>来源写清楚</b>：由校准页测定的值，标题右侧写「校准页 · 步骤名」，点了跳过去。</li>'
+  + '<li><b>枚举走显示名</b>：「每次归位后」而不是 UntilHomed；类名只在副标题出现一次。</li>'
+  + '<li><b>复杂内容用自定义区块</b>：跳动图、换嘴路径、控制台照常嵌在分区里。</li>'
+  + '</ul></div>';
+
+document.body.insertAdjacentHTML('beforeend', '<div class="forms">' + calibration + background + rules + '</div>');
+</script>
+</body>
+</html>
