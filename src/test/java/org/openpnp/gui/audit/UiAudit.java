@@ -282,6 +282,23 @@ final class UiAudit {
         return latin(text, rules);
     }
 
+    /** The words of the first label with any inside a component; null for none. */
+    static String labelText(Component component) {
+        if (component instanceof JLabel) {
+            String text = ((JLabel) component).getText();
+            return text == null || text.isBlank() ? null : text;
+        }
+        if (component instanceof java.awt.Container) {
+            for (Component child : ((java.awt.Container) component).getComponents()) {
+                String text = labelText(child);
+                if (text != null) {
+                    return text;
+                }
+            }
+        }
+        return null;
+    }
+
     /** The text if it has Latin words the interface should not show, marked when one is a class. */
     static String latin(String text, Rules rules) {
         if (text == null || text.isBlank()) {
@@ -417,7 +434,10 @@ final class UiAudit {
                 Component rendered = table.prepareRenderer(table.getCellRenderer(row, col), row, col);
                 String text = rendered instanceof JLabel ? ((JLabel) rendered).getText() : null;
                 if (value instanceof Enum) {
-                    String bad = latin(text == null ? value.toString() : text);
+                    // A renderer that is a panel - the side's badge, a value with its chevron -
+                    // shows the words of the label inside it, not the value's own name.
+                    String shown = text != null ? text : labelText(rendered);
+                    String bad = latin(shown == null ? value.toString() : shown);
                     if (bad != null) {
                         add(Check.Latin, where + " \u203a \u300c" + table.getColumnName(col)
                                 + "\u300d\u5217", bad);

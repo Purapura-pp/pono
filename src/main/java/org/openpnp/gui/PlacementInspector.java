@@ -200,10 +200,12 @@ public final class PlacementInspector {
         }
         form.choice("errorHandling", "PlacementInspector.ErrorHandling", ErrorHandling.class); //$NON-NLS-1$ //$NON-NLS-2$
         form.toggle("enabled", "PlacementInspector.Enabled", "PlacementInspector.EnabledNote"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        form.section("PlacementInspector.ThisRun", "clock").note("PlacementInspector.Live"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-        form.custom("PlacementInspector.Status", Forms.row(runChip)); //$NON-NLS-1$
-        form.custom("PlacementInspector.Alignment", alignment); //$NON-NLS-1$
-        form.custom("PlacementInspector.Duration", duration); //$NON-NLS-1$
+        if (owner != null) {
+            form.section("PlacementInspector.ThisRun", "clock").note("PlacementInspector.Live"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            form.custom("PlacementInspector.Status", Forms.row(runChip)); //$NON-NLS-1$
+            form.custom("PlacementInspector.Alignment", alignment); //$NON-NLS-1$
+            form.custom("PlacementInspector.Duration", duration); //$NON-NLS-1$
+        }
         String comments = placement.getComments();
         form.section("PlacementInspector.Notes", "info").collapsed() //$NON-NLS-1$ //$NON-NLS-2$
                 .note(comments == null || comments.isBlank() ? "" //$NON-NLS-1$
@@ -220,7 +222,8 @@ public final class PlacementInspector {
             describePart(configuration, chosen instanceof Part ? (Part) chosen : null, packageLabel,
                     feederChip, feederNote);
         });
-        Runnable refreshRun = () -> describeRun(owner, location, placement, runChip, alignment, duration);
+        Runnable refreshRun = owner == null ? () -> {
+        } : () -> describeRun(owner, location, placement, runChip, alignment, duration);
         FormWizard wizard = form.build();
         describePart(configuration, placement.getPart(), packageLabel, feederChip, feederNote);
         refreshRun.run();
@@ -304,6 +307,19 @@ public final class PlacementInspector {
             default:
                 return Chip.Tone.Skip;
         }
+    }
+
+    /**
+     * The form of a placement of a board as it is defined, on the boards page: everything can be
+     * changed, and there is no run to show.
+     */
+    public static FormWizard buildDefinition(Configuration configuration, Placement placement) {
+        return build(configuration, null, null, placement, true).getWizard();
+    }
+
+    /** The heading of a placement of a board as it is defined: "Placement · demo-board". */
+    public static String subtitle(org.openpnp.model.PlacementsHolder<?> holder) {
+        return Translations.getString("JobPlacementsPanel.Border.title") + " \u00b7 " + holder.getName(); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     /** The heading for the properties column: the placement's id over where it sits. */

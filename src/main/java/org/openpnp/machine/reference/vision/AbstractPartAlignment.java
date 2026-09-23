@@ -4,17 +4,37 @@ import javax.swing.Action;
 import javax.swing.Icon;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.vision.wizards.BottomVisionSettingsConfigurationWizard;
+import org.openpnp.machine.reference.vision.wizards.VisionSettingsForm;
 import org.openpnp.model.AbstractPartSettingsHolder;
 import org.openpnp.model.BottomVisionSettings;
 import org.openpnp.model.Part;
 import org.openpnp.model.PartSettingsHolder;
 import org.openpnp.model.PartSettingsRoot;
 import org.openpnp.spi.PartAlignment;
+import org.openpnp.spi.base.AbstractMachine;
+import org.openpnp.spi.base.MachineElement;
 import org.openpnp.util.VisionUtils;
 import org.pmw.tinylog.Logger;
 
-public abstract class AbstractPartAlignment extends AbstractPartSettingsHolder implements PartSettingsRoot, PartAlignment {
+/**
+ * A part alignment belongs to its machine as an axis does: the machine hands it a reference to
+ * itself while it is loaded, and its forms reach the configuration through that rather than
+ * through the singleton.
+ */
+public abstract class AbstractPartAlignment extends AbstractPartSettingsHolder
+        implements PartSettingsRoot, PartAlignment, MachineElement {
+
+    private transient AbstractMachine machine;
+
+    @Override
+    public AbstractMachine getMachine() {
+        return MachineElement.machineOf(this, machine);
+    }
+
+    @Override
+    public void setMachine(AbstractMachine machine) {
+        this.machine = machine;
+    }
 
     @Override 
     public PartSettingsHolder getParentHolder(PartSettingsHolder partSettingsHolder) {
@@ -93,6 +113,6 @@ public abstract class AbstractPartAlignment extends AbstractPartSettingsHolder i
         catch (Exception e) {
             Logger.debug(e, "No bottom vision camera available to preset on the bottom vision pipeline.");
         }
-        return new BottomVisionSettingsConfigurationWizard(visionSettings, partSettingsHolder);
+        return VisionSettingsForm.bottom(getMachine().getConfiguration(), visionSettings, partSettingsHolder);
     }
 }

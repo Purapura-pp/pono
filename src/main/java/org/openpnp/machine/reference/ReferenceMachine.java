@@ -96,7 +96,6 @@ import org.openpnp.machine.reference.solutions.ScriptingSolutions;
 import org.openpnp.machine.reference.solutions.VisionSolutions;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision;
 import org.openpnp.machine.reference.vision.ReferenceFiducialLocator;
-import org.openpnp.machine.reference.wizards.MachineDiagnosticsWizard;
 import org.openpnp.machine.reference.wizards.ReferenceMachineConfigurationWizard;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -216,7 +215,10 @@ public class ReferenceMachine extends AbstractMachine {
     @Override
     public void configurationLoaded(Configuration configuration) throws Exception {
         if (partAlignments.isEmpty()) {
-            partAlignments.add(new ReferenceBottomVision());
+            // Not attach(): it is told of the round with the other elements, which is next.
+            ReferenceBottomVision bottomVision = new ReferenceBottomVision();
+            bottomVision.setMachine(this);
+            partAlignments.add(bottomVision);
         }
         // Migrate the driver.
         if (driver != null && driver instanceof AbstractDriver) {

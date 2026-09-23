@@ -75,10 +75,6 @@ import org.openpnp.gui.support.VisionSettingsComboBoxModel;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.gui.tablemodel.PackagesTableModel;
-import org.openpnp.gui.wizards.PackageCompositingWizard;
-import org.openpnp.gui.wizards.PackageNozzleTipsWizard;
-import org.openpnp.gui.wizards.PackageSettingsWizard;
-import org.openpnp.gui.wizards.PackageVisionWizard;
 import org.openpnp.model.AbstractVisionSettings;
 import org.openpnp.model.BottomVisionSettings;
 import org.openpnp.model.Configuration;
@@ -121,24 +117,21 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         multiSelectionActionGroup.setEnabled(false);
         
         setLayout(new BorderLayout(0, 0));
+        setOpaque(false);
+        setBorder(new javax.swing.border.EmptyBorder(0, 10, 10, 10));
+        putClientProperty(MainFrame.DOCK_PAGE, Boolean.TRUE);
         tableModel = new PackagesTableModel(configuration);
         tableSorter = new TableRowSorter<>(tableModel);
 
-        JPanel toolbarAndSearch = new JPanel();
-        add(toolbarAndSearch, BorderLayout.NORTH);
-        toolbarAndSearch.setLayout(new BorderLayout(0, 0));
-
-        JToolBar toolBar = new JToolBar();
-        toolBar.setFloatable(false);
-        toolbarAndSearch.add(toolBar);
-
-        JPanel panel_1 = new JPanel();
-        toolbarAndSearch.add(panel_1, BorderLayout.EAST);
-
-        JLabel lblSearch = new JLabel(Translations.getString("PackagesPanel.SearchLabel.text")); //$NON-NLS-1$
-        panel_1.add(lblSearch);
-
-        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
+        // The mockup's toolbar: New package in the accent, delete, copy and paste, the filter.
+        org.openpnp.gui.shell.DockPanel.Toolbar toolBar = new org.openpnp.gui.shell.DockPanel.Toolbar();
+        toolBar.button(newPackageAction, "plus", "Dock.Action.NewPackage", org.openpnp.gui.shell.Ui.Variant.Primary); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.iconButton(deletePackageAction, "trash"); //$NON-NLS-1$
+        toolBar.separator();
+        toolBar.button(copyPackageToClipboardAction, "copy", "Dock.Action.Copy"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.button(pastePackageToClipboardAction, "upload", "Dock.Action.Paste"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolBar.glue();
+        searchTextField = toolBar.filter(Translations.getString("PackagesPanel.Filter.Placeholder")); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -155,8 +148,6 @@ public class PackagesPanel extends JPanel implements WizardContainer {
                 search();
             }
         });
-        panel_1.add(searchTextField);
-        searchTextField.setColumns(15);
 
 
         table = new AutoSelectTextTable(tableModel) {
@@ -225,16 +216,31 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         });
 
         table.setRowSorter(tableSorter);
-        table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
+        installRenderers();
+        org.openpnp.gui.support.TableUtils.installColumnWidthSavers(table,
+                java.util.prefs.Preferences.userNodeForPackage(PackagesPanel.class), "PackagesPanel.packagesTable"); //$NON-NLS-1$
+        // The mockup's order: ID, body, pads, nozzle tips, bottom vision, parts.
+        int[] order = { 0, PackagesTableModel.BODY, PackagesTableModel.PADS, PackagesTableModel.NOZZLE_TIPS, 3,
+                PackagesTableModel.PARTS };
+        for (int i = 0; i < order.length; i++) {
+            int view = table.convertColumnIndexToView(order[i]);
+            if (view >= 0 && view != i) {
+                table.getColumnModel().moveColumn(view, i);
+            }
+        }
 
         // The wizards of the selected package are shown by the window's one properties column now.
-        add(new JScrollPane(table), BorderLayout.CENTER);
-
-        toolBar.add(newPackageAction);
-        toolBar.add(deletePackageAction);
-        toolBar.addSeparator();
-        toolBar.add(copyPackageToClipboardAction);
-        toolBar.add(pastePackageToClipboardAction);
+        JPanel page = new JPanel(new BorderLayout());
+        page.setOpaque(false);
+        page.add(toolBar, BorderLayout.NORTH);
+        page.add(org.openpnp.gui.shell.DockPanel.table(table), BorderLayout.CENTER);
+        org.openpnp.gui.shell.DockPanel dock = new org.openpnp.gui.shell.DockPanel();
+        packagesTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("pkg"), //$NON-NLS-1$
+                Translations.getString("PackagesPanel.Tab.Packages"), page); //$NON-NLS-1$
+        dock.setMaximize(() -> MainFrame.get().toggleDockMaximised());
+        tableModel.addTableModelListener(e -> packagesTab.setCount(tableModel.getRowCount()));
+        packagesTab.setCount(tableModel.getRowCount());
+        add(dock, BorderLayout.CENTER);
 
         addComponentListener(new ComponentAdapter() {
             @Override
@@ -246,7 +252,7 @@ public class PackagesPanel extends JPanel implements WizardContainer {
                     if (cameraView == null) {
                         return;
                     }
-                    cameraView.removeReticle(PackageVisionWizard.class.getName());
+                    cameraView.removeReticle(PackageVisionForm.class.getName());
                 }
                 catch (Exception e1) {
                     Logger.debug(e1, "Failed to remove the package vision reticle from the camera view.");
@@ -278,17 +284,46 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         }
         return selections;
     }
+    private org.openpnp.gui.shell.DockPanel.Tab packagesTab;
+
+    /** The filter matches the text as typed, rather than as a regular expression. */
     private void search() {
-        RowFilter<PackagesTableModel, Object> rf = null;
-        // If current expression doesn't parse, don't update.
-        try {
-            rf = RowFilter.regexFilter("(?i)" + searchTextField.getText().trim());
+        String text = searchTextField.getText().trim();
+        tableSorter.setRowFilter(text.isEmpty() ? null
+                : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text))); //$NON-NLS-1$
+    }
+
+    /** The ID in bold, the numbers in mono, a package no nozzle tip can pick said in amber. */
+    private void installRenderers() {
+        table.getColumnModel().getColumn(0).setCellRenderer(new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                    boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setFont(table.getFont().deriveFont(java.awt.Font.BOLD));
+                return this;
+            }
+        });
+        org.openpnp.gui.support.MonospacedFontTableCellRenderer mono = new org.openpnp.gui.support.MonospacedFontTableCellRenderer();
+        mono.setHorizontalAlignment(javax.swing.SwingConstants.RIGHT);
+        for (int column : new int[] { PackagesTableModel.BODY, PackagesTableModel.PADS, PackagesTableModel.PARTS }) {
+            table.getColumnModel().getColumn(column).setCellRenderer(mono);
         }
-        catch (PatternSyntaxException e) {
-            Logger.warn(e, "Search failed");
-            return;
-        }
-        tableSorter.setRowFilter(rf);
+        table.getColumnModel().getColumn(PackagesTableModel.NOZZLE_TIPS).setCellRenderer(
+                new javax.swing.table.DefaultTableCellRenderer() {
+                    @Override
+                    public java.awt.Component getTableCellRendererComponent(JTable table, Object value,
+                            boolean isSelected, boolean hasFocus, int row, int column) {
+                        boolean none = value == null || String.valueOf(value).isEmpty();
+                        super.getTableCellRendererComponent(table,
+                                none ? Translations.getString("PackagesPanel.NoNozzleTip") : value, //$NON-NLS-1$
+                                isSelected, hasFocus, row, column);
+                        if (!isSelected) {
+                            setForeground(none ? org.openpnp.gui.shell.Ui.warnText() : org.openpnp.gui.shell.Ui.text2());
+                        }
+                        return this;
+                    }
+                });
     }
 
     public final Action newPackageAction = new AbstractAction() {
@@ -466,18 +501,15 @@ public class PackagesPanel extends JPanel implements WizardContainer {
         Package shownPackage = getSelectedPackage();
         Supplier<List<PropertySheet>> sheets = () -> {
             List<PropertySheet> built = new ArrayList<>();
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PackagesPanel.NozzleTipsTab.title"), //$NON-NLS-1$
-                    new PackageNozzleTipsWizard(shownPackage)));
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PackagesPanel.SettingsTab.title"), //$NON-NLS-1$
-                    new PackageSettingsWizard(shownPackage)));
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PackagesPanel.VisionTab.title"), //$NON-NLS-1$
-                    new PackageVisionWizard(shownPackage)));
-            built.add(PropertySheetPresenter.sheet(
-                    Translations.getString("PackagesPanel.VisionCompositingTab.title"), //$NON-NLS-1$
-                    new PackageCompositingWizard(shownPackage)));
+            built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                    PackageForm.build(configuration, shownPackage),
+                    Translations.getString("PackagesPanel.SettingsTab.title"))); //$NON-NLS-1$
+            built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                    PackageVisionForm.build(configuration, shownPackage),
+                    Translations.getString("PackagesPanel.VisionTab.title"))); //$NON-NLS-1$
+            built.add(new org.openpnp.gui.support.PropertySheetWizardAdapter(
+                    PackageCompositingForm.build(configuration, shownPackage),
+                    Translations.getString("PackagesPanel.VisionCompositingTab.title"))); //$NON-NLS-1$
             Machine machine = configuration.getMachine();
             for (PartAlignment partAlignment : machine.getPartAlignments()) {
                 Wizard wizard = partAlignment.getPartConfigurationWizard(shownPackage);

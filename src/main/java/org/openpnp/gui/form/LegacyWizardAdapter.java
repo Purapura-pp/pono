@@ -70,7 +70,7 @@ public final class LegacyWizardAdapter {
     }
 
     /** Laid out for what they show - a console, charts, a calibration run - and left alone. */
-    static final Set<String> EXCEPTIONS = Set.of("GcodeDriverConsole", "MachineDiagnosticsWizard", //$NON-NLS-1$ //$NON-NLS-2$
+    static final Set<String> EXCEPTIONS = Set.of("GcodeDriverConsole", //$NON-NLS-1$
             "ReferenceAdvancedMotionPlannerDiagnosticsWizard", "ReferenceCameraCalibrationWizard"); //$NON-NLS-1$ //$NON-NLS-2$
 
     private static final String ADAPTED = "Pono.legacyAdapted"; //$NON-NLS-1$
@@ -130,8 +130,8 @@ public final class LegacyWizardAdapter {
 
     /** A scroll pane's content held at the viewport's width, scrolling only up and down. */
     @SuppressWarnings("serial")
-    static final class WidthTracking extends javax.swing.JPanel implements javax.swing.Scrollable {
-        WidthTracking(Component view) {
+    public static final class WidthTracking extends javax.swing.JPanel implements javax.swing.Scrollable {
+        public WidthTracking(Component view) {
             super(new java.awt.BorderLayout());
             setOpaque(false);
             add(view, java.awt.BorderLayout.CENTER);

@@ -50,6 +50,8 @@ import javax.swing.event.ChangeListener;
 import org.opencv.core.Mat;
 import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
+import org.openpnp.gui.shell.Forms;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.model.Location;
@@ -68,10 +70,6 @@ import org.openpnp.vision.pipeline.ui.CvPipelineEditor;
 import org.openpnp.vision.pipeline.ui.CvPipelineEditorDialog;
 import org.pmw.tinylog.Logger;
 
-import com.jgoodies.forms.layout.ColumnSpec;
-import com.jgoodies.forms.layout.FormLayout;
-import com.jgoodies.forms.layout.FormSpecs;
-import com.jgoodies.forms.layout.RowSpec;
 
 public abstract class PipelineControls extends JPanel {
     private CvPipeline pipeline;
@@ -141,12 +139,11 @@ public abstract class PipelineControls extends JPanel {
         invokeRebuildUi();
     }
 
+    /** The controls are built again as they stand: the buttons are inside the row of stages. */
     @Override
     public void setEnabled(boolean enabled) {
-        for (Component comp : getComponents()) { 
-            comp.setEnabled(enabled);
-        }
         super.setEnabled(enabled);
+        invokeRebuildUi();
     }
 
     /**
@@ -284,13 +281,13 @@ public abstract class PipelineControls extends JPanel {
                 }
                 if (showImages.size() > 0) {
                     // Show the first image directly.
-                    cameraView.showFilteredImage(showImages.get(0), paramStage.getParameterLabel()+" = "+paramStage.displayValue(value), 3000);
+                    cameraView.showFilteredImage(showImages.get(0), Translations.translateText(paramStage.getParameterLabel())+" = "+paramStage.displayValue(value), 3000);
                     showImages.remove(0);
                     if (showImages.size() > 0) {
                         // Show subsequent images with a timer.
                         timer = new Timer(1000, e -> {
                             cameraView.showFilteredImage(showImages.get(0), 
-                                    paramStage.getParameterLabel()+" = "+paramStage.displayValue(value), 3000);
+                                    Translations.translateText(paramStage.getParameterLabel())+" = "+paramStage.displayValue(value), 3000);
                             showImages.remove(0);
                             if (showImages.isEmpty()) {
                                 // No more images, stop.
@@ -308,45 +305,26 @@ public abstract class PipelineControls extends JPanel {
         }
     }
 
-    private RowSpec[] dynamicRowspec(int rows) {
-        RowSpec[] rowspec = new RowSpec[rows*2];
-        for (int i = 0; i < rows*2; i+=2) {
-            rowspec[i] = FormSpecs.RELATED_GAP_ROWSPEC;
-            rowspec[i+1] = FormSpecs.DEFAULT_ROWSPEC;
-        }
-        return rowspec;
-    }
-
     private int invokation = 0;
     private JButton btnCopy;
     private JButton btnPaste;
 
+    /**
+     * The mockups' pipeline: its enabled stages by what they do, "阈值 › 轮廓 › 最小外接矩形",
+     * with Edit, Reset to default, copy and paste after them, and a row for each of the
+     * parameters it exposes - its name, the slider and what it is set to. It was a grid of
+     * a label, two buttons, two unlabelled icons and the sliders without their values.
+     */
     private void rebuildUi() {
         removeAll();
         invokation++;
-        //Logger.trace("rebuild "+this.hashCode()+" invokation "+invokation);
-        JPanel panel = this;
+        setOpaque(false);
+        setLayout(new javax.swing.BoxLayout(this, javax.swing.BoxLayout.Y_AXIS));
         List<CvAbstractParameterStage> parameterStages = getPipeline() != null ? 
                 getPipeline().getParameterStages() : new ArrayList<>();
-        int rows = 1 + parameterStages.size();
-        panel.setLayout(new FormLayout(new ColumnSpec[] {
-                FormSpecs.RELATED_GAP_COLSPEC,
-                ColumnSpec.decode("max(70dlu;default)"),
-                FormSpecs.RELATED_GAP_COLSPEC,
-                ColumnSpec.decode("max(70dlu;default)"),
-                FormSpecs.RELATED_GAP_COLSPEC,
-                ColumnSpec.decode("max(70dlu;default)"),
-                FormSpecs.RELATED_GAP_COLSPEC,
-                FormSpecs.DEFAULT_COLSPEC,
-                FormSpecs.UNRELATED_GAP_COLSPEC,
-                FormSpecs.DEFAULT_COLSPEC,},
-            dynamicRowspec(rows)));
 
-        JLabel lblPipeline = new JLabel(Translations.getString("PipelinePanel.PipelineLabel.title")); //$NON-NLS-1$
-        lblPipeline.setEnabled(isEnabled());
-        panel.add(lblPipeline, "2, 2, right, default");
-
-        btnEdit = new JButton(Translations.getString("PipelinePanel.EditButton.title")); //$NON-NLS-1$
+        btnEdit = Ui.button(Translations.getString("PipelinePanel.EditButton.title"), //$NON-NLS-1$
+                Ui.iconSm("edit"), Ui.Size.Xs, Ui.Variant.Default); //$NON-NLS-1$
         btnEdit.setToolTipText(Translations.getString("PipelinePanel.EditButton.toolTipText")); //$NON-NLS-1$
         btnEdit.setEnabled(isEnabled());
         btnEdit.setVisible(editable);
@@ -355,9 +333,9 @@ public abstract class PipelineControls extends JPanel {
                 UiUtils.messageBoxOnException(() -> configurePipeline(getPipeline(), getPipelineParameterAssignments(), true));
             }
         });
-        panel.add(btnEdit, "4, 2, default, fill");
 
-        btnReset = new JButton(Translations.getString("PipelinePanel.ResetButton.text")); //$NON-NLS-1$
+        btnReset = Ui.button(Translations.getString("PipelinePanel.ResetButton.text"), null, //$NON-NLS-1$
+                Ui.Size.Xs, Ui.Variant.Ghost);
         btnReset.setToolTipText(Translations.getString("PipelinePanel.ResetButton.toolTipText")); //$NON-NLS-1$
         btnReset.setEnabled(isEnabled());
         btnReset.setVisible(resetable);
@@ -366,29 +344,34 @@ public abstract class PipelineControls extends JPanel {
                 UiUtils.messageBoxOnException(() -> resetPipeline());
             }
         });
-        panel.add(btnReset, "6, 2, default, fill");
 
-        btnCopy = new JButton(copyAction);
-        add(btnCopy, "8, 2, right, default");
-
-        btnPaste = new JButton(pasteAction);
+        btnCopy = Ui.iconButton(copyAction, Ui.Size.Xs, Ui.Variant.Ghost);
+        btnCopy.setIcon(Ui.iconSm("copy")); //$NON-NLS-1$
+        btnPaste = Ui.iconButton(pasteAction, Ui.Size.Xs, Ui.Variant.Ghost);
+        btnPaste.setIcon(Ui.iconSm("upload")); //$NON-NLS-1$
         btnPaste.setEnabled(isEnabled());
         btnPaste.setVisible(editable);
-        add(btnPaste, "10, 2, left, default");
 
-        int formRow = 2;
+        JPanel stages = Forms.pipeline(org.openpnp.gui.support.PipelineStages.summary(getPipeline()),
+                btnEdit, btnReset, btnCopy, btnPaste);
+        stages.setAlignmentX(Component.LEFT_ALIGNMENT);
+        add(stages);
+
         for (CvAbstractParameterStage parameter : parameterStages) {
             //Logger.trace("    rebuild "+parameter.getParameterName()+" invokation "+invokation);
             if (parameter instanceof CvAbstractScalarParameterStage) {
                 CvAbstractScalarParameterStage scalarParameter = (CvAbstractScalarParameterStage) parameter;
                 try {
-                    JLabel lbl = new JLabel(parameter.getParameterLabel());
-                    lbl.setToolTipText(parameter.getParameterDescription());
+                    // The labels are the pipeline's own, in English in the pipelines the program
+                    // ships; those have translations of their own.
+                    JLabel lbl = Ui.t2(Translations.translateText(parameter.getParameterLabel()));
+                    lbl.setToolTipText(Translations.translateText(parameter.getParameterDescription()));
                     lbl.setEnabled(isEnabled());
-                    panel.add(lbl, "2, "+(formRow*2)+", right, default");
+                    JLabel shown = Ui.mono(parameter.displayValue(getParameterValue(parameter)), 12f);
                     JSlider slider = new JSlider(JSlider.HORIZONTAL,
                             scalarParameter.minimumScalar(), scalarParameter.maximumScalar(), 
                             scalarParameter.convertToScalar(getParameterValue(parameter)));
+                    slider.setOpaque(false);
                     slider.setEnabled(isEnabled());
                     slider.addChangeListener(new ChangeListener() {
                         public void stateChanged(ChangeEvent e) {
@@ -400,6 +383,7 @@ public abstract class PipelineControls extends JPanel {
                             if (newValue != value) {
                                 slider.setValue(newValue);
                             }
+                            shown.setText(parameter.displayValue(getParameterValue(parameter)));
                         }
                     });
                     // Just clicking the slider also shows the preview.
@@ -411,19 +395,25 @@ public abstract class PipelineControls extends JPanel {
                             super.mousePressed(e);
                         }
                     });
-                    slider.setToolTipText(parameter.getParameterDescription());
-                    slider.setEnabled(isEnabled());
-                    panel.add(slider, "4, "+(formRow*2)+", 7, 1, fill, default");
+                    slider.setToolTipText(Translations.translateText(parameter.getParameterDescription()));
+                    JPanel row = new JPanel(new java.awt.BorderLayout(8, 0));
+                    row.setOpaque(false);
+                    row.setAlignmentX(Component.LEFT_ALIGNMENT);
+                    row.add(lbl, java.awt.BorderLayout.WEST);
+                    row.add(slider, java.awt.BorderLayout.CENTER);
+                    row.add(shown, java.awt.BorderLayout.EAST);
+                    add(javax.swing.Box.createVerticalStrut(6));
+                    add(row);
                 }
                 catch (Exception e) {
                     Logger.warn(e);
                 }
             }
-            formRow++;
         }
         revalidate();
         repaint();
     }
+
     public final Action copyAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.copy);

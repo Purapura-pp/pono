@@ -22,6 +22,8 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
+
+import javax.swing.JTextArea;
 import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -640,6 +642,43 @@ public final class Forms {
      * The stylesheet's {@code .pipeline}: the stages of a vision pipeline as small capsules with
      * arrows between them, and its buttons at the right.
      */
+    /**
+     * A paragraph that wraps at the width it is given, in the secondary colour: what a step or an
+     * issue says about itself. An HTML label asked for one line as wide as its text, and cut off
+     * everything after the first line when it was given less.
+     */
+    @SuppressWarnings("serial")
+    public static JTextArea paragraph(String text) {
+        JTextArea area = new JTextArea(text == null ? "" : text) { //$NON-NLS-1$
+            private int laidOutWidth = -1;
+
+            @Override
+            public void setBounds(int x, int y, int width, int height) {
+                boolean widthChanged = width != laidOutWidth;
+                laidOutWidth = width;
+                super.setBounds(x, y, width, height);
+                // Its height for this width is only known now: the parent asks again.
+                if (widthChanged && width > 0 && getPreferredSize().height != height) {
+                    javax.swing.SwingUtilities.invokeLater(this::revalidate);
+                }
+            }
+
+            @Override
+            public Dimension getMinimumSize() {
+                return new Dimension(40, super.getMinimumSize().height);
+            }
+        };
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setOpaque(false);
+        area.setBorder(null);
+        area.setFont(Ui.font(Ui.BASE));
+        area.setForeground(Ui.text2());
+        return area;
+    }
+
     public static JPanel pipeline(java.util.List<String> stages, JComponent... buttons) {
         // The stages go on to a second line in a narrow column, each with the arrow before it;
         // the buttons stay at the right. In one line the row was wider than the column at 1366.

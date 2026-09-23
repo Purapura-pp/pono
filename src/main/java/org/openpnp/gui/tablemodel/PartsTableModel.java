@@ -36,7 +36,25 @@ import org.openpnp.model.Part;
 import org.openpnp.util.Collect;
 
 @SuppressWarnings("serial")
-public class PartsTableModel extends AbstractObjectTableModel implements PropertyChangeListener {
+public class PartsTableModel extends AbstractObjectTableModel implements PropertyChangeListener,
+        org.openpnp.gui.support.TableUtils.ColumnKinds, org.openpnp.gui.support.TableUtils.DefaultHidden {
+    /** The through-board depth is in the part's form; the mockup's table has no column for it. */
+    @Override
+    public int[] getDefaultHiddenColumns() {
+        return new int[] { 3 };
+    }
+
+    /** The fiducial vision and the placements go first when the table is narrow. */
+    @Override
+    public org.openpnp.gui.support.TableUtils.Kind[] getColumnKinds() {
+        org.openpnp.gui.support.TableUtils.Kind id = org.openpnp.gui.support.TableUtils.Kind.Id;
+        org.openpnp.gui.support.TableUtils.Kind name = org.openpnp.gui.support.TableUtils.Kind.Name;
+        org.openpnp.gui.support.TableUtils.Kind number = org.openpnp.gui.support.TableUtils.Kind.Number;
+        org.openpnp.gui.support.TableUtils.Kind secondary = org.openpnp.gui.support.TableUtils.Kind.Secondary;
+        return new org.openpnp.gui.support.TableUtils.Kind[] { id, name, number, number, name, number, name,
+                secondary, secondary, number };
+    }
+
     private String[] columnNames =
             new String[] {Translations.getString("PartsTableModel.ColumnName.ID"), //$NON-NLS-1$
                     Translations.getString("PartsTableModel.ColumnName.Description"), //$NON-NLS-1$

@@ -21,7 +21,6 @@ import org.openpnp.gui.components.CameraView;
 import org.openpnp.gui.support.LengthConverter;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.vision.wizards.FiducialVisionSettingsConfigurationWizard;
 import org.openpnp.machine.reference.vision.wizards.ReferenceFiducialLocatorConfigurationWizard;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.AbstractPartSettingsHolder;
@@ -770,7 +769,8 @@ public class ReferenceFiducialLocator extends AbstractPartSettingsHolder
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
                 new PropertySheetWizardAdapter(new ReferenceFiducialLocatorConfigurationWizard(this)),
-                new PropertySheetWizardAdapter(new FiducialVisionSettingsConfigurationWizard(getFiducialVisionSettings(), this))};
+                new PropertySheetWizardAdapter(org.openpnp.machine.reference.vision.wizards.VisionSettingsForm
+                        .fiducial(getMachine().getConfiguration(), getFiducialVisionSettings(), this))};
     }
 
     @Override
@@ -830,7 +830,8 @@ public class ReferenceFiducialLocator extends AbstractPartSettingsHolder
         catch (Exception e) {
             Logger.debug(e, "No vision camera available to preset on the fiducial vision pipeline.");
         }
-        return new FiducialVisionSettingsConfigurationWizard(visionSettings, partSettingsHolder);
+        return org.openpnp.machine.reference.vision.wizards.VisionSettingsForm
+                .fiducial(getMachine().getConfiguration(), visionSettings, partSettingsHolder);
     }
 
     /**

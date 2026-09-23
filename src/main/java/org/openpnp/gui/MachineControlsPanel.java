@@ -272,9 +272,10 @@ public class MachineControlsPanel extends JPanel {
                                 boardLocation.getBoard().getDimensions(),
                                 physicalLocation, safeDistance);
                         if (!safe) {
-                            throw new Exception(
-                                    subject+" would potentially crash into board " + boardLocation.getId() + ". " + 
-                                    "To disable the board protection go to the \"Safety\" tab in the \"Machine Controls\" panel."); 
+                            // Where the switch is now: the Safety tab of a Machine Controls panel is gone.
+                            throw new Exception(String.format(
+                                    Translations.getString("MachineControlsPanel.BoardProtection.Crash"), //$NON-NLS-1$
+                                    subject, boardLocation.getId()));
                         }
                     }
                 }

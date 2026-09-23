@@ -542,6 +542,21 @@ public final class Dialogs {
      * @return Whether the user chose to delete.
      */
     public static boolean confirmDelete(Component parent, String kind, List<String> names) {
+        return confirmDelete(parent, kind, names, "Dialogs.Delete.What", Translations.getString("Dialogs.Delete.More")); //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
+    /**
+     * Deleting things from a board's or a panel's definition, which is a file of its own and not
+     * in the configuration's backups: the foot says where the change goes instead.
+     * 
+     * @param more Where the change goes: "only this board's definition, written when it is saved".
+     */
+    public static boolean confirmDelete(Component parent, String kind, List<String> names, String more) {
+        return confirmDelete(parent, kind, names, "Dialogs.Delete.WhatHere", more); //$NON-NLS-1$
+    }
+
+    private static boolean confirmDelete(Component parent, String kind, List<String> names, String whatKey,
+            String more) {
         String what = Translations.getString(kind);
         int n = names.size();
         String title = n == 1
@@ -558,8 +573,8 @@ public final class Dialogs {
             list.append('\n').append(String.format(Translations.getString("Dialogs.Delete.AndMore"), n - LISTED)); //$NON-NLS-1$
         }
         return confirmDanger(parent, title,
-                n == 1 ? null : String.format(Translations.getString("Dialogs.Delete.What"), n, what), //$NON-NLS-1$
-                n == 1 ? null : list.toString(), Translations.getString("Dialogs.Delete.More"), action); //$NON-NLS-1$
+                n == 1 ? null : String.format(Translations.getString(whatKey), n, what),
+                n == 1 ? null : list.toString(), more, action);
     }
 
     /**
@@ -576,11 +591,57 @@ public final class Dialogs {
 
     /** A message some callers wrote as HTML, as the plain text the dialog lays out itself. */
     static String prepare(String message) {
+        return message == null ? null : plainText(message);
+    }
+
+    /** The tags the program's messages were written with; anything else in angle brackets is text. */
+    private static final java.util.regex.Pattern TAG = java.util.regex.Pattern.compile(
+            "(?i)</?(html|head|body|br|p|b|i|u|em|strong|font|span|div|ul|ol|li|hr|h[1-6]|pre|code|tt|a|center|small|big|sup|sub|table|tr|td|th)(\\s[^<>]*)?/?>"); //$NON-NLS-1$
+
+    /**
+     * A message as plain text: line breaks and paragraphs as new lines, the formatting tags and
+     * the entities gone. Only tags go: a message about {@code <none>} or {@code a < b} keeps its
+     * words, where every pair of angle brackets used to be taken for a tag and removed.
+     */
+    public static String plainText(String message) {
         if (message == null) {
-            return null;
+            return ""; //$NON-NLS-1$
         }
-        return message.replaceAll("(?i)<br\\s*/?>", "\n").replaceAll("<[^>]+>", "") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-                .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&").trim(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+        return TAG.matcher(message.replaceAll("(?i)<br\\s*/?>", "\n").replaceAll("(?i)</p>", "\n")) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                .replaceAll("") //$NON-NLS-1$
+                .replace("&lt;", "<").replace("&gt;", ">").replace("&nbsp;", " ") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+                .replace("&amp;", "&").replace("\r", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+    }
+
+    /**
+     * Taking things off a list without deleting them - boards and panels, whose files stay where
+     * they are: the title and the button say what and how many, the list names them, and the foot
+     * says the files are still there. Cancel is where the focus starts.
+     * 
+     * @param kind The key of the kind of thing, as {@code Dialogs.Kind.Boards}.
+     * @return Whether the user chose to remove them.
+     */
+    public static boolean confirmRemove(Component parent, String kind, List<String> names) {
+        String what = Translations.getString(kind);
+        int n = names.size();
+        String title = n == 1
+                ? String.format(Translations.getString("Dialogs.Remove.TitleOne"), what, names.get(0)) //$NON-NLS-1$
+                : String.format(Translations.getString("Dialogs.Remove.Title"), n, what); //$NON-NLS-1$
+        String action = n == 1
+                ? String.format(Translations.getString("Dialogs.Remove.ButtonOne"), what) //$NON-NLS-1$
+                : String.format(Translations.getString("Dialogs.Remove.Button"), n, what); //$NON-NLS-1$
+        StringBuilder list = new StringBuilder();
+        for (int i = 0; i < Math.min(n, LISTED); i++) {
+            list.append(i > 0 ? "\n" : "").append(names.get(i)); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        if (n > LISTED) {
+            list.append('\n').append(String.format(Translations.getString("Dialogs.Delete.AndMore"), n - LISTED)); //$NON-NLS-1$
+        }
+        Content content = new Content().tone(Tone.Warn, "x").title(title) //$NON-NLS-1$
+                .what(n == 1 ? null : String.format(Translations.getString("Dialogs.Remove.What"), n, what)) //$NON-NLS-1$
+                .list(n == 1 ? null : list.toString()).more(Translations.getString("Dialogs.Remove.More")); //$NON-NLS-1$
+        List<Choice> choices = Arrays.asList(Choice.cancel(), new Choice(action, Ui.iconSm("x"), Ui.Variant.Danger)); //$NON-NLS-1$
+        return show(parent, content, choices, 0, 0) == 1;
     }
 
     /**

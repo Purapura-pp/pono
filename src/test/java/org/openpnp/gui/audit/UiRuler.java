@@ -152,8 +152,8 @@ public class UiRuler {
                 { "PartsPanel", "parts" }, { "PackagesPanel", "packages" },
                 { "BoardsPanel", "boards" }, { "PanelsPanel", "panels" },
                 { "VisionSettingsPanel", "vision" }, { "MachineSetupPanel", "machine" },
-                { "IssuesAndSolutionsPanel", "issues" }, { "DiagnosticsPanel", "diagnostics" },
-                { "CalibrationPanel", "calibration" }, { "LogPanel", "log" },
+                { "IssuesAndSolutionsPanel", "issues" }, { "CalibrationPanel", "calibration" },
+                { "LogPanel", "log" },
                 { "SettingsPanel", "settings" } };
         for (String[] id : ids) {
             PAGE_IDS.put(id[0], id[1]);
@@ -447,6 +447,7 @@ public class UiRuler {
                 break;
             case "boards":
                 expect(missed, selectRow(page, s -> s.contains("demo-board")), "\u5355\u677f demo-board");
+                expect(missed, selectRow(page, "R12"::equals), "\u8d34\u7247\u4f4d R12");
                 break;
             case "panels":
                 expect(missed, selectRow(page, s -> s.contains("demo-panel")), "\u62fc\u677f demo-panel");
@@ -455,7 +456,8 @@ public class UiRuler {
                 expect(missed, selectFirstRow(page), "\u7b2c\u4e00\u4e2a\u89c6\u89c9\u914d\u7f6e");
                 break;
             case "machine":
-                expect(missed, selectTreeNode(page, "Top"), "\u76f8\u673a Top");
+                expect(missed, selectTreeNode(page, "Top") || selectRow(page, s -> s.endsWith(" Top")),
+                        "\u76f8\u673a Top");
                 break;
             default:
                 break;
@@ -1029,14 +1031,21 @@ public class UiRuler {
         for (NozzleTip tip : machine.getNozzleTips()) {
             data(data, tip.getName());
         }
+        // The folder a definition is in is the user's as much as its name: "jobs\demo-board.board.xml".
         for (Board board : configuration.getBoards()) {
             data(data, board.getName());
             data(data, board.getFile() == null ? null : board.getFile().getName());
+            data(data, board.getFile() == null || board.getFile().getParentFile() == null ? null
+                    : board.getFile().getParentFile().getName());
         }
         for (Panel panel : configuration.getPanels()) {
             data(data, panel.getName());
             data(data, panel.getFile() == null ? null : panel.getFile().getName());
+            data(data, panel.getFile() == null || panel.getFile().getParentFile() == null ? null
+                    : panel.getFile().getParentFile().getName());
         }
+        // The configuration folder, which the settings page shows where it is.
+        data(data, config.getAbsolutePath());
         File[] jobs = new File(config, "jobs").listFiles();
         for (File job : jobs == null ? new File[0] : jobs) {
             data(data, job.getName());

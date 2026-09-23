@@ -216,7 +216,7 @@ public abstract class AbstractMachine extends AbstractModelObject implements Mac
         for (Head head : heads) {
             head.setMachine(this);
         }
-        attachAll(axes, signalers, feeders, cameras, actuators, drivers, nozzleTips);
+        attachAll(axes, signalers, feeders, cameras, actuators, drivers, nozzleTips, partAlignments);
     }
 
     public void addHead(Head head) {

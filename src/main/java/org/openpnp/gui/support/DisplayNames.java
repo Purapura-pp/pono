@@ -24,6 +24,7 @@ import java.awt.Toolkit;
 import java.awt.event.ContainerEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JComboBox;
@@ -63,6 +64,10 @@ public final class DisplayNames {
             if (Translations.has(key)) {
                 return Translations.getString(key);
             }
+        }
+        // A vision setting by its name: its id is a generated one nobody chose.
+        if (value instanceof org.openpnp.model.AbstractVisionSettings) {
+            return visionSettingsName(((org.openpnp.model.AbstractVisionSettings) value).getName());
         }
         // A part, a package, a feeder: by the id the user gave it. Their toString is for the
         // log, "id R0603-10K, name ..., heightUnits ...".
@@ -127,14 +132,44 @@ public final class DisplayNames {
      * under English names; they are shown in the display language.
      */
     public static String visionSettingsName(String name) {
-        if ("- Default Machine Bottom Vision -".equals(name)) { //$NON-NLS-1$
-            return Translations.getString("VisionSettings.Builtin.Bottom"); //$NON-NLS-1$
-        }
-        if ("- Default Machine Fiducial Locator -".equals(name)) { //$NON-NLS-1$
-            return Translations.getString("VisionSettings.Builtin.Fiducial"); //$NON-NLS-1$
-        }
-        return name;
+        String key = BUILT_IN_VISION.get(name);
+        return key == null ? name : Translations.getString(key);
     }
+
+    /**
+     * What uses vision settings, by name: the parts and packages by their ids, the machine's
+     * bottom vision and fiducial locator as the defaults they are. The pseudo user that keeps
+     * built-in settings from being deleted is left out; it used to be listed under the settings'
+     * own English name.
+     */
+    public static String usedIn(List<org.openpnp.model.PartSettingsHolder> holders) {
+        List<String> names = new ArrayList<>();
+        for (org.openpnp.model.PartSettingsHolder holder : holders) {
+            if (org.openpnp.model.AbstractVisionSettings.isStockHolder(holder)) {
+                continue;
+            }
+            if (holder instanceof org.openpnp.spi.PartAlignment) {
+                names.add(Translations.getString("VisionSettings.UsedBy.BottomVision")); //$NON-NLS-1$
+            }
+            else if (holder instanceof org.openpnp.spi.FiducialLocator) {
+                names.add(Translations.getString("VisionSettings.UsedBy.FiducialLocator")); //$NON-NLS-1$
+            }
+            else {
+                names.add(holder.getShortName());
+            }
+        }
+        return String.join(Translations.getString("VisionSettings.UsedBy.Separator"), names); //$NON-NLS-1$
+    }
+
+    /** The names the machine gives the vision settings it makes itself, in "- ... -". */
+    private static final Map<String, String> BUILT_IN_VISION = Map.of(
+            "- Default Machine Bottom Vision -", "VisionSettings.Builtin.Bottom", //$NON-NLS-1$ //$NON-NLS-2$
+            "- Default Machine Fiducial Locator -", "VisionSettings.Builtin.Fiducial", //$NON-NLS-1$ //$NON-NLS-2$
+            "- Stock Bottom Vision Settings -", "VisionSettings.Builtin.StockBottom", //$NON-NLS-1$ //$NON-NLS-2$
+            "- Rectlinear Symmetry Bottom Vision Settings -", "VisionSettings.Builtin.Rectlinear", //$NON-NLS-1$ //$NON-NLS-2$
+            "- Whole Part Body Bottom Vision Settings -", "VisionSettings.Builtin.Body", //$NON-NLS-1$ //$NON-NLS-2$
+            "- Stock Fiducial Vision Settings -", "VisionSettings.Builtin.StockFiducial", //$NON-NLS-1$ //$NON-NLS-2$
+            "- Footprint Fiducial Vision Settings -", "VisionSettings.Builtin.FootprintFiducial"); //$NON-NLS-1$ //$NON-NLS-2$
 
     /** The title of a configured object: its type as the interface names it, and its name. */
     public static String title(Object object, String name) {

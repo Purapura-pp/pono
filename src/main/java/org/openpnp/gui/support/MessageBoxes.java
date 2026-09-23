@@ -32,17 +32,16 @@ import org.openpnp.gui.shell.Dialogs;
  */
 public class MessageBoxes {
 
-    /** A message some callers wrote as HTML, as plain text: the dialog lays its own paragraphs out. */
+    /**
+     * A message some callers wrote as HTML, as plain text: the dialog lays its own paragraphs out.
+     * A message that is not HTML is taken as it is, entities and all.
+     */
     static String prepareMessage(String message) {
         if (message == null) {
             return ""; //$NON-NLS-1$
         }
         if (message.contains("<html") || message.contains("<br")) { //$NON-NLS-1$ //$NON-NLS-2$
-            message = message.replaceAll("(?i)<br\\s*/?>", "\n") //$NON-NLS-1$ //$NON-NLS-2$
-                    .replaceAll("(?i)</p>", "\n") //$NON-NLS-1$ //$NON-NLS-2$
-                    .replaceAll("<[^>]+>", "") //$NON-NLS-1$ //$NON-NLS-2$
-                    .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
-                    .replace("&nbsp;", " "); //$NON-NLS-1$ //$NON-NLS-2$
+            return Dialogs.plainText(message);
         }
         return message.replace("\r", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$
     }

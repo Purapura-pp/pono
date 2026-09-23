@@ -33,6 +33,20 @@ public class AutoScroller implements AdjustmentListener {
         scrollBar.setValue(scrollBar.getModel().getMaximum());
     }
 
+    private boolean enabled = true;
+
+    /**
+     * Whether new lines take the view down with them. Off, the view stays where it is even at the
+     * bottom; on again, it goes to the bottom and follows from there.
+     */
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+        if (enabled) {
+            adjustScrollBar = true;
+            scrollDown();
+        }
+    }
+
     /*
      *  Analyze every adjustment event to determine when the viewport
      *  needs to be repositioned.
@@ -59,7 +73,7 @@ public class AutoScroller implements AdjustmentListener {
           Reset the "value" so we can reposition the viewport
           and distinguish between a user scroll and a program scroll.
          */
-        if (adjustScrollBar) {
+        if (adjustScrollBar && enabled) {
             //  Scroll the viewport to the end.
             scrollBar.removeAdjustmentListener(this);
             value = maximum - extent;

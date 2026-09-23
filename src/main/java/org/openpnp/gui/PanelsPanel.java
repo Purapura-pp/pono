@@ -20,79 +20,74 @@
 package org.openpnp.gui;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FileDialog;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.prefs.Preferences;
+import java.util.stream.Collectors;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
-import javax.swing.JButton;
-import javax.swing.JMenuItem;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
 import javax.swing.JTable;
-import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
-import javax.swing.border.TitledBorder;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.event.TableModelEvent;
-import javax.swing.event.TableModelListener;
 import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
+import org.openpnp.events.PlacementSelectedEvent;
 import org.openpnp.events.PlacementsHolderLocationSelectedEvent;
 import org.openpnp.events.PlacementsHolderSelectedEvent;
-import org.openpnp.events.PlacementSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
+import org.openpnp.gui.shell.Dialogs;
+import org.openpnp.gui.shell.DockPanel;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.support.ActionGroup;
-import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
-import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
-import org.openpnp.gui.support.TableUtils;
+import org.openpnp.gui.support.FileDialogs;
 import org.openpnp.gui.support.Icons;
-import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.gui.support.PropertySheetWizardAdapter;
+import org.openpnp.gui.support.TableUtils;
+import org.openpnp.gui.support.Wizard;
+import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.gui.tablemodel.PlacementsHolderTableModel;
+import org.openpnp.model.Configuration;
+import org.openpnp.model.Configuration.TablesLinked;
 import org.openpnp.model.Panel;
 import org.openpnp.model.PanelLocation;
 import org.openpnp.model.Placement;
-import org.openpnp.model.Configuration.TablesLinked;
-import org.openpnp.model.Configuration;
 import org.pmw.tinylog.Logger;
+
 import com.google.common.eventbus.Subscribe;
 
+/**
+ * The panels page, as mockup 10 draws it: the panel definitions listed down the left, as the
+ * boards page lists its boards, and the selected panel's children and fiducials beside them. It
+ * was a table of panels over the definition in a split, and the definition split again.
+ */
 @SuppressWarnings("serial")
 public class PanelsPanel extends JPanel {
     final private Configuration configuration;
     final private MainFrame frame;
 
-    private static final String PREF_DIVIDER_POSITION = "PanelsPanel.dividerPosition"; //$NON-NLS-1$
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
-
     private PlacementsHolderTableModel panelsTableModel;
     private JTable panelsTable;
-    private JSplitPane splitPane;
 
     private ActionGroup singleSelectionActionGroup;
     private ActionGroup multiSelectionActionGroup;
 
-    private Preferences prefs = Preferences.userNodeForPackage(PanelsPanel.class);
-
-    private final PanelDefinitionPanel panelDefinitionPanel;
+    private PanelDefinitionPanel panelDefinitionPanel;
+    private final DockPanel.Tab definitionsTab;
+    private final JLabel usage = DockPanel.foot(""); //$NON-NLS-1$
 
     public PanelsPanel(Configuration configuration, MainFrame frame) {
         this.configuration = configuration;
@@ -105,171 +100,108 @@ public class PanelsPanel extends JPanel {
         multiSelectionActionGroup.setEnabled(false);
         
         panelsTableModel = new PlacementsHolderTableModel(configuration, 
-                () -> configuration.getPanels(), Panel.class);
-        configuration.addPropertyChangeListener("panels", new PropertyChangeListener() { //$NON-NLS-1$
-
+                () -> configuration.getPanels(), Panel.class) {
             @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                panelsTableModel.fireTableDataChanged();
-            }});
+            public boolean isCellEditable(int rowIndex, int columnIndex) {
+                return false;
+            }
+        };
         
         panelsTable = new AutoSelectTextTable(panelsTableModel) {
             @Override
             public String getToolTipText(MouseEvent e) {
-
-                java.awt.Point p = e.getPoint();
-                int row = rowAtPoint(p);
-                int col = columnAtPoint(p);
-
+                int row = rowAtPoint(e.getPoint());
                 if (row >= 0) {
-                    if (col == 0) {
-                        row = panelsTable.convertRowIndexToModel(row);
-                        return configuration.getPanels().get(row).getFile().toString();
-                    }
+                    row = convertRowIndexToModel(row);
+                    File file = configuration.getPanels().get(row).getFile();
+                    return file == null ? null : file.toString();
                 }
-
                 return super.getToolTipText();
             }
         };
 
-        TableRowSorter<PlacementsHolderTableModel> panelsTableSorter = new TableRowSorter<>(panelsTableModel);
-        panelsTable.setRowSorter(panelsTableSorter);
-        panelsTable.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
-        panelsTable.setDefaultRenderer(LengthCellValue.class, new MonospacedFontTableCellRenderer());
+        panelsTable.setRowSorter(new TableRowSorter<>(panelsTableModel));
         panelsTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
-        panelsTable.setAutoResizeMode(JTable.AUTO_RESIZE_NEXT_COLUMN);
-        
-        TableUtils.setColumnAlignment(panelsTableModel, panelsTable);
-        
-        TableUtils.installColumnWidthSavers(panelsTable, prefs, "PanelsPanel.panelsTable.columnWidth"); //$NON-NLS-1$
-        
-        
-        panelsTable.getModel().addTableModelListener(new TableModelListener() {
-            @Override
-            public void tableChanged(TableModelEvent e) {
-                SwingUtilities.invokeLater(() -> {
-                    panelDefinitionPanel.refresh();
-                });
+        TableUtils.bindKeys(panelsTable, removePanelAction);
+        AutoSelectTextTable.setEmptyText(panelsTable, Translations.getString("PanelsPanel.Empty")); //$NON-NLS-1$
+
+        panelsTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
             }
+            
+            boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
+                    && configuration.getTablesLinked() == TablesLinked.Linked;
+
+            List<Panel> selections = getSelections();
+            Panel shown = selections.size() == 1 ? selections.get(0) : null;
+            singleSelectionActionGroup.setEnabled(selections.size() == 1);
+            multiSelectionActionGroup.setEnabled(selections.size() > 1);
+            try {
+                panelDefinitionPanel.setPanel(shown);
+            }
+            catch (IOException e1) {
+                Logger.error(e1, "Failed to show the definition of panel {}.",
+                        shown == null ? null : shown.getName());
+            }
+            if (updateLinkedTables) {
+                configuration.getBus()
+                    .post(new PlacementsHolderSelectedEvent(shown, PanelsPanel.this));
+            }
+            updateUsage();
+            inspectPanel();
         });
 
-        panelsTable.getSelectionModel()
-                .addListSelectionListener(new ListSelectionListener() {
-                    @Override
-                    public void valueChanged(ListSelectionEvent e) {
-                        if (e.getValueIsAdjusting()) {
-                            return;
-                        }
-                        
-                        boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
-                                && configuration.getTablesLinked() == TablesLinked.Linked;
+        setLayout(new BorderLayout(10, 0));
+        setOpaque(false);
+        setBorder(new javax.swing.border.EmptyBorder(0, 10, 10, 10));
+        putClientProperty(MainFrame.DOCK_PAGE, Boolean.TRUE);
 
-                        List<Panel> selections = getSelections();
-                        if (selections.size() == 0) {
-                            singleSelectionActionGroup.setEnabled(false);
-                            multiSelectionActionGroup.setEnabled(false);
-                            try {
-                                panelDefinitionPanel.setPanel(null);
-                            }
-                            catch (IOException e1) {
-                                Logger.error(e1, "Failed to clear the panel definition view.");
-                            }
-                            if (updateLinkedTables) {
-                                configuration.getBus()
-                                    .post(new PlacementsHolderSelectedEvent(null, PanelsPanel.this));
-                            }
-                        }
-                        else if (selections.size() == 1) {
-                            multiSelectionActionGroup.setEnabled(false);
-                            singleSelectionActionGroup.setEnabled(true);
-                            try {
-                                panelDefinitionPanel.setPanel((Panel) selections.get(0));
-                            }
-                            catch (IOException e1) {
-                                Logger.error(e1, "Failed to show the definition of panel {}.",
-                                        selections.get(0).getName());
-                            }
-                            if (updateLinkedTables) {
-                                configuration.getBus()
-                                    .post(new PlacementsHolderSelectedEvent(selections.get(0), PanelsPanel.this));
-                            }
-                        }
-                        else {
-                            singleSelectionActionGroup.setEnabled(false);
-                            multiSelectionActionGroup.setEnabled(true);
-                            try {
-                                panelDefinitionPanel.setPanel(null);
-                            }
-                            catch (IOException e1) {
-                                Logger.error(e1, "Failed to clear the panel definition view.");
-                            }
-                            if (updateLinkedTables) {
-                                configuration.getBus()
-                                    .post(new PlacementsHolderSelectedEvent(null, PanelsPanel.this));
-                            }
-                        }
-                    }
-                });
-
-        setLayout(new BorderLayout(0, 0));
-
-        splitPane = new JSplitPane();
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setBorder(null);
-        splitPane.setContinuousLayout(true);
-        splitPane.setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() { //$NON-NLS-1$
+        DockPanel.Toolbar listTools = new DockPanel.Toolbar();
+        listTools.button(addNewPanelAction, "plus", "Dock.Action.New"); //$NON-NLS-1$ //$NON-NLS-2$
+        listTools.button(addExistingPanelAction, "folder", "Dock.Action.Open"); //$NON-NLS-1$ //$NON-NLS-2$
+        listTools.glue();
+        listTools.more(copyPanelAction, null, cleanUpAction);
+        listTools.iconButton(removePanelAction, "x"); //$NON-NLS-1$
+        JPanel listPage = new JPanel(new BorderLayout());
+        listPage.setOpaque(false);
+        listPage.add(listTools, BorderLayout.NORTH);
+        listPage.add(DefinitionList.dress(panelsTable, holder -> ((Panel) holder).getChildren().size()),
+                BorderLayout.CENTER);
+        listPage.add(usage, BorderLayout.SOUTH);
+        DockPanel list = new DockPanel() {
             @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
+            public Dimension getPreferredSize() {
+                // 260 as drawn, less on a narrow window, where the children need the room.
+                Dimension size = super.getPreferredSize();
+                int page = PanelsPanel.this.getWidth();
+                size.width = page <= 0 ? 260 : Math.max(220, Math.min(260, page * 3 / 10));
+                return size;
             }
+        };
+        definitionsTab = list.addTab(Ui.iconSm("layers"), //$NON-NLS-1$
+                Translations.getString("PanelsPanel.Tab.Definitions"), listPage); //$NON-NLS-1$
+        configuration.addPropertyChangeListener("panels", evt -> { //$NON-NLS-1$
+            panelsTableModel.fireTableDataChanged();
+            definitionsTab.setCount(configuration.getPanels().size());
+            updateUsage();
         });
+        definitionsTab.setCount(configuration.getPanels().size());
+        add(list, BorderLayout.WEST);
 
-        JPanel pnlPanels = new JPanel();
-        pnlPanels.setBorder(new TitledBorder(null,
-                Translations.getString("PanelsPanel.Tab.Panels"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null)); //$NON-NLS-1$
-        pnlPanels.setLayout(new BorderLayout(0, 0));
-
-        JToolBar toolBarPanels = new JToolBar();
-        toolBarPanels.setFloatable(false);
-        pnlPanels.add(toolBarPanels, BorderLayout.NORTH);
-
-        JButton btnAddPanel = new JButton(addPanelAction);
-        btnAddPanel.setHideActionText(true);
-        btnAddPanel.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                JPopupMenu menu = new JPopupMenu();
-                menu.add(new JMenuItem(addNewPanelAction));
-                menu.add(new JMenuItem(addExistingPanelAction));
-                menu.show(btnAddPanel, (int) btnAddPanel.getWidth(), (int) btnAddPanel.getHeight());
-            }
-        });
-        toolBarPanels.add(btnAddPanel);
-        
-        JButton btnRemovePanel = new JButton(removePanelAction);
-        btnRemovePanel.setHideActionText(true);
-        toolBarPanels.add(btnRemovePanel);
-        
-        JButton btnCopyPanel = new JButton(copyPanelAction);
-        btnCopyPanel.setHideActionText(true);
-        toolBarPanels.add(btnCopyPanel);
-
-        toolBarPanels.addSeparator();
-        
-        JButton btnCleanUp = new JButton(cleanUpAction);
-        btnCleanUp.setHideActionText(true);
-        toolBarPanels.add(btnCleanUp);
-        
-        pnlPanels.add(new JScrollPane(panelsTable));
-        splitPane.setLeftComponent(pnlPanels);
-        
         panelDefinitionPanel = new PanelDefinitionPanel(configuration, this);
-        splitPane.setRightComponent(panelDefinitionPanel);
-        
-        add(splitPane);
-        
+        add(panelDefinitionPanel, BorderLayout.CENTER);
+        panelsTableModel.addTableModelListener(e -> SwingUtilities.invokeLater(() -> {
+            panelDefinitionPanel.refresh();
+        }));
+
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentShown(ComponentEvent e) {
+                updateUsage();
+            }
+        });
+        updateUsage();
 
         configuration.getBus().register(this);
     }
@@ -334,6 +266,48 @@ public class PanelsPanel extends JPanel {
         panelsTableModel.fireTableRowsUpdated(index, index);
     }
 
+    /** The list drawn again: a panel's dot comes and goes as it is changed and saved. */
+    void repaintList() {
+        panelsTable.repaint();
+    }
+
+    private void updateUsage() {
+        List<Panel> selections = getSelections();
+        Panel panel = selections.size() == 1 ? selections.get(0) : null;
+        usage.setText(DefinitionList.usage(configuration, panel));
+        usage.setToolTipText(DefinitionList.usageTip(configuration, panel));
+    }
+
+    /** The selected panel's name, file and size in the properties column. */
+    void inspectPanel() {
+        if (frame == null || frame.getInspector() == null) {
+            return;
+        }
+        List<Panel> selections = getSelections();
+        Panel panel = selections.size() == 1 ? selections.get(0) : null;
+        if (panel == null) {
+            frame.getInspector().show(this, null);
+            return;
+        }
+        frame.getInspector().show(this, panel, panelContainer, panel.getName(),
+                String.format(Translations.getString("PanelsPanel.Inspector.Subtitle"), //$NON-NLS-1$
+                        panel.getChildren().size()),
+                Ui.icon("layers", 16, Ui.accent()), //$NON-NLS-1$
+                () -> List.of(new PropertySheetWizardAdapter(DefinitionForm.build(configuration, panel))));
+    }
+
+    private final WizardContainer panelContainer = new WizardContainer() {
+        @Override
+        public void wizardCompleted(Wizard wizard) {
+            refreshSelectedRow();
+            panelDefinitionPanel.updateSaveState();
+        }
+
+        @Override
+        public void wizardCancelled(Wizard wizard) {
+        }
+    };
+
     public Panel getSelection() {
         List<Panel> selections = getSelections();
         if (selections.isEmpty()) {
@@ -350,6 +324,10 @@ public class PanelsPanel extends JPanel {
             selections.add(configuration.getPanels().get(selectedRow));
         }
         return selections;
+    }
+
+    private static List<String> names(List<Panel> panels) {
+        return panels.stream().map(Panel::getName).collect(Collectors.toList());
     }
 
     public final Action addPanelAction = new AbstractAction() {
@@ -373,16 +351,9 @@ public class PanelsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            FileDialog fileDialog = new FileDialog(frame, 
-                    Translations.getString("PanelsPanel.Action.AddPanel.NewPanel.SaveDialog"), //$NON-NLS-1$
-                    FileDialog.SAVE);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".panel.xml"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setFile("*.panel.xml"); //$NON-NLS-1$
+            String title = Translations.getString("PanelsPanel.Action.AddPanel.NewPanel.SaveDialog"); //$NON-NLS-1$
+            FileDialog fileDialog = FileDialogs.prepare(new FileDialog(frame, title, FileDialog.SAVE), title,
+                    ".panel.xml"); //$NON-NLS-1$
             fileDialog.setVisible(true);
             try {
                 String filename = fileDialog.getFile();
@@ -416,7 +387,7 @@ public class PanelsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            FileDialog fileDialog = org.openpnp.gui.support.FileDialogs.prepare(new FileDialog(frame),
+            FileDialog fileDialog = FileDialogs.prepare(new FileDialog(frame),
                     Translations.getString("PanelsPanel.AddPanel.FileDialog.Title"), ".panel.xml"); //$NON-NLS-1$ //$NON-NLS-2$
             fileDialog.setVisible(true);
             try {
@@ -445,7 +416,11 @@ public class PanelsPanel extends JPanel {
         return panel;
     }
     
-    public final Action removePanelAction = new AbstractAction() { //$NON-NLS-1$
+    /**
+     * Takes the selected panels off the list after asking; their files stay. A panel the job or
+     * another panel uses stays too, and the result says which.
+     */
+    public final Action removePanelAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.delete);
             putValue(NAME, Translations.getString("PanelsPanel.Action.RemovePanel")); //$NON-NLS-1$
@@ -455,18 +430,36 @@ public class PanelsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
+            List<Panel> inUse = new ArrayList<>();
+            List<Panel> removable = new ArrayList<>();
             for (Panel selection : getSelections()) {
-                if (configuration.isInUse(selection)) {
+                (configuration.isInUse(selection) ? inUse : removable).add(selection);
+            }
+            if (removable.isEmpty()) {
+                if (!inUse.isEmpty()) {
                     MessageBoxes.errorBox(PanelsPanel.this, 
                             Translations.getString("PanelsPanel.Action.RemovePanel.ErrorBox.Title"),  //$NON-NLS-1$
                             String.format(Translations.getString("PanelsPanel.Action.RemovePanel.ErrorBox.Message"), //$NON-NLS-1$
-                                    selection.getName()));
+                                    String.join(Translations.getString("DefinitionList.NameSeparator"), names(inUse)))); //$NON-NLS-1$
                 }
-                else {
-                    configuration.removePanel(selection);
+                return;
+            }
+            if (!Dialogs.confirmRemove(frame, "Dialogs.Kind.Panels", names(removable))) { //$NON-NLS-1$
+                return;
+            }
+            int removed = 0;
+            for (Panel panel : removable) {
+                if (configuration.removePanel(panel)) {
+                    removed++;
                 }
             }
             panelsTableModel.fireTableDataChanged();
+            String result = String.format(Translations.getString("PanelsPanel.Removed"), removed); //$NON-NLS-1$
+            if (!inUse.isEmpty()) {
+                result += " \u00b7 " + String.format(Translations.getString("PanelsPanel.Removed.KeptInUse"), //$NON-NLS-1$ //$NON-NLS-2$
+                        String.join(Translations.getString("DefinitionList.NameSeparator"), names(inUse))); //$NON-NLS-1$
+            }
+            frame.setStatus(result);
         }
     };
     
@@ -475,22 +468,16 @@ public class PanelsPanel extends JPanel {
             putValue(SMALL_ICON, Icons.copy);
             putValue(NAME, Translations.getString("PanelsPanel.Action.CopyPanel")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("PanelsPanel.Action.CopyPanel.Description")); //$NON-NLS-1$
-            putValue(MNEMONIC_KEY, KeyEvent.VK_COPY);
+            // VK_COPY is the Copy key of a Sun keyboard, not a letter: the mnemonic never worked.
+            putValue(MNEMONIC_KEY, KeyEvent.VK_C);
         }
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
             Panel panelToCopy = getSelection();
-            FileDialog fileDialog = new FileDialog(frame, 
-                    Translations.getString("PanelsPanel.Action.CopyPanel.SaveDialog"),  //$NON-NLS-1$
-                    FileDialog.SAVE);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".panel.xml"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setFile("*.panel.xml"); //$NON-NLS-1$
+            String title = Translations.getString("PanelsPanel.Action.CopyPanel.SaveDialog"); //$NON-NLS-1$
+            FileDialog fileDialog = FileDialogs.prepare(new FileDialog(frame, title, FileDialog.SAVE), title,
+                    ".panel.xml"); //$NON-NLS-1$
             fileDialog.setVisible(true);
             try {
                 String filename = fileDialog.getFile();
@@ -511,6 +498,8 @@ public class PanelsPanel extends JPanel {
                 configuration.savePanel(newPanel);
                 panelsTableModel.fireTableDataChanged();
                 selectPanel(newPanel);
+                frame.setStatus(String.format(Translations.getString("PanelsPanel.Copied"), //$NON-NLS-1$
+                        panelToCopy.getName(), DefinitionList.where(file)));
             }
             catch (Exception e) {
                 Logger.error(e, "Failed to copy panel {}.", panelToCopy.getName());
@@ -521,6 +510,10 @@ public class PanelsPanel extends JPanel {
         }
     };
 
+    /**
+     * Takes every panel nothing uses off the list after naming them; says so when there is
+     * nothing to take off.
+     */
     public final Action cleanUpAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.clean);
@@ -531,21 +524,52 @@ public class PanelsPanel extends JPanel {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            int endingCount = configuration.getPanels().size();
-            int startingCount = endingCount + 1;
-            //Because panels may be nested in panels, we need to repeat the cleanup until the
-            //remaining list no longer changes size
-            while (startingCount > endingCount) {
-                startingCount = endingCount;
-                List<Panel> panelsList = new ArrayList<>(configuration.getPanels());
-                for (Panel panel : panelsList) {
-                    if (!configuration.isInUse(panel)) {
-                        configuration.removePanel(panel);
-                        endingCount--;
+            // A panel used only by an unused panel goes with it: the list is asked again until
+            // nothing more comes off.
+            List<Panel> unused = new ArrayList<>();
+            List<Panel> remaining = new ArrayList<>(configuration.getPanels());
+            boolean found = true;
+            while (found) {
+                found = false;
+                for (Panel panel : new ArrayList<>(remaining)) {
+                    if (!inUseBy(panel, remaining)) {
+                        unused.add(panel);
+                        remaining.remove(panel);
+                        found = true;
                     }
                 }
             }
+            if (unused.isEmpty()) {
+                Dialogs.info(frame, Translations.getString("PanelsPanel.CleanUp.Nothing.Title"), //$NON-NLS-1$
+                        Translations.getString("PanelsPanel.CleanUp.Nothing")); //$NON-NLS-1$
+                return;
+            }
+            if (!Dialogs.confirmRemove(frame, "Dialogs.Kind.Panels", names(unused))) { //$NON-NLS-1$
+                return;
+            }
+            int removed = 0;
+            for (Panel panel : unused) {
+                if (configuration.removePanel(panel)) {
+                    removed++;
+                }
+            }
+            panelsTableModel.fireTableDataChanged();
+            frame.setStatus(String.format(Translations.getString("PanelsPanel.Removed"), removed)); //$NON-NLS-1$
         }
     };
+
+    /** Whether the job uses the panel, or one of the panels that stay on the list does. */
+    private boolean inUseBy(Panel panel, List<Panel> remaining) {
+        org.openpnp.model.Job job = configuration.getJob();
+        if (job != null && job.instanceCount(panel) > 0) {
+            return true;
+        }
+        for (Panel other : remaining) {
+            if (other.getDefinition() != panel.getDefinition() && other.getInstanceCount(panel) > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
 
 }

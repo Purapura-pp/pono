@@ -133,6 +133,20 @@ public final class DockRenderers {
         };
     }
 
+    /** Text in the secondary colour, the stylesheet's {@code .t2}: what a row says about itself. */
+    public static TableCellRenderer secondary() {
+        return new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+                setForeground(isSelected ? table.getSelectionForeground() : Ui.text2());
+                setBorder(new EmptyBorder(0, 10, 0, 10));
+                return this;
+            }
+        };
+    }
+
     /** Text in the muted colour, for a column that is only sometimes worth reading. */
     /** The stylesheet's bold ID: the column a row is known by. */
     public static TableCellRenderer bold() {
@@ -153,15 +167,88 @@ public final class DockRenderers {
             public Component getTableCellRendererComponent(JTable table, Object value,
                     boolean isSelected, boolean hasFocus, int row, int column) {
                 super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-                setForeground(Ui.muted());
+                // Muted on the accent-soft of a selected row is under 3:1; text-2 keeps 4.5.
+                setForeground(isSelected ? Ui.text2() : Ui.muted());
                 setBorder(new EmptyBorder(0, 10, 0, 10));
                 return this;
             }
         };
     }
 
+    /**
+     * A value that is changed in place from a list, as the mockups draw it: the value with a small
+     * chevron after it, so that it can be seen that a click opens the choices. Without the chevron
+     * the table's combo box editors were found by those who knew to double-click, and the rest set
+     * these values from the right-click menu.
+     * 
+     * @param applies Whether the row has the choice, given the table and the view row: the error
+     *                handling of a fiducial, which is never picked, is only a dash.
+     */
+    public static TableCellRenderer dropdown(TableCellRenderer inner,
+            java.util.function.BiPredicate<JTable, Integer> applies) {
+        return new TableCellRenderer() {
+            private final JLabel chevron = new JLabel(Ui.icon("chevdown", 12, Ui.muted())); //$NON-NLS-1$
+            private final JPanel cell = new JPanel(null) {
+                // What the column is sized by: the value and the chevron side by side.
+                @Override
+                public Dimension getPreferredSize() {
+                    Component value = getComponentCount() > 0 ? getComponent(0) : null;
+                    Dimension v = value == null ? new Dimension() : value.getPreferredSize();
+                    Dimension c = chevron.isVisible() ? chevron.getPreferredSize() : new Dimension();
+                    return new Dimension(v.width + c.width, Math.max(v.height, c.height));
+                }
+
+                @Override
+                public void doLayout() {
+                    // The chevron right after the value, as the mockups' caret; the value gives
+                    // way, with its ellipsis, where the column is too narrow for both.
+                    int h = getHeight();
+                    int cw = chevron.isVisible() ? chevron.getPreferredSize().width : 0;
+                    Component value = getComponentCount() > 0 ? getComponent(0) : null;
+                    if (value == null) {
+                        return;
+                    }
+                    int w = Math.min(value.getPreferredSize().width, Math.max(0, getWidth() - cw));
+                    value.setBounds(0, 0, chevron.isVisible() ? w : getWidth(), h);
+                    chevron.setBounds(w, 0, cw, h);
+                }
+            };
+            {
+                chevron.setBorder(new EmptyBorder(0, 2, 0, 8));
+                chevron.setHorizontalAlignment(SwingConstants.LEFT);
+            }
+
+            @Override
+            public Component getTableCellRendererComponent(JTable table, Object value,
+                    boolean isSelected, boolean hasFocus, int row, int column) {
+                Component shown = inner.getTableCellRendererComponent(table, value, isSelected, hasFocus,
+                        row, column);
+                cell.removeAll();
+                cell.add(shown);
+                chevron.setVisible(table.isCellEditable(row, column)
+                        && (applies == null || applies.test(table, row)));
+                cell.add(chevron);
+                background(cell, table, isSelected);
+                return cell;
+            }
+        };
+    }
+
+    /** A value changed in place from a list, in every row that can be edited. */
+    public static TableCellRenderer dropdown(TableCellRenderer inner) {
+        return dropdown(inner, null);
+    }
+
     /** A board side as the stylesheet's badge: a T in accent or a B in amber, then the word. */
     public static TableCellRenderer side() {
+        return side(true);
+    }
+
+    /**
+     * A board side as the badge, with the word after it or alone: the letter and its colour say
+     * the side, and a table of ten columns has no room for "Bottom".
+     */
+    public static TableCellRenderer side(boolean withWord) {
         return new TableCellRenderer() {
             // Centred in the row: a flow layout put the badge and the word at the top of it.
             private final JPanel cell = new JPanel(new java.awt.GridBagLayout());
@@ -174,8 +261,10 @@ public final class DockRenderers {
                 holder.setLayout(new javax.swing.BoxLayout(holder, javax.swing.BoxLayout.X_AXIS));
                 badge.setMaximumSize(badge.getPreferredSize());
                 holder.add(badge);
-                holder.add(javax.swing.Box.createHorizontalStrut(6));
-                holder.add(word);
+                if (withWord) {
+                    holder.add(javax.swing.Box.createHorizontalStrut(6));
+                    holder.add(word);
+                }
                 java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
                 gc.anchor = java.awt.GridBagConstraints.WEST;
                 gc.weightx = 1;

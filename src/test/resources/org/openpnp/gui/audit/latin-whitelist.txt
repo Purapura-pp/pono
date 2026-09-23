@@ -3,6 +3,9 @@
 # things - part numbers, feeder and camera names, file names - are read from the fixture and
 # need not be listed here.
 
+# The configuration folder's backup folder, named as it is on disk so that it can be found
+backups
+
 # Trade terms and abbreviations, kept in English on purpose
 Safe Z
 G-code

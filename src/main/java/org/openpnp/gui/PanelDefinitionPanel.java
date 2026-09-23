@@ -20,23 +20,21 @@
 package org.openpnp.gui;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.prefs.Preferences;
+import java.util.stream.Collectors;
+
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.DefaultCellEditor;
@@ -47,69 +45,70 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
-import javax.swing.JToolBar;
+import javax.swing.JTable;
+import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
-import javax.swing.border.TitledBorder;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
-import javax.swing.event.TableModelEvent;
-import javax.swing.event.TableModelListener;
-import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
 
 import org.openpnp.Translations;
 import org.openpnp.events.DefinitionStructureChangedEvent;
-import org.openpnp.events.PlacementsHolderLocationSelectedEvent;
 import org.openpnp.events.PlacementSelectedEvent;
+import org.openpnp.events.PlacementsHolderLocationSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.ExistingBoardOrPanelDialog;
 import org.openpnp.gui.panelization.ChildFiducialSelectorDialog;
 import org.openpnp.gui.panelization.PanelArrayBuilderDialog;
+import org.openpnp.gui.shell.Chip;
+import org.openpnp.gui.shell.Dialogs;
+import org.openpnp.gui.shell.DockPanel;
+import org.openpnp.gui.shell.DockRenderers;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.support.ActionGroup;
-import org.openpnp.gui.support.CustomBooleanRenderer;
-import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
-import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
+import org.openpnp.gui.support.FileDialogs;
 import org.openpnp.gui.support.Helpers;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.IdentifiableListCellRenderer;
 import org.openpnp.gui.support.IdentifiableTableCellRenderer;
 import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
 import org.openpnp.gui.support.PartsComboBoxModel;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.TableUtils;
 import org.openpnp.gui.tablemodel.PlacementsHolderLocationsTableModel;
 import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel;
 import org.openpnp.gui.viewers.PlacementsHolderLocationViewerDialog;
-import org.openpnp.model.Board;
 import org.openpnp.model.Abstract2DLocatable.Side;
+import org.openpnp.model.Board;
 import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Configuration.TablesLinked;
-import org.openpnp.model.PlacementsHolderLocation;
-import org.openpnp.util.IdentifiableList;
 import org.openpnp.model.Location;
 import org.openpnp.model.Panel;
 import org.openpnp.model.PanelLocation;
 import org.openpnp.model.Part;
 import org.openpnp.model.Placement;
 import org.openpnp.model.PlacementsHolder;
+import org.openpnp.model.PlacementsHolderLocation;
+import org.openpnp.util.IdentifiableList;
 import org.pmw.tinylog.Logger;
 
-import javax.swing.JSplitPane;
-import javax.swing.JTable;
-import javax.swing.border.EtchedBorder;
 import java.awt.FileDialog;
 import java.awt.Frame;
 
+/**
+ * The selected panel's definition on the panels page, as mockup 10 draws it: one dock with the
+ * children and the panel's fiducials as its two tabs, Save and how much is unsaved above both,
+ * and a toolbar with words on it in each. It was a titled box holding a split of two more titled
+ * boxes, each with a row of unlabelled icons, and removing a child or a fiducial asked nothing.
+ */
 @SuppressWarnings("serial")
 public class PanelDefinitionPanel extends JPanel implements PropertyChangeListener {
-    private static final String PREF_DIVIDER_POSITION = "PanelDefinitionPanel.dividerPosition"; //$NON-NLS-1$
-    private static final int PREF_DIVIDER_POSITION_DEF = -1;
-    
     private Preferences prefs = Preferences.userNodeForPackage(PanelDefinitionPanel.class);
     
     private AutoSelectTextTable fiducialTable;
@@ -133,10 +132,17 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
     
     private PlacementsHolderLocationViewerDialog panelViewer;
 
-    private JSplitPane splitPane;
     private MainFrame frame;
     private Configuration configuration;
     private boolean dirty;
+
+    private DockPanel.Tab childrenTab;
+    private DockPanel.Tab fiducialsTab;
+    private JButton addChildButton;
+    private JTextField childrenFilter;
+    /** "Modified · 2 places", beside Save, while the panel has changes that are not saved. */
+    private final Chip modified = new Chip("", Chip.Tone.Warn, Chip.Shape.Status); //$NON-NLS-1$
+    private final UnsavedChanges unsaved = new UnsavedChanges(this::updateSaveState);
 
     public PanelDefinitionPanel(Configuration configuration, PanelsPanel panelsPanel) {
     	this.configuration = configuration;
@@ -144,14 +150,15 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
     	frame = MainFrame.get();
         createUi();
         addChildAction.setEnabled(false);
+        addChildButton.setEnabled(false);
         viewerAction.setEnabled(false);
         addFiducialAction.setEnabled(false);
         useChildFiducialAction.setEnabled(false);
+        updateSaveState();
     }
     
     private void createUi() {
-        setBorder(new TitledBorder(null, Translations.getString("PanelDefinition.Title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, null));
+        setOpaque(false);
         
         fiducialSingleSelectionActionGroup = new ActionGroup(removeFiducialAction, setSideAction, 
                 setEnabledAction);
@@ -180,156 +187,112 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
         JComboBox<Side> sidesComboBox = new JComboBox(Side.values());
         
         setLayout(new BorderLayout(0, 0));
-        
-        splitPane = new JSplitPane();
-        splitPane.setResizeWeight(0.5);
-        splitPane.setOrientation(JSplitPane.VERTICAL_SPLIT);
-        splitPane.setBorder(null);
-        splitPane.setContinuousLayout(true);
-        add(splitPane, BorderLayout.CENTER);
-        
-        JPanel pnlChildren = new JPanel();
-        pnlChildren.setBorder(new TitledBorder(null, Translations.getString("PanelDefinition.Children.Title"),  //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, null));
-        splitPane.setLeftComponent(pnlChildren);
-        pnlChildren.setLayout(new BorderLayout(0, 0));
-        
-        JPanel pnlChildrenToolbar = new JPanel();
-        pnlChildren.add(pnlChildrenToolbar, BorderLayout.NORTH);
-        pnlChildrenToolbar.setLayout(new BorderLayout(0, 0));
-        
-        JToolBar toolBarChildren = new JToolBar();
-        toolBarChildren.setFloatable(false);
-        pnlChildrenToolbar.add(toolBarChildren);
-        
-        JButton btnAddChild = new JButton(addChildAction);
-        btnAddChild.setHideActionText(true);
-        btnAddChild.addMouseListener(new MouseAdapter() {
-            @Override
-            public void mousePressed(MouseEvent e) {
-                JPopupMenu menu = new JPopupMenu();
-                menu.add(new JMenuItem(addNewBoardAction));
-                menu.add(new JMenuItem(addExistingBoardAction));
-                menu.addSeparator();
-                menu.add(new JMenuItem(addNewPanelAction));
-                menu.add(new JMenuItem(addExistingPanelAction));
-                menu.show(btnAddChild, (int) btnAddChild.getWidth(), (int) btnAddChild.getHeight());
-            }
-        });
-        toolBarChildren.add(btnAddChild);
-        
-        JButton btnRemoveChild = new JButton(removeChildAction);
-        btnRemoveChild.setHideActionText(true);
-        toolBarChildren.add(btnRemoveChild);
-        toolBarChildren.addSeparator();
-        
-        JButton btnCreateArray = new JButton(createArrayAction);
-        btnCreateArray.setHideActionText(true);
-        toolBarChildren.add(btnCreateArray);
-        
-        toolBarChildren.addSeparator();
-        
-        JButton btnViewer = new JButton(viewerAction);
-        btnViewer.setHideActionText(true);
-        toolBarChildren.add(btnViewer);
-        
+
+        // ---- the children ----------------------------------------------------------------------
+
         childrenTableModel = new PlacementsHolderLocationsTableModel(configuration) {
             
             @Override
             public boolean isCellEditable(int rowIndex, int columnIndex) {
                 return columnIndex <= 1 || columnIndex >= 4;
             }
+
+            // Numbers right and the rest left, as in every dock table; the model centres them
+            // all for the job's table.
+            @Override
+            public int[] getColumnAlignments() {
+                return new int[] {LEFT, LEFT, RIGHT, RIGHT, LEFT, RIGHT, RIGHT, RIGHT, RIGHT, LEFT, LEFT};
+            }
         };
         childrenTableModel.setRootPanelLocation(rootPanelLocation);
         childrenTableSorter = new TableRowSorter<>(childrenTableModel);
         
         childrenTable = new AutoSelectTextTable(childrenTableModel);
+        // Enter edits the cell, Delete removes the selected children, which asks first.
+        TableUtils.bindKeys(childrenTable, removeChildAction);
+        AutoSelectTextTable.setEmptyText(childrenTable,
+                Translations.getString("PanelDefinition.Children.Empty")); //$NON-NLS-1$
         TableColumnModel tcm = childrenTable.getColumnModel();
-        tcm.removeColumn(tcm.getColumn(7)); //remove Z column
+        // Z is always nought for a child, and the size is the child's own, shown on its page.
+        tcm.removeColumn(tcm.getColumn(7));
+        tcm.removeColumn(tcm.getColumn(3));
+        tcm.removeColumn(tcm.getColumn(2));
+        // The mockup's order: the side after the angle.
+        tcm.moveColumn(2, 5);
         
         childrenTable.setRowSorter(childrenTableSorter);
-        childrenTable.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
         childrenTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         childrenTable.setDefaultEditor(Side.class, new DefaultCellEditor(sidesComboBox));
-        childrenTable.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer());
         childrenTable.setDefaultRenderer(LengthCellValue.class, new MonospacedFontTableCellRenderer());
         childrenTable.setDefaultRenderer(RotationCellValue.class, new MonospacedFontTableCellRenderer());
         childrenTable.setAutoResizeMode(JTable.AUTO_RESIZE_NEXT_COLUMN);
         
         TableUtils.setColumnAlignment(childrenTableModel, childrenTable);
         
-        TableUtils.installColumnWidthSavers(childrenTable, prefs, "PanelDefinitionPanel.childrenTable.columnWidth"); //$NON-NLS-1$
+        TableUtils.installColumnWidthSavers(childrenTable, prefs, "PanelDefinitionPanel.childrenTable"); //$NON-NLS-1$
         
-        childrenTable.getModel().addTableModelListener(new TableModelListener() {
-            @Override
-            public void tableChanged(TableModelEvent e) {
-                SwingUtilities.invokeLater(() -> {
-                    fiducialTableModel.fireTableDataChanged();
-                });
+        childrenTable.getModel().addTableModelListener(e -> SwingUtilities.invokeLater(() -> {
+            fiducialTableModel.fireTableDataChanged();
+        }));
+
+        childrenTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
             }
-        });
+            
+            boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
+                    && configuration.getTablesLinked() == TablesLinked.Linked;
 
-        childrenTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                if (e.getValueIsAdjusting()) {
-                    return;
-                }
-                
-                boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
-                        && configuration.getTablesLinked() == TablesLinked.Linked;
-
-                List<PlacementsHolderLocation<?>> selections = getChildrenSelections();
-                if (selections.size() > 1) {
-                    // multi select
-                    childrenSingleSelectionActionGroup.setEnabled(false);
-                    childrenMultiSelectionActionGroup.setEnabled(true);
-                    boolean allSameDefinition = true;
-                    boolean starting = true;
-                    PlacementsHolder<?> definition = null;
-                    for (PlacementsHolderLocation<?> phl : selections) {
-                        if (starting) {
-                            definition = phl.getPlacementsHolder().getDefinition();
-                            starting = false;
-                        }
-                        else {
-                            if (phl.getPlacementsHolder().getDefinition() != definition) {
-                                allSameDefinition = false;
-                                break;
-                            }
+            List<PlacementsHolderLocation<?>> selections = getChildrenSelections();
+            if (selections.size() > 1) {
+                // multi select
+                childrenSingleSelectionActionGroup.setEnabled(false);
+                childrenMultiSelectionActionGroup.setEnabled(true);
+                boolean allSameDefinition = true;
+                boolean starting = true;
+                PlacementsHolder<?> definition = null;
+                for (PlacementsHolderLocation<?> phl : selections) {
+                    if (starting) {
+                        definition = phl.getPlacementsHolder().getDefinition();
+                        starting = false;
+                    }
+                    else {
+                        if (phl.getPlacementsHolder().getDefinition() != definition) {
+                            allSameDefinition = false;
+                            break;
                         }
                     }
-                    replaceChildrenSelectionActionGroup.setEnabled(allSameDefinition);
-                    if (updateLinkedTables) {
-                        configuration.getBus()
-                            .post(new PlacementsHolderLocationSelectedEvent(null, PanelDefinitionPanel.this));
-                        configuration.getBus()
-                            .post(new PlacementSelectedEvent(null, null, PanelDefinitionPanel.this));
-                    }
                 }
-                else if (selections.size() == 1) {
-                    // single select
-                    childrenMultiSelectionActionGroup.setEnabled(false);
-                    childrenSingleSelectionActionGroup.setEnabled(selections != null);
-                    replaceChildrenSelectionActionGroup.setEnabled(selections != null);
-                    if (updateLinkedTables) {
-                        configuration.getBus()
-                            .post(new PlacementsHolderLocationSelectedEvent(selections.get(0), PanelDefinitionPanel.this));
-                        configuration.getBus()
-                            .post(new PlacementSelectedEvent(null, selections.get(0), PanelDefinitionPanel.this));
-                    }
+                replaceChildrenSelectionActionGroup.setEnabled(allSameDefinition);
+                if (updateLinkedTables) {
+                    configuration.getBus()
+                        .post(new PlacementsHolderLocationSelectedEvent(null, PanelDefinitionPanel.this));
+                    configuration.getBus()
+                        .post(new PlacementSelectedEvent(null, null, PanelDefinitionPanel.this));
                 }
-                else {
-                    // no select
-                    childrenSingleSelectionActionGroup.setEnabled(false);
-                    childrenMultiSelectionActionGroup.setEnabled(false);
-                    replaceChildrenSelectionActionGroup.setEnabled(false);
-                    if (updateLinkedTables) {
-                        configuration.getBus()
-                            .post(new PlacementsHolderLocationSelectedEvent(null, PanelDefinitionPanel.this));
-                        configuration.getBus()
-                            .post(new PlacementSelectedEvent(null, null, PanelDefinitionPanel.this));
-                    }
+            }
+            else if (selections.size() == 1) {
+                // single select
+                childrenMultiSelectionActionGroup.setEnabled(false);
+                childrenSingleSelectionActionGroup.setEnabled(true);
+                replaceChildrenSelectionActionGroup.setEnabled(true);
+                if (updateLinkedTables) {
+                    configuration.getBus()
+                        .post(new PlacementsHolderLocationSelectedEvent(selections.get(0), PanelDefinitionPanel.this));
+                    configuration.getBus()
+                        .post(new PlacementSelectedEvent(null, selections.get(0), PanelDefinitionPanel.this));
+                }
+            }
+            else {
+                // no select
+                childrenSingleSelectionActionGroup.setEnabled(false);
+                childrenMultiSelectionActionGroup.setEnabled(false);
+                replaceChildrenSelectionActionGroup.setEnabled(false);
+                if (updateLinkedTables) {
+                    configuration.getBus()
+                        .post(new PlacementsHolderLocationSelectedEvent(null, PanelDefinitionPanel.this));
+                    configuration.getBus()
+                        .post(new PlacementSelectedEvent(null, null, PanelDefinitionPanel.this));
                 }
             }
         });
@@ -349,6 +312,7 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
             }
         });
 
+        // The same settings for many children at once; each is changed in its cell too.
         JPopupMenu childrenPopupMenu = new JPopupMenu();
 
         JMenuItem changeChildrenMenu = new JMenuItem(replaceChildrenAction);
@@ -372,39 +336,46 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
         
         childrenTable.setComponentPopupMenu(childrenPopupMenu);
 
-        JScrollPane scrollPaneChildren = new JScrollPane(childrenTable);
-        pnlChildren.add(scrollPaneChildren);
+        JPanel childrenPage = new JPanel(new BorderLayout());
+        childrenPage.setOpaque(false);
+        childrenPage.add(DockPanel.table(childrenTable), BorderLayout.CENTER);
+        // The mockup's cells: the id in bold, the side's badge with its chevron, enabled as a
+        // switch and the fiducial check as a check.
+        childrenTable.setDefaultRenderer(Side.class, DockRenderers.dropdown(DockRenderers.side()));
+        columnRenderer(childrenTable, 0, DockRenderers.bold());
+        columnRenderer(childrenTable, 9, DockRenderers.toggle());
+        columnRenderer(childrenTable, 10, DockRenderers.check());
 
-        
-        
-        JPanel pnlFiducials = new JPanel();
-        pnlFiducials.setBorder(new TitledBorder(new EtchedBorder(EtchedBorder.LOWERED, 
-                new Color(255, 255, 255), new Color(160, 160, 160)), 
-                Translations.getString("PanelDefinition.PanelAlignment.Title"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, null));
-        splitPane.setRightComponent(pnlFiducials);
-        pnlFiducials.setLayout(new BorderLayout(0, 0));
-        
-        JPanel pnlFiducialsToolbar = new JPanel();
-        pnlFiducials.add(pnlFiducialsToolbar, BorderLayout.NORTH);
-        pnlFiducialsToolbar.setLayout(new BorderLayout(0, 0));
-        
-        JToolBar toolBarFiducials = new JToolBar();
-        toolBarFiducials.setFloatable(false);
-        pnlFiducialsToolbar.add(toolBarFiducials, BorderLayout.CENTER);
-        
-        JButton btnAddFiducial = new JButton(addFiducialAction);
-        btnAddFiducial.setHideActionText(true);
-        toolBarFiducials.add(btnAddFiducial);
-        
-        JButton btnRemoveFiducial = new JButton(removeFiducialAction);
-        btnRemoveFiducial.setHideActionText(true);
-        toolBarFiducials.add(btnRemoveFiducial);
-        
-        JButton btnUseChildFiducial = new JButton(useChildFiducialAction);
-        btnUseChildFiducial.setHideActionText(true);
-        toolBarFiducials.add(btnUseChildFiducial);
-        
+        DockPanel.Toolbar childrenTools = new DockPanel.Toolbar();
+        addChildButton = childrenTools.menu("Dock.Action.AddChild", "plus", this::addChildMenu); //$NON-NLS-1$ //$NON-NLS-2$
+        addChildButton.setToolTipText(Translations.getString("PanelDefinition.Children.Add.Description")); //$NON-NLS-1$
+        childrenTools.button(createArrayAction, "grid", "Dock.Action.CreateArray"); //$NON-NLS-1$ //$NON-NLS-2$
+        childrenTools.iconButton(removeChildAction, "trash"); //$NON-NLS-1$
+        childrenTools.separator();
+        childrenTools.button(viewerAction, "eye", "Dock.Action.BoardView"); //$NON-NLS-1$ //$NON-NLS-2$
+        childrenTools.more(replaceChildrenAction);
+        childrenTools.glue();
+        childrenFilter = childrenTools.filter(Translations.getString("PanelDefinition.Children.Filter")); //$NON-NLS-1$
+        childrenFilter.getDocument().addDocumentListener(new DocumentListener() {
+            @Override
+            public void removeUpdate(DocumentEvent e) {
+                filterChildren();
+            }
+
+            @Override
+            public void insertUpdate(DocumentEvent e) {
+                filterChildren();
+            }
+
+            @Override
+            public void changedUpdate(DocumentEvent e) {
+                filterChildren();
+            }
+        });
+        childrenPage.add(childrenTools, BorderLayout.NORTH);
+
+        // ---- the panel's fiducials -------------------------------------------------------------
+
         fiducialTableModel = new PlacementsHolderPlacementsTableModel(configuration, this) {
             @Override
             public boolean isCellEditable(int rowIndex, int columnIndex) {
@@ -420,56 +391,55 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
         fiducialTableSorter = new TableRowSorter<>(fiducialTableModel);
         
         fiducialTable = new AutoSelectTextTable(fiducialTableModel);
+        TableUtils.bindKeys(fiducialTable, removeFiducialAction);
+        AutoSelectTextTable.setEmptyText(fiducialTable,
+                Translations.getString("PanelDefinition.PanelAlignment.Empty")); //$NON-NLS-1$
+        // A fiducial is looked at, not placed: no rank, no error handling, no status, not placed
+        // and no type.
         tcm = fiducialTable.getColumnModel();
-        tcm.removeColumn(tcm.getColumn(11)); //remove Comments column
-        tcm.removeColumn(tcm.getColumn(10)); //remove Error Handling column
-        tcm.removeColumn(tcm.getColumn(9)); //remove Status column
-        tcm.removeColumn(tcm.getColumn(8)); //remove Placed column
-        tcm.removeColumn(tcm.getColumn(7)); //remove Type column
+        tcm.removeColumn(tcm.getColumn(11));
+        tcm.removeColumn(tcm.getColumn(10));
+        tcm.removeColumn(tcm.getColumn(9));
+        tcm.removeColumn(tcm.getColumn(8));
+        tcm.removeColumn(tcm.getColumn(7));
         
         fiducialTable.setRowSorter(fiducialTableSorter);
-        fiducialTable.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
         fiducialTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         fiducialTable.setDefaultEditor(Side.class, new DefaultCellEditor(sidesComboBox));
-        fiducialTable.setDefaultRenderer(Side.class, new DefaultTableCellRenderer());
         fiducialTable.setDefaultEditor(Part.class, new DefaultCellEditor(partsComboBox));
         fiducialTable.setDefaultRenderer(Part.class, new IdentifiableTableCellRenderer<Part>());
-        fiducialTable.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer());
         fiducialTable.setDefaultRenderer(LengthCellValue.class, new MonospacedFontTableCellRenderer());
         fiducialTable.setDefaultRenderer(RotationCellValue.class, new MonospacedFontTableCellRenderer());
         fiducialTable.setAutoResizeMode(JTable.AUTO_RESIZE_NEXT_COLUMN);
         
         TableUtils.setColumnAlignment(fiducialTableModel, fiducialTable);
         
-        TableUtils.installColumnWidthSavers(fiducialTable, prefs, "PanelDefinitionPanel.fiducialTable.columnWidth"); //$NON-NLS-1$
+        TableUtils.installColumnWidthSavers(fiducialTable, prefs, "PanelDefinitionPanel.fiducialTable"); //$NON-NLS-1$
         
-        fiducialTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                if (e.getValueIsAdjusting()) {
-                    return;
+        fiducialTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
+            
+            boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
+                    && configuration.getTablesLinked() == TablesLinked.Linked;
+            
+            if (getFiducialSelections().size() > 1) {
+                // multi select
+                fiducialSingleSelectionActionGroup.setEnabled(false);
+                fiducialMultiSelectionActionGroup.setEnabled(true);
+                if (updateLinkedTables) {
+                    configuration.getBus().post(new PlacementSelectedEvent(null,
+                            rootPanelLocation, PanelDefinitionPanel.this));
                 }
-                
-                boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getPanelsTab() 
-                        && configuration.getTablesLinked() == TablesLinked.Linked;
-                
-                if (getFiducialSelections().size() > 1) {
-                    // multi select
-                    fiducialSingleSelectionActionGroup.setEnabled(false);
-                    fiducialMultiSelectionActionGroup.setEnabled(true);
-                    if (updateLinkedTables) {
-                        configuration.getBus().post(new PlacementSelectedEvent(null,
-                                rootPanelLocation, PanelDefinitionPanel.this));
-                    }
-                }
-                else {
-                    // single select, or no select
-                    fiducialMultiSelectionActionGroup.setEnabled(false);
-                    fiducialSingleSelectionActionGroup.setEnabled(getFiducialSelection() != null);
-                    if (updateLinkedTables) {
-                        configuration.getBus().post(new PlacementSelectedEvent(getFiducialSelection(),
-                                rootPanelLocation, PanelDefinitionPanel.this));
-                    }
+            }
+            else {
+                // single select, or no select
+                fiducialMultiSelectionActionGroup.setEnabled(false);
+                fiducialSingleSelectionActionGroup.setEnabled(getFiducialSelection() != null);
+                if (updateLinkedTables) {
+                    configuration.getBus().post(new PlacementSelectedEvent(getFiducialSelection(),
+                            rootPanelLocation, PanelDefinitionPanel.this));
                 }
             }
         });
@@ -489,35 +459,128 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
         
         fiducialTable.setComponentPopupMenu(fiducialPopupMenu);
 
+        JPanel fiducialsPage = new JPanel(new BorderLayout());
+        fiducialsPage.setOpaque(false);
+        fiducialsPage.add(DockPanel.table(fiducialTable), BorderLayout.CENTER);
+        fiducialTable.setDefaultRenderer(Boolean.class, DockRenderers.check());
+        fiducialTable.setDefaultRenderer(org.openpnp.gui.support.PartCellValue.class, DockRenderers.bold());
+        fiducialTable.setDefaultRenderer(Side.class, DockRenderers.dropdown(DockRenderers.side()));
+        fiducialTable.setDefaultRenderer(String.class, DockRenderers.muted());
 
-        JScrollPane scrollPaneFiducials = new JScrollPane(fiducialTable);
-        pnlFiducials.add(scrollPaneFiducials, BorderLayout.CENTER);
-        
-        
-        splitPane.setDividerLocation(prefs.getInt(PREF_DIVIDER_POSITION, PREF_DIVIDER_POSITION_DEF));
-        splitPane.addPropertyChangeListener("dividerLocation", new PropertyChangeListener() { //$NON-NLS-1$
-            @Override
-            public void propertyChange(PropertyChangeEvent evt) {
-                prefs.putInt(PREF_DIVIDER_POSITION, splitPane.getDividerLocation());
-            }
-        });
+        DockPanel.Toolbar fiducialTools = new DockPanel.Toolbar();
+        fiducialTools.button(addFiducialAction, "plus", "Dock.Action.Add"); //$NON-NLS-1$ //$NON-NLS-2$
+        fiducialTools.iconButton(removeFiducialAction, "trash"); //$NON-NLS-1$
+        fiducialTools.separator();
+        fiducialTools.button(useChildFiducialAction, "crosshair", "Dock.Action.UseChildFiducial"); //$NON-NLS-1$ //$NON-NLS-2$
+        fiducialsPage.add(fiducialTools, BorderLayout.NORTH);
+        fiducialsPage.add(DockPanel.foot(Translations.getString("PanelDefinition.PanelAlignment.Foot")), //$NON-NLS-1$
+                BorderLayout.SOUTH);
+
+        // ---- the dock: Save above both tabs ----------------------------------------------------
+
+        DockPanel dock = new DockPanel();
+        childrenTab = dock.addTab(Ui.iconSm("board"), //$NON-NLS-1$
+                Translations.getString("PanelDefinition.Tab.Children"), childrenPage); //$NON-NLS-1$
+        fiducialsTab = dock.addTab(Ui.iconSm("target"), //$NON-NLS-1$
+                Translations.getString("PanelDefinition.Tab.Fiducials"), fiducialsPage); //$NON-NLS-1$
+        JButton save = Ui.button(saveAction, Ui.Size.Sm, Ui.Variant.Primary);
+        save.setIcon(Ui.iconSm("save")); //$NON-NLS-1$
+        save.setFocusable(false);
+        modified.withHeight(24);
+        modified.setVisible(false);
+        dock.setTools(modified, (javax.swing.JComponent) javax.swing.Box.createHorizontalStrut(6), save);
+        dock.setMaximize(() -> MainFrame.get().toggleDockMaximised());
+        childrenTableModel.addTableModelListener(e -> updateCounts());
+        fiducialTableModel.addTableModelListener(e -> updateCounts());
+        add(dock, BorderLayout.CENTER);
 
         configuration.getBus().register(this);
     }
+
+    /** A column's renderer by its model index, where the column is shown. */
+    private static void columnRenderer(JTable table, int modelColumn, javax.swing.table.TableCellRenderer renderer) {
+        int view = table.convertColumnIndexToView(modelColumn);
+        if (view >= 0) {
+            table.getColumnModel().getColumn(view).setCellRenderer(renderer);
+        }
+    }
+
+    private JPopupMenu addChildMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(new JMenuItem(addNewBoardAction));
+        menu.add(new JMenuItem(addExistingBoardAction));
+        menu.addSeparator();
+        menu.add(new JMenuItem(addNewPanelAction));
+        menu.add(new JMenuItem(addExistingPanelAction));
+        return menu;
+    }
+
+    /** The filter as the words typed, over every column. */
+    private void filterChildren() {
+        String text = childrenFilter.getText().trim();
+        childrenTableSorter.setRowFilter(text.isEmpty() ? null
+                : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text))); //$NON-NLS-1$
+    }
+
+    private void updateCounts() {
+        childrenTab.setCount(panel == null ? null : childrenTableModel.getRowCount());
+        fiducialsTab.setCount(panel == null ? null : fiducialTableModel.getRowCount());
+    }
+
+    /** Save, and the chip beside it, as the panel on show stands: saved here, or with the job. */
+    void updateSaveState() {
+        String state = unsaved.describe(panel);
+        saveAction.setEnabled(state != null && panel.getFile() != null);
+        modified.setVisible(state != null);
+        if (state != null) {
+            modified.setText(state);
+        }
+        panelsPanel.repaintList();
+    }
+
+    public final Action saveAction = new AbstractAction() {
+        {
+            putValue(NAME, Translations.getString("PanelDefinition.Action.Save")); //$NON-NLS-1$
+            putValue(SHORT_DESCRIPTION, Translations.getString("PanelDefinition.Action.Save.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent arg0) {
+            Panel saved = panel;
+            if (saved == null) {
+                return;
+            }
+            try {
+                configuration.savePanel(saved);
+                MainFrame.get().setStatus(String.format(Translations.getString("PanelDefinition.Saved"), //$NON-NLS-1$
+                        saved.getName(), DefinitionList.where(saved.getFile())));
+            }
+            catch (Exception e) {
+                Logger.error(e, "Failed to save panel {}.", saved.getName());
+                MessageBoxes.errorBox(getTopLevelAncestor(),
+                        Translations.getString("PanelDefinition.SaveError"), e); //$NON-NLS-1$
+            }
+            updateSaveState();
+        }
+    };
     
     public void setPanel(Panel panel) throws IOException {
         this.panel = panel;
+        unsaved.watch(panel);
         rootPanelLocation.setGlobalSide(Side.Top);
         rootPanelLocation.setPanel(panel);
         childrenTableModel.setPlacementsHolderLocations(rootPanelLocation.getChildren());
         fiducialTableModel.setPlacementsHolder(rootPanelLocation.getPanel());
         addChildAction.setEnabled(panel != null);
+        addChildButton.setEnabled(panel != null);
         viewerAction.setEnabled(panel != null);
         addFiducialAction.setEnabled(panel != null);
         useChildFiducialAction.setEnabled(panel != null);
         if (panelViewer != null) {
             panelViewer.setPlacementsHolder(panel);
         }
+        updateCounts();
+        updateSaveState();
     }
     
     public void refresh() {
@@ -638,7 +701,13 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            for (Placement placement : getFiducialSelections()) {
+            List<Placement> selections = getFiducialSelections();
+            if (selections.isEmpty() || !Dialogs.confirmDelete(getTopLevelAncestor(), "Dialogs.Kind.PanelFiducials", //$NON-NLS-1$
+                    selections.stream().map(Placement::getId).collect(Collectors.toList()),
+                    Translations.getString("PanelDefinition.Delete.More"))) { //$NON-NLS-1$
+                return;
+            }
+            for (Placement placement : selections) {
                 if (panel.getPseudoPlacements().contains(placement)) {
                     panel.removePseudoPlacement(placement);
                 }
@@ -648,6 +717,8 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
                 placement.dispose();
             }
             fiducialTableModel.fireTableDataChanged();
+            MainFrame.get().setStatus(String.format(Translations.getString("PanelDefinition.PanelAlignment.Removed"), //$NON-NLS-1$
+                    selections.size(), panel.getName()));
             
             configuration.getBus()
                 .post(new DefinitionStructureChangedEvent(panel, "placements", PanelDefinitionPanel.this)); //$NON-NLS-1$
@@ -695,16 +766,9 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            FileDialog fileDialog = new FileDialog(frame, 
-                    Translations.getString("PanelDefinition.Children.Add.NewBoard.DialogTitle"), //$NON-NLS-1$
-                    FileDialog.SAVE);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".board.xml"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setFile("*.board.xml"); //$NON-NLS-1$
+            String title = Translations.getString("PanelDefinition.Children.Add.NewBoard.DialogTitle"); //$NON-NLS-1$
+            FileDialog fileDialog = FileDialogs.prepare(new FileDialog(frame, title, FileDialog.SAVE), title,
+                    ".board.xml"); //$NON-NLS-1$
             fileDialog.setVisible(true);
             try {
                 String filename = fileDialog.getFile();
@@ -784,16 +848,9 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            FileDialog fileDialog = new FileDialog(frame, 
-                    Translations.getString("PanelDefinition.Children.Add.NewPanel.DialogTitle"), //$NON-NLS-1$
-                    FileDialog.SAVE);
-            fileDialog.setFilenameFilter(new FilenameFilter() {
-                @Override
-                public boolean accept(File dir, String name) {
-                    return name.toLowerCase().endsWith(".panel.xml"); //$NON-NLS-1$
-                }
-            });
-            fileDialog.setFile("*.panel.xml"); //$NON-NLS-1$
+            String title = Translations.getString("PanelDefinition.Children.Add.NewPanel.DialogTitle"); //$NON-NLS-1$
+            FileDialog fileDialog = FileDialogs.prepare(new FileDialog(frame, title, FileDialog.SAVE), title,
+                    ".panel.xml"); //$NON-NLS-1$
             fileDialog.setVisible(true);
             try {
                 String filename = fileDialog.getFile();
@@ -885,10 +942,17 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
         @Override
         public void actionPerformed(ActionEvent arg0) {
             List<PlacementsHolderLocation<?>> selectedChildren = getChildrenSelections();
+            if (selectedChildren.isEmpty() || !Dialogs.confirmDelete(getTopLevelAncestor(), "Dialogs.Kind.PanelChildren", //$NON-NLS-1$
+                    selectedChildren.stream().map(PlacementsHolderLocation::getId).collect(Collectors.toList()),
+                    Translations.getString("PanelDefinition.Delete.More"))) { //$NON-NLS-1$
+                return;
+            }
             for (PlacementsHolderLocation<?> child : selectedChildren) {
                 rootPanelLocation.getPanel().getDefinition().removeChild(child);
             }
             childrenTableModel.fireTableDataChanged();
+            MainFrame.get().setStatus(String.format(Translations.getString("PanelDefinition.Children.Removed"), //$NON-NLS-1$
+                    selectedChildren.size(), panel.getName()));
             
             configuration.getBus()
                 .post(new DefinitionStructureChangedEvent(rootPanelLocation.getPanel(), "children", //$NON-NLS-1$
@@ -921,7 +985,7 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
     public final Action viewerAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.colorTrue);
-            putValue(NAME, ""); //$NON-NLS-1$
+            putValue(NAME, Translations.getString("BoardsPanel.BoardPlacements.Action.View")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION,
                     Translations.getString("PanelDefinition.Children.ViewPanel.Description")); //$NON-NLS-1$
         }

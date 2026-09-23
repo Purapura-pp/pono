@@ -59,7 +59,7 @@ public final class PageLayouts {
 
     /** The pages that work with the machine: they start with the camera large. */
     private static final Set<String> LARGE = Set.of("Job", "Feeders", "Vision", "MachineSetup", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-            "Diagnostics"); //$NON-NLS-1$
+            "Calibration"); //$NON-NLS-1$
 
     private final Preferences prefs;
 
@@ -141,7 +141,7 @@ public final class PageLayouts {
     }
 
     /** Pages with nothing of their own to show in the column. */
-    private static final Set<String> NO_PROPERTIES = Set.of("Log", "Diagnostics", "Settings"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+    private static final Set<String> NO_PROPERTIES = Set.of("Log", "Settings"); //$NON-NLS-1$ //$NON-NLS-2$
 
     /**
      * Whether the column shows on a page, given whether there is anything in it. Left to itself

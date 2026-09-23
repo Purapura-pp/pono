@@ -20,47 +20,35 @@
 package org.openpnp.gui;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Frame;
-import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.prefs.Preferences;
-import java.util.regex.PatternSyntaxException;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.DefaultCellEditor;
-import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JTable;
 import javax.swing.JTextField;
-import javax.swing.JToolBar;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
-import javax.swing.border.TitledBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableColumnModel;
 import javax.swing.table.TableRowSorter;
@@ -71,19 +59,25 @@ import org.openpnp.events.PlacementSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.importer.BoardImporter;
 import org.openpnp.gui.importer.SolderPasteGerberImporter;
+import org.openpnp.gui.shell.Chip;
+import org.openpnp.gui.shell.DockPanel;
+import org.openpnp.gui.shell.DockRenderers;
+import org.openpnp.gui.shell.PropertySheetPresenter.Result;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.support.ActionGroup;
-import org.openpnp.gui.support.CustomBooleanRenderer;
-import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
-import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
 import org.openpnp.gui.support.Helpers;
-import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.IdentifiableListCellRenderer;
 import org.openpnp.gui.support.IdentifiableTableCellRenderer;
 import org.openpnp.gui.support.LengthCellValue;
 import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.gui.support.MonospacedFontTableCellRenderer;
+import org.openpnp.gui.support.MultisortTableHeaderCellRenderer;
 import org.openpnp.gui.support.PartsComboBoxModel;
+import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.RotationCellValue;
 import org.openpnp.gui.support.TableUtils;
+import org.openpnp.gui.support.Wizard;
+import org.openpnp.gui.support.WizardContainer;
 import org.openpnp.gui.tablemodel.PlacementsHolderPlacementsTableModel;
 import org.openpnp.gui.viewers.PlacementsHolderLocationViewerDialog;
 import org.openpnp.model.Abstract2DLocatable.Side;
@@ -107,6 +101,14 @@ import io.github.classgraph.ClassInfo;
 import io.github.classgraph.ClassInfoList;
 import io.github.classgraph.ScanResult;
 
+/**
+ * The placements of the board selected on the boards page, as mockup 09 draws them: a dock with
+ * Save and how much is unsaved, add and delete, the importers and the board's picture, the
+ * filter; the side, the type, the error handling and whether a placement is enabled changed in the
+ * table itself, and the selected placement's properties in the window's properties column. It was
+ * a titled box under the boards in a split, a row of unlabelled icons, and these four values were
+ * set from the right-click menu.
+ */
 @SuppressWarnings("serial")
 public class BoardPlacementsPanel extends JPanel {
     private JTable table;
@@ -118,19 +120,22 @@ public class BoardPlacementsPanel extends JPanel {
     private Board board;
     private Preferences prefs = Preferences.userNodeForPackage(BoardPlacementsPanel.class);
     protected PlacementsHolderLocationViewerDialog boardViewer;
-    private JButton btnImport;
     private List<BoardImporter> boardImporters;
-    private Configuration configuration;
-    
-    private static Color typeColorFiducial = new Color(157, 188, 255);
-    private static Color typeColorPlacement = new Color(255, 255, 255);
-    
-    public BoardPlacementsPanel(BoardsPanel boardsPanel) {
-    	this.boardsPanel = boardsPanel;
-    	boardImporters = scanForBoardImporters();
+    private final Configuration configuration;
+    private DockPanel.Tab placementsTab;
+    /** "Modified · 2 places", beside Save, while the board has changes that are not saved. */
+    private final Chip modified = new Chip("", Chip.Tone.Warn, Chip.Shape.Status); //$NON-NLS-1$
+    private JTextField searchTextField;
+
+    private final UnsavedChanges unsaved = new UnsavedChanges(this::updateSaveState);
+
+    public BoardPlacementsPanel(BoardsPanel boardsPanel, Configuration configuration) {
+        this.boardsPanel = boardsPanel;
+        this.configuration = configuration;
+        boardImporters = scanForBoardImporters();
         createUi();
     }
-    
+
     /**
      * Scans the importer's package for BoardImporters
      * @return the list of BoardImporters that were found
@@ -165,12 +170,9 @@ public class BoardPlacementsPanel extends JPanel {
     }
     
     private void createUi() {
-        setBorder(new TitledBorder(null, 
-                Translations.getString("BoardsPanel.BoardPlacements.Placements"), //$NON-NLS-1$
-                TitledBorder.LEADING, TitledBorder.TOP, null, null));
-        
-        configuration = Configuration.get();
-        
+        setOpaque(false);
+        setLayout(new BorderLayout(0, 0));
+
         singleSelectionActionGroup = new ActionGroup(removeAction, 
                 setTypeAction, setSideAction, setErrorHandlingAction, setEnabledAction);
         singleSelectionActionGroup.setEnabled(false);
@@ -189,7 +191,6 @@ public class BoardPlacementsPanel extends JPanel {
         JComboBox<Type> typesComboBox = new JComboBox<>(new Type[] { Type.Placement, Type.Fiducial });
         JComboBox<ErrorHandling> errorHandlingComboBox = new JComboBox<>(ErrorHandling.values());
         
-        setLayout(new BorderLayout(0, 0));
         tableModel = new PlacementsHolderPlacementsTableModel(configuration, this);
         tableSorter = new TableRowSorter<>(tableModel);
         
@@ -198,13 +199,24 @@ public class BoardPlacementsPanel extends JPanel {
             public String getToolTipText(MouseEvent evt) {
                 int column = convertColumnIndexToModel(columnAtPoint(evt.getPoint()));
                 if(column==11) { return Translations.getString("BoardsPanel.BoardPlacements.Placements.Rank.toolTip"); } //$NON-NLS-1$
-                return null;
+                return super.getToolTipText(evt);
             }
         };
+        // Enter edits the cell, Delete removes the selected placements, which asks first.
+        TableUtils.bindKeys(table, removeAction);
+        AutoSelectTextTable.setEmptyText(table,
+                Translations.getString("BoardPlacementsPanel.Empty")); //$NON-NLS-1$
         
+        // On a narrow window the comments give way first, then the error handling: both are in
+        // the properties column too, and the error handling in the right-click menu.
+        TableUtils.setColumnKinds(table, TableUtils.Kind.Check, TableUtils.Kind.Id, TableUtils.Kind.Name,
+                TableUtils.Kind.Status, TableUtils.Kind.Number, TableUtils.Kind.Number, TableUtils.Kind.Number,
+                TableUtils.Kind.Status, TableUtils.Kind.Secondary, TableUtils.Kind.Status, TableUtils.Kind.Secondary,
+                TableUtils.Kind.Secondary, TableUtils.Kind.Secondary);
+        // Neither the placed column nor the status is a board's: both are about a run of the job.
         TableColumnModel tcm = table.getColumnModel();
-        tcm.removeColumn(tcm.getColumn(9)); //remove Status column
-        tcm.removeColumn(tcm.getColumn(8)); //remove Placed column
+        tcm.removeColumn(tcm.getColumn(9));
+        tcm.removeColumn(tcm.getColumn(8));
         
         table.setRowSorter(tableSorter);
         table.getTableHeader().setDefaultRenderer(new MultisortTableHeaderCellRenderer());
@@ -213,56 +225,49 @@ public class BoardPlacementsPanel extends JPanel {
         table.setDefaultEditor(Side.class, new DefaultCellEditor(sidesComboBox));
         table.setDefaultEditor(Part.class, new DefaultCellEditor(partsComboBox));
         table.setDefaultEditor(Type.class, new DefaultCellEditor(typesComboBox));
-        table.setDefaultRenderer(Type.class, new TypeRenderer());
         table.setDefaultEditor(ErrorHandling.class, new DefaultCellEditor(errorHandlingComboBox));
         table.setDefaultRenderer(Part.class, new IdentifiableTableCellRenderer<Part>());
-        table.setDefaultRenderer(Boolean.class, new CustomBooleanRenderer());
         table.setDefaultRenderer(LengthCellValue.class, new MonospacedFontTableCellRenderer());
         table.setDefaultRenderer(RotationCellValue.class, new MonospacedFontTableCellRenderer());
         table.setAutoResizeMode(JTable.AUTO_RESIZE_NEXT_COLUMN);
         
         TableUtils.setColumnAlignment(tableModel, table);
         
-        TableUtils.installColumnWidthSavers(table, prefs, "BoardPlacementsPanel.placementsTable.columnWidth"); //$NON-NLS-1$
+        TableUtils.installColumnWidthSavers(table, prefs, "BoardPlacementsPanel.placementsTable"); //$NON-NLS-1$
         
-        table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                if (e.getValueIsAdjusting()) {
-                    return;
-                }
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
 
-                boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getBoardsTab() 
-                        && configuration.getTablesLinked() == TablesLinked.Linked;
-                
-                if (getSelections().size() > 1) {
-                    // multi select
-                    singleSelectionActionGroup.setEnabled(false);
-                    multiSelectionActionGroup.setEnabled(true);
+            boolean updateLinkedTables = MainFrame.get().getNavigation().getSelectedComponent() == MainFrame.get().getBoardsTab() 
+                    && configuration.getTablesLinked() == TablesLinked.Linked;
+            
+            if (getSelections().size() > 1) {
+                // multi select
+                singleSelectionActionGroup.setEnabled(false);
+                multiSelectionActionGroup.setEnabled(true);
+            }
+            else {
+                // single select, or no select
+                multiSelectionActionGroup.setEnabled(false);
+                singleSelectionActionGroup.setEnabled(getSelection() != null);
+                MainFrame mainFrame = MainFrame.get();
+                Component selectedComponent = mainFrame.getNavigation().getSelectedComponent();
+                if (updateLinkedTables) {
+                    configuration.getBus().post(new PlacementSelectedEvent(getSelection(),
+                            new BoardLocation(board), BoardPlacementsPanel.this));
                 }
-                else {
-                    // single select, or no select
-                    multiSelectionActionGroup.setEnabled(false);
-                    singleSelectionActionGroup.setEnabled(getSelection() != null);
-                    MainFrame mainFrame = MainFrame.get();
-                    Component selectedComponent = mainFrame.getNavigation().getSelectedComponent();
-                    if (updateLinkedTables) {
-                        configuration.getBus().post(new PlacementSelectedEvent(getSelection(),
-                                new BoardLocation(board), BoardPlacementsPanel.this));
-                    }
-                    if (getSelection() != null
-                            && (selectedComponent == mainFrame.getJobTab() ||
-                                    selectedComponent == mainFrame.getBoardsTab())
-                            && configuration.getTablesLinked() == TablesLinked.Linked) {
-                        Part selectedPart = getSelection().getPart();
-                        mainFrame.getPartsTab().selectPartInTableAndUpdateLinks(selectedPart);
-                    }
+                if (getSelection() != null
+                        && (selectedComponent == mainFrame.getJobTab() ||
+                                selectedComponent == mainFrame.getBoardsTab())
+                        && configuration.getTablesLinked() == TablesLinked.Linked) {
+                    Part selectedPart = getSelection().getPart();
+                    mainFrame.getPartsTab().selectPartInTableAndUpdateLinks(selectedPart);
                 }
             }
+            inspect();
         });
-        
-        table.setDefaultRenderer(PlacementsHolderPlacementsTableModel.PlacementStatus.class,
-                new JobPlacementsPanel.StatusRenderer());
         
         table.addKeyListener(new KeyAdapter() {
             @Override
@@ -280,6 +285,7 @@ public class BoardPlacementsPanel extends JPanel {
             }
         });
         
+        // The same four settings for many placements at once; each is changed in its cell too.
         JPopupMenu popupMenu = new JPopupMenu();
 
         JMenu setTypeMenu = new JMenu(setTypeAction);
@@ -306,45 +312,33 @@ public class BoardPlacementsPanel extends JPanel {
 
         table.setComponentPopupMenu(popupMenu);
 
-        JScrollPane scrollPane = new JScrollPane(table);
-        add(scrollPane, BorderLayout.CENTER);
-        
-        JPanel panel = new JPanel();
-        add(panel, BorderLayout.NORTH);
-        panel.setLayout(new BorderLayout(0, 0));
-        JToolBar toolBarPlacements = new JToolBar();
-        panel.add(toolBarPlacements);
-        
-        toolBarPlacements.setFloatable(false);
-        JButton btnNewPlacement = new JButton(newAction);
-        btnNewPlacement.setHideActionText(true);
-        newAction.setEnabled(false);
-        toolBarPlacements.add(btnNewPlacement);
-        
-        JButton btnRemovePlacement = new JButton(removeAction);
-        btnRemovePlacement.setHideActionText(true);
-        toolBarPlacements.add(btnRemovePlacement);
+        // The mockup's cells: the check, the designator in bold, the side's badge, and the three
+        // values changed from a list with their chevrons; the comments in grey.
+        JPanel page = new JPanel(new BorderLayout());
+        page.setOpaque(false);
+        page.add(DockPanel.table(table), BorderLayout.CENTER);
+        table.setDefaultRenderer(Boolean.class, DockRenderers.check());
+        table.setDefaultRenderer(org.openpnp.gui.support.PartCellValue.class, DockRenderers.bold());
+        table.setDefaultRenderer(Side.class, DockRenderers.dropdown(DockRenderers.side(false)));
+        table.setDefaultRenderer(Type.class, DockRenderers.dropdown(new TypeRenderer()));
+        table.setDefaultRenderer(ErrorHandling.class, DockRenderers.dropdown(new ErrorHandlingRenderer(),
+                (t, row) -> !isFiducial(t, row)));
+        table.setDefaultRenderer(String.class, DockRenderers.muted());
 
-        toolBarPlacements.addSeparator();
-        btnImport = new JButton(importAction);
-        btnImport.setHideActionText(true);
-        importAction.setEnabled(false);
-        toolBarPlacements.add(btnImport);
-
-        toolBarPlacements.addSeparator();
-        
-        JButton btnViewer = new JButton(viewerAction);
-        btnViewer.setHideActionText(true);
-        viewerAction.setEnabled(false);
-        toolBarPlacements.add(btnViewer);
-        
-        JPanel panel_1 = new JPanel();
-        panel.add(panel_1, BorderLayout.EAST);
-
-        JLabel lblNewLabel = new JLabel(Translations.getString("BoardsPanel.BoardPlacements.Placements.Search")); //$NON-NLS-1$
-        panel_1.add(lblNewLabel);
-
-        searchTextField = org.openpnp.gui.shell.Ui.markFilter(new JTextField());
+        DockPanel.Toolbar toolbar = new DockPanel.Toolbar();
+        toolbar.button(saveAction, "save", "Dock.Action.Save", Ui.Variant.Primary); //$NON-NLS-1$ //$NON-NLS-2$
+        modified.withHeight(24);
+        modified.setVisible(false);
+        toolbar.add(modified);
+        toolbar.separator();
+        toolbar.button(newAction, "plus", "Dock.Action.Add"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.iconButton(removeAction, "trash"); //$NON-NLS-1$
+        toolbar.separator();
+        toolbar.menu("Dock.Action.Import", "download", this::importMenu).setToolTipText( //$NON-NLS-1$ //$NON-NLS-2$
+                Translations.getString("BoardsPanel.BoardPlacements.Action.Import.Description")); //$NON-NLS-1$
+        toolbar.button(viewerAction, "eye", "Dock.Action.BoardView"); //$NON-NLS-1$ //$NON-NLS-2$
+        toolbar.glue();
+        searchTextField = toolbar.filter(Translations.getString("BoardPlacementsPanel.Filter.Placeholder")); //$NON-NLS-1$
         searchTextField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void removeUpdate(DocumentEvent e) {
@@ -361,12 +355,29 @@ public class BoardPlacementsPanel extends JPanel {
                 search();
             }
         });
-        panel_1.add(searchTextField);
-        searchTextField.setColumns(15);
+        page.add(toolbar, BorderLayout.NORTH);
+        page.add(DockPanel.foot(Translations.getString("BoardPlacementsPanel.Foot")), BorderLayout.SOUTH); //$NON-NLS-1$
+
+        DockPanel dock = new DockPanel();
+        placementsTab = dock.addTab(Ui.iconSm("parts"), //$NON-NLS-1$
+                Translations.getString("BoardPlacementsPanel.Tab.Placements"), page); //$NON-NLS-1$
+        dock.setMaximize(() -> MainFrame.get().toggleDockMaximised());
+        tableModel.addTableModelListener(e -> placementsTab.setCount(board == null ? null : tableModel.getRowCount()));
+        add(dock, BorderLayout.CENTER);
+
+        newAction.setEnabled(false);
+        importAction.setEnabled(false);
+        viewerAction.setEnabled(false);
+        updateSaveState();
 
         configuration.getBus().register(this);
     }
-    
+
+    private static boolean isFiducial(JTable table, int viewRow) {
+        Object type = table.getModel().getValueAt(table.convertRowIndexToModel(viewRow), 7);
+        return type == Type.Fiducial;
+    }
+
     @Subscribe
     public void placementSelectedEventHandler(PlacementSelectedEvent event) {
         if (event.source == this || event.placementsHolderLocation == null || !(event.placementsHolderLocation.getPlacementsHolder() instanceof Board)) {
@@ -404,23 +415,15 @@ public class BoardPlacementsPanel extends JPanel {
         }
     }
     
+    /** The filter as the words typed: "(" used to be the start of a pattern, and hid nothing. */
     private void updateRowFilter() {
-        List<RowFilter<PlacementsHolderPlacementsTableModel, Integer>> filters = new ArrayList<>();
-        
-        try {
-            RowFilter<PlacementsHolderPlacementsTableModel, Integer> searchFilter = RowFilter.regexFilter("(?i)" + searchTextField.getText().trim()); //$NON-NLS-1$
-            filters.add(searchFilter);
-        }
-        catch (PatternSyntaxException e) {
-            // Expected while the user is still typing a partial regex, just leave the search
-            // filter out until the pattern becomes valid again.
-        }
-        
-        tableSorter.setRowFilter(RowFilter.andFilter(filters));
+        String text = searchTextField.getText().trim();
+        tableSorter.setRowFilter(text.isEmpty() ? null
+                : RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(text))); //$NON-NLS-1$
     }
     
-    
     public void setBoard(Board board) {
+        unsaved.watch(board);
         this.board = board;
         tableModel.setPlacementsHolder(board);
         newAction.setEnabled(board != null);
@@ -429,8 +432,67 @@ public class BoardPlacementsPanel extends JPanel {
         if (boardViewer != null) {
             boardViewer.setPlacementsHolder(board);
         }
+        placementsTab.setCount(board == null ? null : tableModel.getRowCount());
         updateRowFilter();
+        updateSaveState();
     }
+
+    /** Save, and the chip beside it, as the board on show stands: saved here, or with the job. */
+    void updateSaveState() {
+        String state = unsaved.describe(board);
+        saveAction.setEnabled(state != null && board.getFile() != null);
+        modified.setVisible(state != null);
+        if (state != null) {
+            modified.setText(state);
+        }
+        boardsPanel.repaintList();
+    }
+
+    // ---- the properties column -----------------------------------------------------------------
+
+    /**
+     * The selected placement's form in the properties column; with none or several selected, the
+     * board's.
+     */
+    void inspect() {
+        MainFrame frame = MainFrame.get();
+        if (frame == null || frame.getInspector() == null) {
+            return;
+        }
+        List<Placement> selections = getSelections();
+        if (selections.size() != 1 || board == null) {
+            boardsPanel.inspectBoard();
+            return;
+        }
+        Placement placement = selections.get(0);
+        Board shownBoard = board;
+        Result shown = frame.getInspector().show(boardsPanel, placement, inspectorContainer, placement.getId(),
+                PlacementInspector.subtitle(shownBoard), Ui.icon("parts", 16, Ui.accent()), //$NON-NLS-1$
+                () -> List.of(new PropertySheetWizardAdapter(
+                        PlacementInspector.buildDefinition(configuration, placement))));
+        if (shown == Result.Cancelled) {
+            // The user kept unapplied edits on the previous placement: put the selection back.
+            SwingUtilities.invokeLater(() -> {
+                Object previous = frame.getInspector().getPresenter().getShown();
+                if (previous instanceof Placement) {
+                    Helpers.selectObjectTableRow(table, previous);
+                }
+            });
+        }
+    }
+
+    private final WizardContainer inspectorContainer = new WizardContainer() {
+        @Override
+        public void wizardCompleted(Wizard wizard) {
+            refresh();
+            configuration.getBus().post(new DefinitionStructureChangedEvent(board, "placements", //$NON-NLS-1$
+                    BoardPlacementsPanel.this));
+        }
+
+        @Override
+        public void wizardCancelled(Wizard wizard) {
+        }
+    };
 
     public Placement getSelection() {
         List<Placement> selectedPlacements = getSelections();
@@ -457,9 +519,34 @@ public class BoardPlacementsPanel extends JPanel {
         return boardImporters;
     }
 
+    public final Action saveAction = new AbstractAction() {
+        {
+            putValue(NAME, Translations.getString("BoardPlacementsPanel.Action.Save")); //$NON-NLS-1$
+            putValue(SHORT_DESCRIPTION, Translations.getString("BoardPlacementsPanel.Action.Save.Description")); //$NON-NLS-1$
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent arg0) {
+            Board saved = board;
+            if (saved == null) {
+                return;
+            }
+            try {
+                configuration.saveBoard(saved);
+                MainFrame.get().setStatus(String.format(Translations.getString("BoardPlacementsPanel.Saved"), //$NON-NLS-1$
+                        saved.getName(), DefinitionList.where(saved.getFile())));
+            }
+            catch (Exception e) {
+                Logger.error(e, "Failed to save board {}.", saved.getName());
+                MessageBoxes.errorBox(getTopLevelAncestor(),
+                        Translations.getString("BoardPlacementsPanel.SaveError"), e); //$NON-NLS-1$
+            }
+            updateSaveState();
+        }
+    };
+
     public final Action newAction = new AbstractAction() {
         {
-            putValue(SMALL_ICON, Icons.add);
             putValue(NAME, Translations.getString("BoardsPanel.BoardPlacements.Action.NewPlacement")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("BoardsPanel.BoardPlacements.Action.NewPlacement.Description")); //$NON-NLS-1$
         }
@@ -508,7 +595,6 @@ public class BoardPlacementsPanel extends JPanel {
 
     public final Action removeAction = new AbstractAction() {
         {
-            putValue(SMALL_ICON, Icons.delete);
             putValue(NAME, Translations.getString("BoardsPanel.BoardPlacements.Action.RemovePlacement")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("BoardsPanel.BoardPlacements.Action.RemovePlacement.Description")); //$NON-NLS-1$
         }
@@ -518,13 +604,16 @@ public class BoardPlacementsPanel extends JPanel {
             List<Placement> selections = getSelections();
             if (selections.isEmpty() || !org.openpnp.gui.shell.Dialogs.confirmDelete(getTopLevelAncestor(),
                     "Dialogs.Kind.Placements", //$NON-NLS-1$
-                    selections.stream().map(Placement::getId).collect(java.util.stream.Collectors.toList()))) {
+                    selections.stream().map(Placement::getId).collect(java.util.stream.Collectors.toList()),
+                    Translations.getString("BoardPlacementsPanel.Delete.More"))) { //$NON-NLS-1$
                 return;
             }
             for (Placement placement : selections) {
                 board.removePlacement(placement);
             }
             tableModel.fireTableDataChanged();
+            MainFrame.get().setStatus(String.format(Translations.getString("BoardPlacementsPanel.Deleted"), //$NON-NLS-1$
+                    selections.size(), board.getName()));
 
             configuration.getBus()
                 .post(new DefinitionStructureChangedEvent(board, "placements", BoardPlacementsPanel.this)); //$NON-NLS-1$
@@ -576,7 +665,9 @@ public class BoardPlacementsPanel extends JPanel {
                 if (importOption == 1) {
                     board.removeAllPlacements();
                 }
+                int imported = 0;
                 for (Placement placement : importedBoard.getPlacements()) {
+                    imported++;
                     if (importOption == 0 && (existingPlacements.get(placement.getId()) != null)) {
                         Placement existingPlacement = existingPlacements.get(placement.getId());
                         existingPlacement.setPart(placement.getPart());
@@ -604,6 +695,8 @@ public class BoardPlacementsPanel extends JPanel {
                 importedBoard.dispose();
                 
                 tableModel.fireTableDataChanged();
+                MainFrame.get().setStatus(String.format(Translations.getString("BoardPlacementsPanel.Imported"), //$NON-NLS-1$
+                        imported, board.getName()));
                 
                 configuration.getBus()
                     .post(new DefinitionStructureChangedEvent(board, "placements", BoardPlacementsPanel.this)); //$NON-NLS-1$
@@ -614,39 +707,42 @@ public class BoardPlacementsPanel extends JPanel {
         }
     }
 
+    /** The importers, each with its description; greyed with no board to import into. */
+    private JPopupMenu importMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        for (BoardImporter bi : boardImporters) {
+            final BoardImporter boardImporter = bi;
+            JMenuItem item = new JMenuItem(new AbstractAction() {
+                {
+                    putValue(NAME, boardImporter.getImporterName());
+                    putValue(SHORT_DESCRIPTION, boardImporter.getImporterDescription());
+                }
+
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    importBoard(boardImporter.getClass());
+                    refresh();
+                }
+            });
+            item.setEnabled(importAction.isEnabled());
+            menu.add(item);
+        }
+        return menu;
+    }
+
     public final Action importAction = new AbstractAction() {
         {
-            putValue(SMALL_ICON, Icons.importt);
             putValue(NAME, Translations.getString("BoardsPanel.BoardPlacements.Action.Import")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("BoardsPanel.BoardPlacements.Action.Import.Description")); //$NON-NLS-1$
         }
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            JPopupMenu menu = new JPopupMenu();
-            for (BoardImporter bi : boardImporters) {
-                final BoardImporter boardImporter = bi;
-                menu.add(new JMenuItem(new AbstractAction() {
-                    {
-                        putValue(NAME, boardImporter.getImporterName());
-                        putValue(SHORT_DESCRIPTION, boardImporter.getImporterDescription());
-                        putValue(MNEMONIC_KEY, KeyEvent.VK_I);
-                    }
-
-                    @Override
-                    public void actionPerformed(ActionEvent e) {
-                        importBoard(boardImporter.getClass());
-                        refresh();
-                    }
-                }));
-            }
-            menu.show(btnImport, (int) btnImport.getWidth(), (int) btnImport.getHeight());
         }
     };
 
     public final Action viewerAction = new AbstractAction() {
         {
-            putValue(SMALL_ICON, Icons.colorTrue);
             putValue(NAME, Translations.getString("BoardsPanel.BoardPlacements.Action.View")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("BoardsPanel.BoardPlacements.Action.View.Description")); //$NON-NLS-1$
         }
@@ -807,7 +903,6 @@ public class BoardPlacementsPanel extends JPanel {
         @Override
         public void actionPerformed(ActionEvent arg0) {}
     };
-    private JTextField searchTextField;
 
     class SetEnabledAction extends AbstractAction {
         final Boolean enabled;
@@ -843,4 +938,20 @@ public class BoardPlacementsPanel extends JPanel {
         }
     }
 
+    /**
+     * The error handling by its display name; a dash for a fiducial, which is looked at and never
+     * picked, so that nothing about it can go wrong the way a pick does.
+     */
+    static class ErrorHandlingRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected,
+                boolean hasFocus, int row, int column) {
+            super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+            boolean fiducial = isFiducial(table, row);
+            setText(fiducial ? DockPanel.dash()
+                    : value == null ? "" : org.openpnp.gui.support.DisplayNames.of(value)); //$NON-NLS-1$
+            setForeground(fiducial ? Ui.muted() : isSelected ? table.getSelectionForeground() : Ui.text2());
+            return this;
+        }
+    }
 }

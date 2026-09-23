@@ -21,7 +21,6 @@
 
 package org.openpnp.machine.reference.axis.wizards;
 
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
@@ -47,19 +46,12 @@ import org.openpnp.gui.support.DoubleConverter;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.LengthConverter;
 import org.openpnp.gui.support.NamedConverter;
-import org.openpnp.machine.reference.ReferenceHead;
-import org.openpnp.machine.reference.ReferenceMachine;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis.BacklashCompensationMethod;
-import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.spi.Axis;
 import org.openpnp.spi.Axis.Type;
-import org.openpnp.spi.Camera.Looking;
 import org.openpnp.spi.Driver;
-import org.openpnp.spi.HeadMountable;
-import org.openpnp.spi.base.AbstractControllerAxis;
 import org.openpnp.spi.base.AbstractMachine;
-import org.openpnp.util.UiUtils;
 
 import com.jgoodies.forms.layout.ColumnSpec;
 import com.jgoodies.forms.layout.FormLayout;
@@ -107,26 +99,18 @@ public class BacklashCompensationConfigurationWizard extends AbstractConfigurati
                     "BacklashCompensationConfigurationWizard.Action.Calibrate.Description")); //$NON-NLS-1$
         }
 
+        /**
+         * The calibration page's step for this axis, where the measurement is run with the
+         * others it depends on and its result is shown; it used to be run from here, in the
+         * middle of the axis's settings, without them.
+         */
         @Override
         public void actionPerformed(ActionEvent e) {
             applyAction.actionPerformed(e);
-            UiUtils.submitUiMachineTask(() -> {
-                HeadMountable hm = ((AbstractControllerAxis) axis).getDefaultHeadMountable();
-                if (hm instanceof ReferenceCamera) {
-                    ReferenceCamera camera = (ReferenceCamera) hm;
-                    if (camera.getHead() != null && camera.getLooking() == Looking.Down) {
-                        if (getMachine() instanceof ReferenceMachine) {
-                            ReferenceMachine refMachine = (ReferenceMachine) getMachine();
-                            refMachine.getCalibrationSolutions()
-                            .calibrateAxisBacklash((ReferenceHead)(camera.getHead()), camera,
-                                    camera, (ReferenceControllerAxis)axis);
-                            MainFrame.get().getMachineSetupTab().selectCurrentTreePath();
-                            return true;
-                        }
-                    }
-                }
-                throw new Exception("Only an axis on a down-looking camera can be calibrated.");
-            });
+            MainFrame frame = MainFrame.get();
+            if (frame != null) {
+                frame.showCalibrationStep(org.openpnp.model.CalibrationStep.XyBacklash, axis);
+            }
         }
     };    
 
