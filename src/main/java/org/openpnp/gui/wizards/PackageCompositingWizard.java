@@ -23,6 +23,7 @@
 package org.openpnp.gui.wizards;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 
 import javax.swing.AbstractAction;
@@ -93,10 +94,11 @@ public class PackageCompositingWizard extends AbstractConfigurationWizard {
     }
 
     private void createUi() {
+        // Into the scrolling content, like every other form, rather than into the wizard's own
+        // layout, which took the scroll pane out and cut the right-hand fields off.
         compositingPanel = new JPanel();
         contentPanel.add(compositingPanel);
         compositingPanel.setBorder(new TitledBorder(null, Translations.getString("PackageCompositingWizard.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
-        add(compositingPanel, BorderLayout.NORTH);
         compositingPanel.setLayout(new FormLayout(new ColumnSpec[] {
                 FormSpecs.RELATED_GAP_COLSPEC,
                 ColumnSpec.decode("max(70dlu;default)"), //$NON-NLS-1$
@@ -167,9 +169,24 @@ public class PackageCompositingWizard extends AbstractConfigurationWizard {
 
         visionPreview = new VisionCompositingPreview();
         visionPreview.setBorder(new BevelBorder(BevelBorder.LOWERED, null, null, null, null));
-        add(visionPreview, BorderLayout.CENTER);
+        visionPreview.setPreferredSize(new Dimension(400, 320));
+        contentPanel.add(visionPreview);
 
-        pkg.addPropertyChangeListener("footprint", (e) -> computeCompositingAction.actionPerformed(null)); //$NON-NLS-1$
+        pkg.addPropertyChangeListener("footprint", footprintListener); //$NON-NLS-1$
+    }
+
+    /**
+     * Recomputes the compositing when the footprint changes. Kept, so that it can be taken off
+     * the package again: it used to be added on every visit and never removed, and every package
+     * looked at made each later footprint edit recompute once more.
+     */
+    private final java.beans.PropertyChangeListener footprintListener =
+            (e) -> this.computeCompositingAction.actionPerformed(null);
+
+    @Override
+    public void dispose() {
+        pkg.removePropertyChangeListener("footprint", footprintListener); //$NON-NLS-1$
+        super.dispose();
     }
 
     public final Action computeCompositingAction = new AbstractAction() {

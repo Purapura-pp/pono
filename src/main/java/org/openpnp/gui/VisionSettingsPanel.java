@@ -253,7 +253,9 @@ public class VisionSettingsPanel extends JPanel implements WizardContainer {
 
             List<PartSettingsHolder> usedIn = new ArrayList<>();
             for (AbstractVisionSettings settings : selections) {
-                usedIn.addAll(settings.getUsedBottomVisionIn());
+                // A fiducial vision setting in use is as much in use as a bottom vision one; it
+                // used to be deleted from under the parts that referred to it.
+                usedIn.addAll(settings.getUsedIn());
             }
 
             if (!usedIn.isEmpty()) {

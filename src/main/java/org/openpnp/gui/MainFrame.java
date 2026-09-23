@@ -101,6 +101,15 @@ import org.openpnp.spi.Camera;
 import javax.swing.BorderFactory;
 import javax.swing.SwingConstants;
 import java.awt.GridBagLayout;
+import java.awt.Container;
+import java.awt.Insets;
+import java.awt.Window;
+import javax.swing.JScrollPane;
+import org.openpnp.ConfigurationListener;
+import org.openpnp.gui.shell.Hotkeys;
+import org.openpnp.model.SaveCancelledException;
+import org.openpnp.spi.Machine;
+import org.openpnp.spi.MachineListener;
 import org.openpnp.gui.shell.CameraStage;
 import org.openpnp.gui.shell.CameraToolsBar;
 import org.openpnp.gui.shell.PillBar;
@@ -510,9 +519,8 @@ public class MainFrame extends JFrame {
         mnEdit.setMnemonic(KeyEvent.VK_E);
         menuBar.add(mnEdit);
 
-        mnEdit.add(new JMenuItem(undoAction));
-        mnEdit.add(new JMenuItem(redoAction));
-        mnEdit.addSeparator();
+        // No Undo or Redo: nothing in the program ever records an edit to undo, so the two items
+        // only ever did nothing, which a user who relies on them finds out too late.
         mnEditAddBoard = new JMenu(jobPanel.addBoardAction);
         mnEditAddBoard.add(new JMenuItem(jobPanel.addNewBoardAction));
         mnEditAddBoard.add(new JMenuItem(jobPanel.addExistingBoardAction));
@@ -641,6 +649,8 @@ public class MainFrame extends JFrame {
         if (!macOsXMenus) {
             mnHelp.add(new JMenuItem(aboutAction));
         }
+        mnHelp.add(hotkeysAction);
+        mnHelp.addSeparator();
         mnHelp.add(quickStartLinkAction);
         mnHelp.add(setupAndCalibrationLinkAction);
         mnHelp.add(userManualLinkAction);
@@ -686,11 +696,19 @@ public class MainFrame extends JFrame {
             @Override
             protected void dispatchEvent(AWTEvent event) {
                 if (event instanceof KeyEvent) {
-                    // Skip hotkey processing if a text input component has focus.
-                    // This prevents accidental machine motion when editing text
-                    // (e.g., using Ctrl+Shift+Arrow to select words).
-                    if (!UiUtils.isTextInputFocused()) {
-                        KeyStroke ks = KeyStroke.getKeyStrokeForEvent((KeyEvent) event);
+                    KeyStroke ks = KeyStroke.getKeyStrokeForEvent((KeyEvent) event);
+                    // Stopping the machine is taken first and everywhere: in a text field, in a
+                    // dialog, in the camera window. It is the one key that must never be eaten.
+                    if (Hotkeys.STOP_MACHINE.equals(ks) && stopMachineAction.isEnabled()) {
+                        stopMachineAction.actionPerformed(null);
+                        return;
+                    }
+                    // Everything else moves the machine or changes the job, so it only applies
+                    // where the user is looking at the machine: the main window or the camera
+                    // window, with no dialog in front of them, and not while text is being
+                    // typed - Ctrl+Shift+Arrow selects words, and a table cell being edited is
+                    // text too.
+                    if (machineHotkeysApply() && !UiUtils.isTextInputFocused()) {
                         Action action = hotkeyActionMap.get(ks);
                         if (action != null && action.isEnabled()) {
                             action.actionPerformed(null);
@@ -711,14 +729,39 @@ public class MainFrame extends JFrame {
 
         // The stylesheet's .instr: a 640 pixel banner with a 3 pixel accent rule down its left,
         // the activity mark in a circle, the title over the text, and the buttons at the right.
-        panelInstructions = new JPanel();
+        panelInstructions = new JPanel() {
+            /**
+             * 640 wide, and as high as the text wraps to at that width. The banner floats over
+             * the image and is laid out at its preferred size, so the height has to come from
+             * the text: a fixed 640 x 0 left the card its 12 pixels of padding and nothing else,
+             * the instructions and the Next button clipped away.
+             */
+            @Override
+            public Dimension getPreferredSize() {
+                int width = INSTRUCTIONS_WIDTH;
+                Container stage = SwingUtilities.getAncestorOfClass(CameraStage.class, this);
+                if (stage != null && stage.getWidth() > 0) {
+                    width = Math.min(width, stage.getWidth() - 40);
+                }
+                Insets insets = getInsets();
+                int side = 0;
+                if (panelInstructionActions != null) {
+                    side += panelInstructionActions.getPreferredSize().width + 12;
+                }
+                side += 34 + 12;
+                if (lblInstructions != null) {
+                    lblInstructions.setSize(Math.max(120, width - insets.left - insets.right - side),
+                            Short.MAX_VALUE);
+                }
+                return new Dimension(width, super.getPreferredSize().height);
+            }
+        };
         panelInstructions.setVisible(false);
         panelInstructions.setOpaque(false);
         panelInstructions.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 3, 0, 0, org.openpnp.gui.shell.Ui.accent()),
                 new EmptyBorder(6, 8, 6, 4)));
         panelInstructions.setLayout(new BorderLayout(12, 0));
-        panelInstructions.setPreferredSize(new Dimension(640, 0));
 
         // The wizard sets this per step, which is what the etched border's title used to carry.
         lblInstructionsTitle = new JLabel(Translations.getString("General.Instructions")); //$NON-NLS-1$
@@ -805,58 +848,41 @@ public class MainFrame extends JFrame {
         mnCommands.add(new JMenuItem(machineControlsPanel.homeAction));
         mnCommands.add(new JMenuItem(machineControlsPanel.startStopMachineAction));
 
-        int[] ctrl_shift_mask = {KeyEvent.CTRL_DOWN_MASK, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK};
-        for (int mask : ctrl_shift_mask) {
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, mask),
-                    machineControlsPanel.getJogControlsPanel().yPlusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, mask),
-                    machineControlsPanel.getJogControlsPanel().yMinusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, mask),
-                    machineControlsPanel.getJogControlsPanel().xMinusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, mask),
-                    machineControlsPanel.getJogControlsPanel().xPlusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_QUOTE, mask),
-                    machineControlsPanel.getJogControlsPanel().zPlusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, mask),
-                    machineControlsPanel.getJogControlsPanel().zMinusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_COMMA, mask),
-                    machineControlsPanel.getJogControlsPanel().cPlusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_PERIOD, mask),
-                    machineControlsPanel.getJogControlsPanel().cMinusAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, mask),
-                    machineControlsPanel.getJogControlsPanel().lowerIncrementAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, mask),
-                    machineControlsPanel.getJogControlsPanel().raiseIncrementAction);
-            hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, mask),
-                    machineControlsPanel.homeAction);
+        JogControlsPanel jog = machineControlsPanel.getJogControlsPanel();
+        for (int mask : Hotkeys.JOG_MODIFIERS) {
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_Y_PLUS, mask), jog.yPlusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_Y_MINUS, mask), jog.yMinusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_X_MINUS, mask), jog.xMinusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_X_PLUS, mask), jog.xPlusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_Z_PLUS, mask), jog.zPlusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_Z_MINUS, mask), jog.zMinusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_C_PLUS, mask), jog.cPlusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.JOG_C_MINUS, mask), jog.cMinusAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.INCREMENT_LOWER, mask),
+                    jog.lowerIncrementAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.INCREMENT_RAISE, mask),
+                    jog.raiseIncrementAction);
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.HOME, mask), machineControlsPanel.homeAction);
         }
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_R, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                jobPanel.startPauseResumeJobAction); // Ctrl-Shift-R for Start
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_S, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                jobPanel.stepJobAction); // Ctrl-Shift-S for Step
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_A, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                jobPanel.stopJobAction); // Ctrl-Shift-A for Stop
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_P, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().xyParkAction); // Ctrl-Shift-P for xyPark
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_L, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().zParkAction); // Ctrl-Shift-P for zPark
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().safezAction); // Ctrl-Shift-Z for safezAction
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_D, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().discardAction); // Ctrl-Shift-D for discard
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F1, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().setIncrement1Action);
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F2, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().setIncrement2Action);
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F3, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().setIncrement3Action);
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F4, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().setIncrement4Action);
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F5, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
-                machineControlsPanel.getJogControlsPanel().setIncrement5Action);
+        // Starting or stepping a job from the keyboard only where the job is in view: a key that
+        // sets the machine going from the parts page, with the job out of sight, is a surprise.
+        hotkeyActionMap.put(Hotkeys.JOB_START_PAUSE, onJobPage(jobPanel.startPauseResumeJobAction));
+        hotkeyActionMap.put(Hotkeys.JOB_STEP, onJobPage(jobPanel.stepJobAction));
+        // Aborting is wanted wherever the user happens to be.
+        hotkeyActionMap.put(Hotkeys.JOB_ABORT, jobPanel.stopJobAction);
+        hotkeyActionMap.put(Hotkeys.PARK_XY, jog.xyParkAction);
+        hotkeyActionMap.put(Hotkeys.PARK_Z, jog.zParkAction);
+        hotkeyActionMap.put(Hotkeys.SAFE_Z, jog.safezAction);
+        hotkeyActionMap.put(Hotkeys.DISCARD, jog.discardAction);
+        Action[] increments = { jog.setIncrement1Action, jog.setIncrement2Action,
+                jog.setIncrement3Action, jog.setIncrement4Action, jog.setIncrement5Action };
+        for (int i = 0; i < increments.length; i++) {
+            hotkeyActionMap.put(KeyStroke.getKeyStroke(Hotkeys.INCREMENT_KEYS[i],
+                    KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK), increments[i]);
+        }
         // Ctrl-Shift-J folds the jog controls off the camera image and back. A bare J would fire
         // whenever the focus is not in a text field, which includes every table in the window.
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_J, KeyEvent.CTRL_DOWN_MASK | KeyEvent.SHIFT_DOWN_MASK),
+        hotkeyActionMap.put(Hotkeys.TOGGLE_JOG_CARD,
                 new AbstractAction() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
@@ -948,9 +974,10 @@ public class MainFrame extends JFrame {
             }});
         
         topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel, menuBar,
-                () -> showTab(issuesAndSolutionsPanel), this::openCommandPalette);
+                () -> showTab(issuesAndSolutionsPanel), this::openCommandPalette,
+                stopMachineAction, this::saveConfig);
         contentPane.add(topBarPanel, BorderLayout.NORTH);
-        hotkeyActionMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_K, KeyEvent.CTRL_DOWN_MASK),
+        hotkeyActionMap.put(Hotkeys.COMMAND_PALETTE,
                 new AbstractAction() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
@@ -960,6 +987,32 @@ public class MainFrame extends JFrame {
 
         statusBarPanel = new StatusBarPanel(configuration);
         contentPane.add(statusBarPanel, BorderLayout.SOUTH);
+
+        // An applied setting is saved on its own a little after the last change, and the top bar
+        // says whether there is anything unsaved in the meantime.
+        autosaveTimer.setRepeats(false);
+        configuration.addPropertyChangeListener("dirty", e -> SwingUtilities.invokeLater(() -> { //$NON-NLS-1$
+            boolean dirty = configuration.isDirty();
+            topBarPanel.setConfigurationDirty(dirty);
+            if (dirty) {
+                autosaveTimer.restart();
+            }
+            else {
+                autosaveTimer.stop();
+            }
+        }));
+        configuration.addListener(new ConfigurationListener.Adapter() {
+            @Override
+            public void configurationComplete(Configuration configuration) throws Exception {
+                configuration.getMachine().addListener(disconnectReporter);
+                // A solution changes settings, and dismissing or reopening an issue changes the
+                // lists machine.xml keeps: either way there is something to save.
+                if (configuration.getMachine() instanceof org.openpnp.machine.reference.ReferenceMachine) {
+                    ((org.openpnp.machine.reference.ReferenceMachine) configuration.getMachine()).getSolutions()
+                            .addPropertyChangeListener("issue", e -> configuration.setDirty(true)); //$NON-NLS-1$
+                }
+            }
+        });
 
         // One properties column for the whole window, where every table used to keep its own
         // below itself behind a split divider.
@@ -1289,6 +1342,158 @@ public class MainFrame extends JFrame {
         dialog.setVisible(true);
     }
 
+    /** The stylesheet's .instr banner width. */
+    private static final int INSTRUCTIONS_WIDTH = 640;
+
+    /** Autosave's delay after the last change: long enough that a run of edits saves once. */
+    private static final int AUTOSAVE_DELAY_MS = 3000;
+    private final javax.swing.Timer autosaveTimer = new javax.swing.Timer(AUTOSAVE_DELAY_MS,
+            e -> autosave());
+
+    /**
+     * Saves the configuration without asking about boards and panels, unless the machine is in
+     * the middle of something: its tasks change the configuration from their own thread, and a
+     * save that serialises it meanwhile could catch it half changed. It tries again later.
+     */
+    private void autosave() {
+        Machine machine = configuration.getMachine();
+        if ((machine != null && machine.isBusy()) || jobPanel.isJobRunning()) {
+            autosaveTimer.restart();
+            return;
+        }
+        try {
+            configuration.autosave();
+            setStatus(String.format(Translations.getString("MainFrame.Autosave.Saved"), //$NON-NLS-1$
+                    new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()))); //$NON-NLS-1$
+        }
+        catch (Exception e) {
+            Logger.warn(e, "Autosaving the configuration failed."); //$NON-NLS-1$
+            setStatus(String.format(Translations.getString("MainFrame.Autosave.Failed"), //$NON-NLS-1$
+                    e.getMessage()));
+        }
+    }
+
+    /** Whether a key that moves the machine or changes the job should be taken now. */
+    private boolean machineHotkeysApply() {
+        Window active = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
+        return active == this || (frameCamera != null && active == frameCamera);
+    }
+
+    /**
+     * The action, but only while the job page is showing; elsewhere the key says where it works
+     * instead of starting the machine on a job the user is not looking at.
+     */
+    private Action onJobPage(Action action) {
+        return new AbstractAction() {
+            @Override
+            public boolean isEnabled() {
+                return action.isEnabled();
+            }
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (navigationRail.getSelectedComponent() != jobPanel) {
+                    setStatus(Translations.getString("MainFrame.Hotkey.JobPageOnly")); //$NON-NLS-1$
+                    return;
+                }
+                action.actionPerformed(e);
+            }
+        };
+    }
+
+    /**
+     * Stops the machine, from anywhere: aborts a running job, then disables the machine. While the
+     * machine is busy the disabling bypasses the task queue, as the machine controls' own switch
+     * does for an emergency, because a queued stop would wait for the very motion it is meant to
+     * interrupt.
+     */
+    public final Action stopMachineAction = new AbstractAction(Translations.getString("TopBar.StopMachine")) { //$NON-NLS-1$
+        {
+            putValue(SHORT_DESCRIPTION, String.format(
+                    Translations.getString("TopBar.StopMachine.toolTipText"), //$NON-NLS-1$
+                    Hotkeys.describe(Hotkeys.STOP_MACHINE)));
+        }
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            final Machine machine = configuration.getMachine();
+            if (machine == null) {
+                return;
+            }
+            if (jobPanel.isJobRunning() && jobPanel.stopJobAction.isEnabled()) {
+                jobPanel.stopJobAction.actionPerformed(e);
+            }
+            if (!machine.isEnabled()) {
+                setStatus(Translations.getString("TopBar.StopMachine.AlreadyStopped")); //$NON-NLS-1$
+                return;
+            }
+            Runnable disable = () -> {
+                try {
+                    machine.setEnabled(false);
+                }
+                catch (Exception ex) {
+                    Logger.error(ex, "Stopping the machine failed."); //$NON-NLS-1$
+                    SwingUtilities.invokeLater(() -> UiUtils.showError(ex));
+                }
+            };
+            if (machine.isBusy()) {
+                Thread thread = new Thread(disable, "Pono stop machine"); //$NON-NLS-1$
+                thread.setDaemon(true);
+                thread.start();
+            }
+            else {
+                UiUtils.submitUiMachineTask(() -> {
+                    disable.run();
+                    return null;
+                });
+            }
+        }
+    };
+
+    /**
+     * Says why the machine went off, which the driver reports and nobody used to show: the state
+     * chip only ever said "disconnected".
+     */
+    private final MachineListener disconnectReporter = new MachineListener.Adapter() {
+        @Override
+        public void machineDisabled(Machine machine, String reason) {
+            report(Translations.getString("MainFrame.Machine.Disabled"), reason); //$NON-NLS-1$
+        }
+
+        @Override
+        public void machineEnableFailed(Machine machine, String reason) {
+            report(Translations.getString("MainFrame.Machine.EnableFailed"), reason); //$NON-NLS-1$
+        }
+
+        private void report(String what, String reason) {
+            if (reason == null || reason.trim().isEmpty()) {
+                return;
+            }
+            setStatus(String.format(what, reason.trim()));
+        }
+    };
+
+    /** The window-wide hotkeys, listed from the one place they are bound. */
+    private final Action hotkeysAction = new AbstractAction(Translations.getString("Menu.Help.Hotkeys")) { //$NON-NLS-1$
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            StringBuilder html = new StringBuilder("<html><table cellpadding='2'>"); //$NON-NLS-1$
+            for (Hotkeys.Entry entry : Hotkeys.all()) {
+                html.append("<tr><td><b>").append(Hotkeys.describe(entry.keyStroke)) //$NON-NLS-1$
+                        .append("</b></td><td>").append(Translations.getString(entry.descriptionKey)) //$NON-NLS-1$
+                        .append("</td></tr>"); //$NON-NLS-1$
+            }
+            html.append("</table></html>"); //$NON-NLS-1$
+            JLabel label = new JLabel(html.toString());
+            JScrollPane scroll = new JScrollPane(label);
+            scroll.setBorder(null);
+            scroll.setPreferredSize(new Dimension(460, Math.min(560,
+                    label.getPreferredSize().height + 8)));
+            JOptionPane.showMessageDialog(MainFrame.this, scroll,
+                    Translations.getString("Menu.Help.Hotkeys"), JOptionPane.PLAIN_MESSAGE); //$NON-NLS-1$
+        }
+    };
+
     public boolean saveConfig() {
         // Save the configuration
         try {
@@ -1301,6 +1506,11 @@ public class MainFrame extends JFrame {
         
         try {
             configuration.save();
+            setStatus(String.format(Translations.getString("MainFrame.Autosave.Saved"), //$NON-NLS-1$
+                    new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()))); //$NON-NLS-1$
+        }
+        catch (SaveCancelledException e) {
+            return false;
         }
         catch (Exception e) {
 			String message = String.format(
@@ -1320,6 +1530,28 @@ public class MainFrame extends JFrame {
 
     public boolean quit() {
         Logger.info("Shutting down..."); //$NON-NLS-1$
+        // A running job first: quitting under it used to save, ask about the job file and switch
+        // the machine off in the middle of a placement, without a word about the job itself.
+        if (jobPanel.isJobRunning()) {
+            int answer = JOptionPane.showOptionDialog(this,
+                    Translations.getString("MainFrame.Quit.JobRunning.Message"), //$NON-NLS-1$
+                    Translations.getString("MainFrame.Quit.JobRunning.Title"), //$NON-NLS-1$
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null,
+                    new Object[] { Translations.getString("MainFrame.Quit.JobRunning.Stop"), //$NON-NLS-1$
+                            Translations.getString("Dialog.Cancel") }, //$NON-NLS-1$
+                    Translations.getString("Dialog.Cancel")); //$NON-NLS-1$
+            if (answer != 0) {
+                return false;
+            }
+            jobPanel.stopJobAction.actionPerformed(null);
+        }
+        // Then whatever was typed into the properties column and not applied yet.
+        if (inspectorPanel != null && !inspectorPanel.getPresenter().settleUnappliedEdits()) {
+            return false;
+        }
+        if (!jobPanel.checkForModifications()) {
+            return false;
+        }
         try {
             Preferences.userRoot().flush();
         }
@@ -1330,6 +1562,9 @@ public class MainFrame extends JFrame {
         // Save the configuration
         try {
             configuration.save();
+        }
+        catch (SaveCancelledException e) {
+            return false;
         }
         catch (Exception e) {
             String message = String.format(
@@ -1343,9 +1578,6 @@ public class MainFrame extends JFrame {
             if (result != JOptionPane.YES_OPTION) {
                 return false;
             }
-        }
-        if (!jobPanel.checkForModifications()) {
-            return false;
         }
         // Attempt to stop the machine on quit
         try {

@@ -695,15 +695,22 @@ public class JobPanel extends JPanel {
     private boolean checkForJobModifications() {
         if (getJob().isDirty()) {
             String name = (job.getFile() == null ? UNTITLED_JOB_FILENAME : job.getFile().getName());
-            int result = JOptionPane.showConfirmDialog(mainFrame,
+            // The buttons say what they do. Yes / No / Cancel made No the button that throws the
+            // changes away, one place over from the one that keeps them.
+            String save = Translations.getString("Dialog.Save"); //$NON-NLS-1$
+            String discard = Translations.getString("Dialog.DontSave"); //$NON-NLS-1$
+            String cancel = Translations.getString("Dialog.Cancel"); //$NON-NLS-1$
+            int result = JOptionPane.showOptionDialog(mainFrame,
                     Translations.getString("JobPanel.CheckForModifications.Dialog.Question") + "\n" //$NON-NLS-1$ //$NON-NLS-2$
                             + Translations.getString("JobPanel.CheckForModifications.Dialog.Message"), //$NON-NLS-1$
                     Translations.getString("JobPanel.CheckForModifications.Dialog.Title") //$NON-NLS-1$
-                    + " - " + name, JOptionPane.YES_NO_CANCEL_OPTION); //$NON-NLS-1$ //$NON-NLS-2$
-            if (result == JOptionPane.YES_OPTION) {
+                    + " - " + name, JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, //$NON-NLS-1$
+                    null, new Object[] { save, discard, cancel }, save);
+            if (result == 0) {
                 return saveJob();
             }
-            else if (result == JOptionPane.CANCEL_OPTION) {
+            else if (result != 1) {
+                // Cancel, or the dialog closed.
                 return false;
             }
         }

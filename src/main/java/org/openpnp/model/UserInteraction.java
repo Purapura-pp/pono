@@ -50,6 +50,23 @@ public interface UserInteraction {
      */
     void reportError(String title, String message);
 
+    /** The three answers to "save your changes?". */
+    enum SaveChoice {
+        Save,
+        Discard,
+        /** Neither: whatever asked should not go ahead. */
+        Cancel
+    }
+
+    /**
+     * Asks whether to save changes that would otherwise be lost. Cancel is its own answer: it
+     * used to be folded into "don't save", which threw the changes away on the one button a user
+     * presses to get out of a question.
+     */
+    default SaveChoice askToSave(String title, String message) {
+        return confirm(title, message) ? SaveChoice.Save : SaveChoice.Discard;
+    }
+
     /**
      * The implementation used when nobody is watching. Questions are declined rather than answered
      * on the user's behalf, which is the branch that changes nothing on disk, and both the question

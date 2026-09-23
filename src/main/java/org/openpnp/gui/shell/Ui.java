@@ -230,7 +230,9 @@ public final class Ui {
         /** The ok green as a fill, for Start. */
         PrimaryOk,
         /** err-soft fill on an err border, for Stop. */
-        Danger
+        Danger,
+        /** The err red as a fill, for stopping the machine: the one button that must stand out. */
+        SolidDanger
     }
 
     /** A button in the stylesheet's shape. The action's text and icon are kept if it has them. */
@@ -303,6 +305,11 @@ public final class Ui {
                 style.append("background: $Pono.errSoft; borderColor: fade($Pono.statusErr,45%); foreground: $Pono.statusErr; " //$NON-NLS-1$
                         + "hoverBackground: fade($Pono.statusErr,25%); hoverBorderColor: fade($Pono.statusErr,60%); " //$NON-NLS-1$
                         + "pressedBackground: fade($Pono.statusErr,35%)"); //$NON-NLS-1$
+                break;
+            case SolidDanger:
+                style.append("background: $Pono.statusErr; borderColor: $Pono.statusErr; foreground: #ffffff; " //$NON-NLS-1$
+                        + "hoverBackground: darken($Pono.statusErr,6%); hoverBorderColor: darken($Pono.statusErr,6%); " //$NON-NLS-1$
+                        + "pressedBackground: darken($Pono.statusErr,12%)"); //$NON-NLS-1$
                 break;
             case Default:
             default:

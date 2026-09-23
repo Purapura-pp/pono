@@ -77,8 +77,10 @@ public class VisionSettingsTableModel extends AbstractObjectTableModel implement
             case 0:
                 return visionSettings.getName();
             case 1:
+                // Both kinds of use: a fiducial vision setting is assigned to parts and packages
+                // as much as a bottom vision one is, and this column used to show it as unused.
                 return new AbstractVisionSettings.ListConverter(false)
-                        .convertForward(visionSettings.getUsedBottomVisionIn());
+                        .convertForward(visionSettings.getUsedIn());
             default:
                 return null;
         }
@@ -94,6 +96,7 @@ public class VisionSettingsTableModel extends AbstractObjectTableModel implement
         AbstractVisionSettings visionSettings = this.visionSettings.get(rowIndex);
         if (columnIndex == 0) {
             visionSettings.setName((String) aValue);
+            configuration.setDirty(true);
         }
     }
 

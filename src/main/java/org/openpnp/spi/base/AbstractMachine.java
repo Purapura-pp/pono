@@ -139,6 +139,11 @@ public abstract class AbstractMachine extends AbstractModelObject implements Mac
         this.configuration = configuration;
     }
 
+    /** The configuration this machine was loaded into; null for one built directly, as tests do. */
+    public Configuration getConfiguration() {
+        return configuration;
+    }
+
     /**
      * Tell the elements that the configuration has been read, so that the ids they were
      * deserialized with can be turned into references.

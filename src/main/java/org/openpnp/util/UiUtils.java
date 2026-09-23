@@ -397,13 +397,24 @@ public class UiUtils {
      * @return true if a text input component has focus
      */
     public static boolean isTextInputFocused() {
-        Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager()
-                .getFocusOwner();
+        return isTextInput(KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner());
+    }
+
+    /**
+     * Whether keys typed into this component are text. A table whose cell editing was started by
+     * typing into it keeps the focus itself rather than handing it to the editor, so the table
+     * counts too while it is editing: Ctrl+Left there is the caret moving a word, not the machine
+     * jogging.
+     */
+    public static boolean isTextInput(Component focusOwner) {
         if (focusOwner == null) {
             return false;
         }
         // Check for text components (JTextField, JTextArea, JEditorPane, etc.)
         if (focusOwner instanceof JTextComponent) {
+            return true;
+        }
+        if (focusOwner instanceof javax.swing.JTable && ((javax.swing.JTable) focusOwner).isEditing()) {
             return true;
         }
         // Check for spinner editors which contain text fields

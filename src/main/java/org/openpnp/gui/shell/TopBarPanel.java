@@ -80,9 +80,13 @@ public class TopBarPanel extends JPanel {
     private JButton themeButton;
     private final JMenuBar menuBar;
 
+    /** Shown while the configuration has changes that are not on disk yet; a click saves them. */
+    private final Chip configurationDirty = new Chip(
+            Translations.getString("TopBar.ConfigurationDirty"), Chip.Tone.Warn, Chip.Shape.Chip); //$NON-NLS-1$
+
     public TopBarPanel(Configuration configuration, JobPanel jobPanel,
             MachineControlsPanel machineControls, JMenuBar menuBar, Runnable openIssues,
-            Runnable openCommands) {
+            Runnable openCommands, Action stopMachine, Runnable saveConfiguration) {
         this.configuration = configuration;
         this.jobPanel = jobPanel;
         this.menuBar = menuBar;
@@ -100,12 +104,37 @@ public class TopBarPanel extends JPanel {
         add(Ui.divider(24));
         add(Box.createHorizontalStrut(14));
         add(jobName());
+        add(Box.createHorizontalStrut(8));
+        configurationDirty.setToolTipText(Translations.getString("TopBar.ConfigurationDirty.toolTipText")); //$NON-NLS-1$
+        configurationDirty.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+        configurationDirty.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                saveConfiguration.run();
+            }
+        });
+        configurationDirty.setVisible(configuration.isDirty());
+        add(configurationDirty);
         add(Box.createHorizontalGlue());
         add(new MachineStateChip(configuration, machineControls.startStopMachineAction));
         add(Box.createHorizontalStrut(14));
         add(Ui.divider(24));
         add(Box.createHorizontalStrut(14));
         add(jobControls());
+        add(Box.createHorizontalStrut(8));
+        // Always there and always red: stopping the machine must not depend on a job running,
+        // which is the only time the job's own Stop is enabled.
+        JButton stopMachineButton = Ui.button(stopMachine, Ui.Size.Md, Ui.Variant.SolidDanger);
+        stopMachineButton.setIcon(Ui.icon("power")); //$NON-NLS-1$
+        // It never gives way: on a narrow window the other controls truncate before this does.
+        // Measured again with its icon, which the styling's fixed width was taken without.
+        stopMachineButton.setPreferredSize(null);
+        Dimension stopSize = new Dimension(stopMachineButton.getPreferredSize().width,
+                Ui.Size.Md.height);
+        stopMachineButton.setPreferredSize(stopSize);
+        stopMachineButton.setMinimumSize(stopSize);
+        stopMachineButton.setMaximumSize(stopSize);
+        add(stopMachineButton);
         add(Box.createHorizontalStrut(14));
         add(progress());
         add(Box.createHorizontalStrut(14));
@@ -189,6 +218,13 @@ public class TopBarPanel extends JPanel {
         pill.setMinimumSize(new Dimension(120, 30));
         jobNameLabel.setMinimumSize(new Dimension(40, 20));
         return pill;
+    }
+
+    /** Whether to show that the configuration has unsaved changes. */
+    public void setConfigurationDirty(boolean dirty) {
+        configurationDirty.setVisible(dirty);
+        revalidate();
+        repaint();
     }
 
     private void showJobName(String displayName) {

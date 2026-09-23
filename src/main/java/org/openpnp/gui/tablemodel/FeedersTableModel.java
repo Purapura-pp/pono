@@ -130,6 +130,7 @@ public class FeedersTableModel extends AbstractObjectTableModel {
             else if (columnIndex == 6) {
                 ((ReferenceFeeder)feeder).setFeedOptions((ReferenceFeeder.FeedOptions) aValue);
             }
+            configuration.setDirty(true);
         }
         catch (Exception e) {
             // TODO: dialog, bad input

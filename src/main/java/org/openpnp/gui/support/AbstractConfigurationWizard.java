@@ -131,12 +131,44 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
             MessageBoxes.errorBox(getTopLevelAncestor(),
                     Translations.getString("AbstractConfigurationWizard.Validation.ErrorBox.Title"), //$NON-NLS-1$
                     e.getMessage());
+            // Nothing is written: the values that failed are still on screen to be corrected,
+            // and Apply stays available. It used to write them anyway after saying they were
+            // wrong, and grey out Apply as if all were well.
+            return;
         }
         for (WrappedBinding wrappedBinding : wrappedBindings) {
             wrappedBinding.save();
         }
         applyAction.setEnabled(false);
         resetAction.setEnabled(false);
+        if (modifiesConfiguration()) {
+            markConfigurationChanged();
+        }
+    }
+
+    /** Tells the configuration of the machine being configured that it has something to save. */
+    private void markConfigurationChanged() {
+        try {
+            Machine machine = getMachine();
+            if (machine instanceof org.openpnp.spi.base.AbstractMachine) {
+                Configuration configuration = ((org.openpnp.spi.base.AbstractMachine) machine).getConfiguration();
+                if (configuration != null) {
+                    configuration.setDirty(true);
+                }
+            }
+        }
+        catch (Exception e) {
+            // No machine to ask, which is a wizard shown outside the running application.
+        }
+    }
+
+    /**
+     * Whether applying this form changes what the configuration saves - true for the settings of
+     * the machine, its parts and packages. A form that edits the open job instead says no, so
+     * that applying it does not report the configuration as unsaved.
+     */
+    protected boolean modifiesConfiguration() {
+        return true;
     }
     
     /**

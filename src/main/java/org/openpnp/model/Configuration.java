@@ -121,6 +121,30 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
     private LinkedHashMap<File, Panel> panels = new LinkedHashMap<>();
     private LinkedHashMap<File, Board> boards = new LinkedHashMap<>();
     private boolean loaded;
+    /**
+     * Whether anything save() writes has changed since it last wrote it. An applied setting used
+     * to live in memory until the program was closed, which a crash or a power cut loses; the
+     * window shows this and saves on its own a little after a change.
+     */
+    private boolean dirty;
+    /** When autosave last kept a copy in the backups directory. */
+    private long lastBackupMillis;
+    /** Autosave keeps a backup at most this often, so that it does not bury the explicit ones. */
+    private static final long AUTOSAVE_BACKUP_INTERVAL_MILLIS = 15 * 60 * 1000;
+    /** The configuration's own collections, whose changes are changes to what save() writes. */
+    private static final Set<String> SAVED_COLLECTIONS = Set.of("parts", "packages", //$NON-NLS-1$ //$NON-NLS-2$
+            "visionSettings"); //$NON-NLS-1$
+    /** The machine's element lists, which it reports as indexed property changes. */
+    private static final Set<String> MACHINE_ELEMENTS = Set.of("axes", "feeders", "cameras", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            "actuators", "drivers", "signalers", "nozzleTips"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+
+    {
+        addPropertyChangeListener(e -> {
+            if (loaded && SAVED_COLLECTIONS.contains(e.getPropertyName())) {
+                setDirty(true);
+            }
+        });
+    }
     private Set<ConfigurationListener> listeners = Collections.synchronizedSet(new HashSet<>());
     private boolean listenersLocked;
     private List<ConfigurationListener> pendingListeners = new ArrayList<ConfigurationListener>();
@@ -196,6 +220,13 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
     
     public void setMachine(Machine machine) {
         this.machine = machine;
+        if (machine instanceof AbstractModelObject) {
+            ((AbstractModelObject) machine).addPropertyChangeListener(e -> {
+                if (loaded && MACHINE_ELEMENTS.contains(e.getPropertyName())) {
+                    setDirty(true);
+                }
+            });
+        }
         if (machine instanceof AbstractMachine) {
             // The machine hands this on to its elements, so that a nozzle firing a pick event does
             // not have to come back here for the scripting service.
@@ -663,51 +694,163 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
         if (machine instanceof AbstractMachine) {
             ((AbstractMachine) machine).configurationComplete(this);
         }
+        // What the listeners set up while the configuration came in is the configuration as it
+        // was read, not a change the user made.
+        setDirty(false);
     }
 
+    /**
+     * Saves the configuration, with a backup of every file, after asking about each board and
+     * panel definition that has unsaved changes.
+     * <p>
+     * The questions come first and nothing is written until they are all answered, so that
+     * Cancel leaves everything as it was: it used to mean "don't save" for the one board it was
+     * asked about, while the files around it had already been written.
+     *
+     * @throws SaveCancelledException if the user cancelled one of the questions.
+     */
     public synchronized void save() throws Exception {
+        List<PlacementsHolder<?>> holders = modifiedHoldersToSave();
         LocalDateTime now = LocalDateTime.now();
+        writeConfigurationFiles(now, true);
+        lastBackupMillis = System.currentTimeMillis();
+        for (PlacementsHolder<?> holder : holders) {
+            try {
+                saveHolder(holder);
+            }
+            catch (Exception e) {
+                userInteraction.reportError(Translations.getString("Configuration.SaveHolder.Error.Title"), //$NON-NLS-1$
+                        holder.getFile().getName() + ": " + e.getMessage()); //$NON-NLS-1$
+            }
+        }
+        setDirty(false);
+    }
+
+    /**
+     * Saves what {@link #save()} saves, without asking about modified boards and panels, which
+     * are documents the user saves on purpose, and keeping a backup at most every quarter of an
+     * hour. This is what the window does on its own shortly after a setting is applied.
+     */
+    public synchronized void autosave() throws Exception {
+        LocalDateTime now = LocalDateTime.now();
+        boolean backup = System.currentTimeMillis() - lastBackupMillis > AUTOSAVE_BACKUP_INTERVAL_MILLIS;
+        writeConfigurationFiles(now, backup);
+        if (backup) {
+            lastBackupMillis = System.currentTimeMillis();
+        }
+        setDirty(false);
+    }
+
+    private void writeConfigurationFiles(LocalDateTime now, boolean backup) throws Exception {
         try {
-           saveMachine(createBackedUpFile("machine.xml", now));
+           saveMachine(configurationFile("machine.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving machine.xml (" + e.getMessage() + ")", e);
         }
         try {
-            savePackages(createBackedUpFile("packages.xml", now));
+            savePackages(configurationFile("packages.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving packages.xml (" + e.getMessage() + ")", e);
         }
         try {
-            saveParts(createBackedUpFile("parts.xml", now));
+            saveParts(configurationFile("parts.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving parts.xml (" + e.getMessage() + ")", e);
         }
         try {
-            saveBoards(createBackedUpFile("boards.xml", now));
+            saveBoardsList(configurationFile("boards.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving boards.xml (" + e.getMessage() + ")", e);
         }
         try {
-            savePanels(createBackedUpFile("panels.xml", now));
+            savePanelsList(configurationFile("panels.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving panels.xml (" + e.getMessage() + ")", e);
         }
         try {
-            saveVisionSettings(createBackedUpFile("vision-settings.xml", now));
+            saveVisionSettings(configurationFile("vision-settings.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving vision-settings.xml (" + e.getMessage() + ")", e);
         }
         try {
-            saveScriptState(createBackedUpFile("script-state.xml", now));
+            saveScriptState(configurationFile("script-state.xml", now, backup)); //$NON-NLS-1$
         }
         catch (Exception e) {
             throw new Exception("Error while saving script-state.xml (" + e.getMessage() + ")", e);
+        }
+    }
+
+    private File configurationFile(String fileName, LocalDateTime now, boolean backup) throws Exception {
+        return backup ? createBackedUpFile(fileName, now) : new File(configurationDirectory, fileName);
+    }
+
+    /** Whether anything save() writes has changed since it last wrote it. */
+    public boolean isDirty() {
+        return dirty;
+    }
+
+    /**
+     * Marks the configuration as changed, or as saved. Anything that changes what save() writes
+     * without going through a collection the configuration watches itself - a property applied
+     * in a settings form, a table cell - calls this.
+     */
+    public void setDirty(boolean dirty) {
+        boolean oldValue = this.dirty;
+        this.dirty = dirty;
+        firePropertyChange("dirty", oldValue, dirty); //$NON-NLS-1$
+    }
+
+    /**
+     * Asks about every board and panel definition with unsaved changes, before anything is
+     * written.
+     *
+     * @return The ones the user wants saved.
+     * @throws SaveCancelledException if the user cancelled.
+     */
+    private List<PlacementsHolder<?>> modifiedHoldersToSave() throws SaveCancelledException {
+        List<PlacementsHolder<?>> holders = new ArrayList<>();
+        List<PlacementsHolder<?>> candidates = new ArrayList<>(getBoards());
+        candidates.addAll(getPanels());
+        for (PlacementsHolder<?> holder : candidates) {
+            if (!holder.isDirty() || holder.getFile() == null) {
+                continue;
+            }
+            switch (askToSave(holder)) {
+                case Save:
+                    holders.add(holder);
+                    break;
+                case Discard:
+                    break;
+                case Cancel:
+                default:
+                    throw new SaveCancelledException();
+            }
+        }
+        return holders;
+    }
+
+    private UserInteraction.SaveChoice askToSave(PlacementsHolder<?> holder) {
+        String name = holder.getFile().getName();
+        return userInteraction.askToSave(
+                String.format(Translations.getString("Configuration.SaveHolder.Title"), name), //$NON-NLS-1$
+                String.format(Translations.getString("Configuration.SaveHolder.Message"), name)); //$NON-NLS-1$
+    }
+
+    private void saveHolder(PlacementsHolder<?> holder) throws Exception {
+        if (holder instanceof Board) {
+            saveBoard((Board) holder);
+        }
+        else if (holder instanceof Panel) {
+            savePanel((Panel) holder);
+        }
+        else {
+            throw new UnsupportedOperationException("Instance type " + holder.getClass() + " not supported."); //$NON-NLS-1$ //$NON-NLS-2$
         }
     }
 
@@ -859,12 +1002,15 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
      * save the Panel definition to the file system before it is removed.
      * @param panel - the Panel definition to remove
      */
-    public void removePanel(Panel panel) {
-        confirmSaveOfModified(panel);
+    public boolean removePanel(Panel panel) {
+        if (!confirmSaveOfModified(panel)) {
+            return false;
+        }
         LinkedHashMap<File, Panel> oldValue = new LinkedHashMap<>(panels);
         panels.remove(panel.getFile());
         firePropertyChange("panels", oldValue, panels);
         panel.dispose();
+        return true;
     }
     
     /**
@@ -925,13 +1071,17 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
      * been flagged as being modified, a dialog is presented to confirm if the operator desires to 
      * save the Board definition to the file system before it is removed.
      * @param board - the Board to remove
+     * @return false if the user cancelled, in which case the board is still there.
      */
-    public void removeBoard(Board board) {
-        confirmSaveOfModified(board);
+    public boolean removeBoard(Board board) {
+        if (!confirmSaveOfModified(board)) {
+            return false;
+        }
         LinkedHashMap<File, Board> oldValue = new LinkedHashMap<>(boards);
         boards.remove(board.getFile());
         firePropertyChange("boards", oldValue, boards);
         board.dispose();
+        return true;
     }
     
     /**
@@ -1041,14 +1191,10 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
      * @param file - the file in which to save the Boards
      * @throws Exception if the file can't be written successfully
      */
-    private void saveBoards(File file) throws Exception {
+    private void saveBoardsList(File file) throws Exception {
         BoardsConfigurationHolder holder = new BoardsConfigurationHolder();
         holder.boards = new ArrayList<>(boards.keySet());
         serializeObject(holder, file);
-        
-        for (Board board : getBoards()) {
-            confirmSaveOfModified(board);
-        }
     }
 
     /**
@@ -1078,38 +1224,37 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
      * @param file - the file in which to save the Panels
      * @throws Exception if the file can't be written successfully
      */
-    private void savePanels(File file) throws Exception {
+    private void savePanelsList(File file) throws Exception {
         PanelsConfigurationHolder holder = new PanelsConfigurationHolder();
         holder.panels = new ArrayList<>(panels.keySet());
         serializeObject(holder, file);
-        
-        for (Panel panel : getPanels()) {
-            confirmSaveOfModified(panel);
-        }
     }
 
-    private void confirmSaveOfModified(PlacementsHolder<?> placementsHolder) {
-        if (placementsHolder.isDirty()) {
-            String name = placementsHolder.getFile().getName();
-            if (!userInteraction.confirm("Save " + name + "?", //$NON-NLS-1$ //$NON-NLS-2$
-                    "Do you want to save your changes to " + name + "?" //$NON-NLS-1$ //$NON-NLS-2$
-                            + "\n" + "If you don't save, your changes will be lost.")) { //$NON-NLS-1$ //$NON-NLS-2$
-                return;
-            }
-            try {
-                if (placementsHolder instanceof Board) {
-                    saveBoard((Board) placementsHolder);
+    /**
+     * Asks whether to save a modified board or panel definition that is about to go away.
+     *
+     * @return false if the user cancelled, and whatever was about to happen should not.
+     */
+    private boolean confirmSaveOfModified(PlacementsHolder<?> placementsHolder) {
+        if (!placementsHolder.isDirty() || placementsHolder.getFile() == null) {
+            return true;
+        }
+        switch (askToSave(placementsHolder)) {
+            case Save:
+                try {
+                    saveHolder(placementsHolder);
                 }
-                else if (placementsHolder instanceof Panel) {
-                    savePanel((Panel)placementsHolder);
+                catch (Exception e) {
+                    userInteraction.reportError(Translations.getString("Configuration.SaveHolder.Error.Title"), //$NON-NLS-1$
+                            e.getMessage());
+                    return false;
                 }
-                else {
-                    throw new UnsupportedOperationException("Instance type " + placementsHolder.getClass() + " not supported.");
-                }
-            }
-            catch (Exception e) {
-                userInteraction.reportError("Save Error", e.getMessage()); //$NON-NLS-1$
-            }
+                return true;
+            case Discard:
+                return true;
+            case Cancel:
+            default:
+                return false;
         }
     }
     
@@ -1580,6 +1725,16 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
         serializer.write(job, file);
         job.setFile(file);
         job.setDirty(false);
+        // The job refers to its boards and panels by file. Saved without them, it opens the next
+        // time on the definitions as they were on disk, and the edits made while working on the
+        // job - in the job's own placements table as much as on the boards page - are gone.
+        for (PlacementsHolderLocation<?> location : job.getBoardAndPanelLocations()) {
+            PlacementsHolder<?> holder = location.getPlacementsHolder();
+            PlacementsHolder<?> definition = holder == null ? null : holder.getDefinition();
+            if (definition != null && definition.isDirty() && definition.getFile() != null) {
+                saveHolder(definition);
+            }
+        }
     }
     
     public String getImgurClientId() {

@@ -50,6 +50,8 @@ public class OverlayAnchorLayout implements LayoutManager2 {
 
     /** Distance from the container's edges, so a card does not touch the image border. */
     private static final int MARGIN = 10;
+    /** The stylesheet's .instr top: clear of the camera tools along the top edge. */
+    private static final int NORTH_TOP = 56;
 
     private final Map<Component, Anchor> anchors = new LinkedHashMap<>();
 
@@ -99,8 +101,11 @@ public class OverlayAnchorLayout implements LayoutManager2 {
                 int y;
                 switch (anchor) {
                     case North:
+                        // Below the two rows of camera tools rather than over them: the banner
+                        // at the top edge covered the camera selector and the reticle switches,
+                        // and they covered the step's title.
                         x = left + (width - w) / 2;
-                        y = top + MARGIN;
+                        y = top + NORTH_TOP;
                         break;
                     case NorthEast:
                         x = left + width - w - MARGIN;

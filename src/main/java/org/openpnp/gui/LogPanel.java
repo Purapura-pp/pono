@@ -270,7 +270,16 @@ public class LogPanel extends JPanel {
         globalLogLevelPanel.add(new JLabel(Translations.getString(
                 "LogPanel.FilterLoggingPanel.GlobalLogLevelLabel.text"))); //$NON-NLS-1$
         JComboBox logLevelFilterComboBox = new JComboBox(Level.values());
-        logLevelFilterComboBox.setSelectedItem((Level.valueOf(prefs.get(PREF_LOG_LEVEL, PREF_LOG_LEVEL_DEF))));
+        // The same guard as loadLoggingPreferences: an older version stored an int here, and
+        // Level.valueOf threw on it while the main window was being built.
+        Level stored;
+        try {
+            stored = Level.valueOf(prefs.get(PREF_LOG_LEVEL, PREF_LOG_LEVEL_DEF));
+        }
+        catch (Exception e) {
+            stored = Level.INFO;
+        }
+        logLevelFilterComboBox.setSelectedItem(stored);
         logLevelFilterComboBox.addActionListener(e -> {
             Level logLevel = (Level) logLevelFilterComboBox.getSelectedItem();
             prefs.put(PREF_LOG_LEVEL, logLevel.toString());

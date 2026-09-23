@@ -127,6 +127,10 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         });
         panel_1.add(searchTextField);
         searchTextField.setColumns(15);
+        // The search does nothing yet: typing into it filtered nothing, which reads as "no such
+        // element". Hidden until it works.
+        lblSearch.setVisible(false);
+        searchTextField.setVisible(false);
 
         // The property sheets of the selected node are shown by the window's one properties
         // column now, so the tree gets the whole panel.

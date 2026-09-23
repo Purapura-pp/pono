@@ -88,9 +88,11 @@ public class PackageVisionWizard extends AbstractConfigurationWizard {
         deleteAction.setEnabled(false);
         toggleMarkAction.setEnabled(false);
 
+        // Everything goes into the scrolling content. The two panels used to be put straight
+        // into the wizard's own layout, which took the scroll pane out of it: in the properties
+        // column the right-hand fields were cut off, with no scroll bar to reach them.
         JPanel propertiesPanel = new JPanel();
         contentPanel.add(propertiesPanel);
-        add(propertiesPanel, BorderLayout.NORTH);
         propertiesPanel.setBorder(
                 new TitledBorder(null, Translations.getString("PackageVisionWizard.SettingsPanel.Border.title"), //$NON-NLS-1$
                         TitledBorder.LEADING, TitledBorder.TOP, null));
@@ -206,8 +208,8 @@ public class PackageVisionWizard extends AbstractConfigurationWizard {
         propertiesPanel.add(padRoundness, "14, 8, fill, default");
         padRoundness.setColumns(10);
 
-        JPanel tablePanel = new JPanel();
-        add(tablePanel, BorderLayout.CENTER);
+        JPanel tablePanel = new JPanel(new BorderLayout(0, 0));
+        contentPanel.add(tablePanel);
         tablePanel.setBorder(new TitledBorder(null, Translations.getString(
                 "PackageVisionWizard.PadsPanel.Border.title"), TitledBorder.LEADING, TitledBorder.TOP, null, null)); //$NON-NLS-1$
 
@@ -246,7 +248,7 @@ public class PackageVisionWizard extends AbstractConfigurationWizard {
         toolBar.add(toggleMarkAction);
 
         JScrollPane tableScrollPane = new JScrollPane(table);
-        tableScrollPane.setPreferredSize(new Dimension(454, 100));
+        tableScrollPane.setPreferredSize(new Dimension(454, 240));
         tablePanel.add(tableScrollPane);
 
         showReticle();

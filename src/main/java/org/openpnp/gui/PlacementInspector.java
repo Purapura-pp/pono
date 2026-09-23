@@ -172,6 +172,12 @@ public class PlacementInspector extends AbstractConfigurationWizard {
                 .content(grid);
     }
 
+    /** A placement belongs to the job, which has its own unsaved mark and its own Save. */
+    @Override
+    protected boolean modifiesConfiguration() {
+        return false;
+    }
+
     @Override
     public void createBindings() {
         LengthConverter lengthConverter = new LengthConverter();
