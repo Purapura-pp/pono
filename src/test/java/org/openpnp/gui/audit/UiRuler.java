@@ -1432,7 +1432,7 @@ public class UiRuler {
                 .append(" \u00b7 \u6f14\u793a\u914d\u7f6e `").append(fixture).append("`\n\n");
         r.append("\u544a\u8b66 **").append(unique).append("** \u6761\uff08\u53bb\u91cd\u540e\uff1b\u51fa\u73b0 ")
                 .append(findings.size()).append(" \u6b21\uff09\u3002\u65e7\u5411\u5bfc\u7c7b **")
-                .append(wizardClasses.size()).append("** \u4e2a\uff0cP9 \u4e4b\u524d\u53ea\u8981\u6c42\u4e0d\u589e\u52a0\u3002\n\n");
+                .append(wizardClasses.size()).append("** \u4e2a\uff0cP9 \u4e4b\u540e\u5fc5\u987b\u4fdd\u6301\u4e3a 0\u3002\n\n");
 
         r.append("## \u5404\u9879\u68c0\u67e5\n\n| \u68c0\u67e5 | \u6761\u6570 | \u51fa\u73b0\u6b21\u6570 | \u6700\u591a\u7684\u9875\u9762 |\n|---|---:|---:|---|\n");
         for (Map.Entry<UiAudit.Check, Map<String, List<UiAudit.Finding>>> e : grouped.entrySet()) {

@@ -60,6 +60,8 @@ import javassist.NotFoundException;
  *
  */
 public class Main {
+    /** The program's name, the same in every language. */
+    public static final String NAME = "Pono"; //$NON-NLS-1$
 
     public static String getVersion() {
         return getVersionString()+"_"+getBuildString();
@@ -123,7 +125,8 @@ public class Main {
         if (version == null) {
             version = "INTERNAL BUILD";
         }
-        return version;
+        // A build that could not read its revision leaves Maven's placeholder in the manifest.
+        return version.replaceAll("\\.?\\$\\{[^}]*\\}", ""); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     public static String getSourceUri() {

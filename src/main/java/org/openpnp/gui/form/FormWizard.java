@@ -105,7 +105,7 @@ public class FormWizard extends AbstractConfigurationWizard {
         contentPanel.add(Box.createVerticalGlue());
         // Held at the column's width, where the fields give way down to their minimum and a
         // pipeline's stages wrap, rather than scrolling sideways in a narrow column.
-        getScrollPane().setViewportView(new LegacyWizardAdapter.WidthTracking(contentPanel));
+        getScrollPane().setViewportView(new org.openpnp.gui.shell.WidthTracking(contentPanel));
         // Opened at its top: a tab shown later had scrolled down to its first field, hiding the
         // heading and the words above it.
         contentPanel.addHierarchyListener(e -> {

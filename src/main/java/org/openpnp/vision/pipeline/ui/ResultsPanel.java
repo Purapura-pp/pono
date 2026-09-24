@@ -68,7 +68,7 @@ public class ResultsPanel extends JPanel {
         add(headerPanel, BorderLayout.NORTH);
         headerPanel.setLayout(new BorderLayout(0, 0));
 
-        resultStageNameLabel = new JLabel("New label");
+        resultStageNameLabel = new JLabel();
         headerPanel.add(resultStageNameLabel, BorderLayout.NORTH);
         resultStageNameLabel.setHorizontalAlignment(SwingConstants.CENTER);
 

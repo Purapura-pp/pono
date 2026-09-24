@@ -164,6 +164,7 @@ a complete change list, only those that may directly interest or affect users.
 * The status bar's message was cut at its start: "配置已保存 · 10:47:17" showed as far as the blank the bar began with. Choosing no axis for a head's actuator, camera or nozzle stopped Apply with an error when assertions were on. The G-code driver's tabs, the thermistor's conversion and the line endings had English names in Simplified Chinese.
 * The push-pull feeder showed the parts it had read by OCR from the machine's thread; the dialog is now opened on the UI's. The push-pull and blinds feeders' tabs were named "Configuration", "Push-Pull Motion" and "Feeder Array" in English in Simplified Chinese.
 * A Photon slot's location, and the highest address searched, were written the moment they were typed, before Apply. The Photon slot programming changed its window from a thread of its own, and said "Programming done." when the feeder it had programmed then failed to start; its steps and messages, the Photon tabs and the NeoDen4 driver's tab were in English. The NeoDen4 feeder's area of interest, drawn in the camera view, was counted across from the middle of the picture's height. The NeoDen4 feeders' actuator showed a feed length that nothing kept, and its camera an X and Y shift the capture never reads; the NeoDen4 buzzer's two switches did nothing - it sounds at every error and at the end of every job - and are no longer shown. The NeoDen4 driver and feeders' actuator were shown by their class names.
+* The version in Settings and in the About dialog ended in "${buildNumber}" when the build could not read its revision; that part is left out now.
 
 ## Translations
 
@@ -190,6 +191,7 @@ a complete change list, only those that may directly interest or affect users.
 * The drivers', actuators' and signalers' forms are translated into Simplified Chinese, and the 91 keys of their wizards that nothing reads any more have been removed from all seven language files.
 * The feeders' forms are translated into Simplified Chinese, and the 429 keys of their wizards that nothing reads any more have been removed from all seven language files.
 * The NeoDen4's and the Photon feeders' forms are translated into Simplified Chinese, and the 74 keys of their wizards that nothing reads any more have been removed from all seven language files.
+* The About dialog - its title, button, tabs and notices - and the diagnostics dialog's files are translated: no text is left in the sources that a translation cannot reach. The 558 keys and the 48 texts nothing reads any more have been removed, and the 38 keys other languages still had that English no longer has.
 
 ## Development
 
@@ -207,6 +209,7 @@ a complete change list, only those that may directly interest or affect users.
 * `ActuatorForm.common` is the part every actuator's form has, replacing the actuators' base wizard for all but a vendor's; a choice's items may be an immutable list. The ruler photographs a driver's connection, a G-code driver's five tabs and two actuators, the fixture adding a G-code driver on the built-in simulated controller once the machine is running.
 * `FeederForm.common` is the part every feeder's form has, replacing the feeders' base wizard for all but a vendor's; `SlotBanks` is the bank chooser both slot feeders share; a choice may have buttons beside it, and its items may be changed while the form is open. The freeze test's baseline no longer names the wizards that were deleted. The ruler photographs eight feeders' forms on the feeders page, the fixture adding one feeder of each kind only when those scenes are asked for.
 * `DragFeederForm.Template` takes any feeder's template and area of interest through `Picture`, which says where the area is counted from. The actuators' and the feeders' base wizards are gone, and the freeze test's baseline no longer names the Photon slot programming's step. The ruler photographs the NeoDen4's driver, feeders' actuator, buzzer, switched camera and feeder and a Photon feeder's two tabs, adding them only when those scenes are asked for, and takes the names of what it adds as data.
+* The adapter that fitted the old wizards into the properties column is gone with the last of them, and so are the 17 support classes only they used; `WidthTracking` is in `gui.shell`. `i18n.py unused` knows a key made of a literal and a suffix, or of a literal and whatever follows it, and the ruler's report asks that no legacy wizard is left at all.
 
 # Version 2.6
 
