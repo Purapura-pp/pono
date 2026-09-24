@@ -88,11 +88,13 @@ public final class SlotAutoForm {
                 .decimal("actuatorValue", "FeederForm.Auto.FeedValue").width(120) //$NON-NLS-1$ //$NON-NLS-2$
                 .button("SchultzForm.Test", "play", //$NON-NLS-1$ //$NON-NLS-2$
                         f -> SchultzForm.actuate(f, slot.getMachine(), slot::getActuatorName, slot::getActuatorValue, null, null))
+                .movesMachine()
                 .choice("postPickActuatorName", "FeederForm.Auto.PostPick", actuators, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .decimal("postPickActuatorValue", "FeederForm.Auto.PostPickValue").width(120) //$NON-NLS-1$ //$NON-NLS-2$
                 .button("SchultzForm.Test", "play", //$NON-NLS-1$ //$NON-NLS-2$
                         f -> SchultzForm.actuate(f, slot.getMachine(), slot::getPostPickActuatorName,
                                 slot::getPostPickActuatorValue, null, null))
+                .movesMachine()
                 .hint("FeederForm.Auto.Value.Hint") //$NON-NLS-1$
                 .toggle("moveBeforeFeed", "FeederForm.Auto.MoveBeforeFeed", "FeederForm.Auto.MoveBeforeFeed.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .section("SlotAutoForm.Banks", "layers").collapsed() //$NON-NLS-1$ //$NON-NLS-2$

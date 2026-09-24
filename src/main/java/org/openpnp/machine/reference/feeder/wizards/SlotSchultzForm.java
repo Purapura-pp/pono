@@ -112,11 +112,13 @@ public final class SlotSchultzForm {
                 .section("SchultzForm.Feeding", "zap") //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("actuatorName", "SchultzForm.PrePick", names, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .button("SchultzForm.Test", "play", f -> SchultzForm.actuate(f, machine, slot::getActuatorName, value, null, null)) //$NON-NLS-1$ //$NON-NLS-2$
+                .movesMachine()
                 .decimal("actuatorValue", "SchultzForm.Value").width(120) //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("SchultzForm.Value.Hint") //$NON-NLS-1$
                 .choice("postPickActuatorName", "SchultzForm.PostPick", names, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .button("SchultzForm.Test", "play", f -> SchultzForm.actuate(f, machine, slot::getPostPickActuatorName, //$NON-NLS-1$ //$NON-NLS-2$
                         value, null, () -> SwingUtilities.invokeLater(countAgain)))
+                .movesMachine()
                 .section("SchultzForm.Count", "list") //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("feedCountActuatorName", "SchultzForm.FeedCount", names, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .button("SchultzForm.Read", "download", f -> countAgain.run()) //$NON-NLS-1$ //$NON-NLS-2$
