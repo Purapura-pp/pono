@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.wizards.ScriptActuatorConfigurationWizard;
+import org.openpnp.machine.reference.wizards.ActuatorForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.scripting.Scripting;
 import org.simpleframework.xml.Element;
@@ -51,7 +51,7 @@ public class ScriptActuator extends ReferenceActuator {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ScriptActuatorConfigurationWizard(getMachine(), this);
+        return ActuatorForm.script(this);
     }
 
     public String getScriptName() {

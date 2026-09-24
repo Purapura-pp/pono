@@ -22,7 +22,7 @@
 package org.openpnp.machine.reference;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.wizards.ActuatorInterlockMonitorConfigurationWizard;
+import org.openpnp.machine.reference.wizards.InterlockForm;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
@@ -419,6 +419,6 @@ public class ActuatorInterlockMonitor extends AbstractModelObject implements Act
 
     @Override
     public Wizard getConfigurationWizard(AbstractActuator actuator) {
-        return new ActuatorInterlockMonitorConfigurationWizard(actuator.getMachine(), actuator, this);
+        return InterlockForm.build(actuator.getMachine(), actuator, this);
     }
 }

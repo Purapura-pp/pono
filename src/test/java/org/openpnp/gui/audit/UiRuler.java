@@ -370,7 +370,23 @@ public class UiRuler {
             return null;
         }).get(60, TimeUnit.SECONDS);
         say("machine enabled and homed");
+        // A G-code driver on the built-in simulated controller, added once the machine runs so
+        // that enabling does not try to reach it: only its forms are photographed.
+        org.openpnp.machine.reference.driver.GcodeAsyncDriver gcode = new org.openpnp.machine.reference.driver.GcodeAsyncDriver();
+        gcode.setName(GCODE_DRIVER);
+        gcode.setCommunicationsType(org.openpnp.machine.reference.driver.AbstractReferenceDriver.CommunicationsType.tcp);
+        gcode.setIpAddress("GcodeServer");
+        edt(() -> {
+            try {
+                ((org.openpnp.spi.base.AbstractMachine) machine).addDriver(gcode);
+            }
+            catch (Exception e) {
+                say("no G-code driver: " + e);
+            }
+        });
     }
+
+    private static final String GCODE_DRIVER = "\u4e3b\u63a7";
 
     private void openJob() throws Exception {
         Job job = configuration.loadJob(new File(config, "jobs/demo-board.job.xml"));
@@ -459,6 +475,14 @@ public class UiRuler {
             { "camera-bottom-position", "\u5e95\u90e8\u76f8\u673a\u4f4d\u7f6e", "Bottom", "\u4f4d\u7f6e" },
             { "vision-bottom", "\u5e95\u90e8\u89c6\u89c9", "#bottomVision", null },
             { "vision-fiducials", "\u57fa\u51c6\u70b9\u5b9a\u4f4d", "#fiducials", null },
+            { "driver", "\u9a71\u52a8 NullDriver", "#nulldriver", null },
+            { "gcode-driver", "G \u4ee3\u7801\u9a71\u52a8", "#gcode", null },
+            { "gcode-settings", "G \u4ee3\u7801\u9a71\u52a8\u8bbe\u5b9a", "#gcode", "\u9a71\u52a8\u8bbe\u5b9a" },
+            { "gcode-commands", "G \u4ee3\u7801\u6307\u4ee4", "#gcode", "G \u4ee3\u7801" },
+            { "gcode-console", "G \u4ee3\u7801\u63a7\u5236\u53f0", "#gcode", "\u547d\u4ee4\u63a7\u5236\u53f0" },
+            { "gcode-async", "G \u4ee3\u7801\u9ad8\u7ea7\u8bbe\u7f6e", "#gcode", "\u9ad8\u7ea7\u8bbe\u7f6e" },
+            { "actuator", "\u6267\u884c\u5668 LIGHT_TOP", "LIGHT_TOP", null },
+            { "actuator-machine", "\u6267\u884c\u5668 LIGHT_BOTTOM", "LIGHT_BOTTOM", null },
     };
 
     private static String[] machineScene(String id) {
@@ -939,13 +963,25 @@ public class UiRuler {
         if (name.equals("#fiducials")) {
             return setup.selectPropertySheetHolder(machine.getFiducialLocator());
         }
+        if (name.equals("#nulldriver") || name.equals("#gcode")) {
+            for (org.openpnp.spi.Driver driver : machine.getDrivers()) {
+                boolean wanted = name.equals("#gcode") ? GCODE_DRIVER.equals(driver.getName())
+                        : driver instanceof org.openpnp.machine.reference.driver.NullDriver;
+                if (wanted) {
+                    return setup.selectPropertySheetHolder(driver);
+                }
+            }
+            return false;
+        }
         java.util.List<org.openpnp.spi.PropertySheetHolder> holders = new ArrayList<>(machine.getAxes());
         for (org.openpnp.spi.Head head : machine.getHeads()) {
             holders.add(head);
             holders.addAll(head.getNozzles());
             holders.addAll(head.getCameras());
+            holders.addAll(head.getActuators());
         }
         holders.addAll(machine.getCameras());
+        holders.addAll(machine.getActuators());
         holders.addAll(machine.getNozzleTips());
         for (org.openpnp.spi.PropertySheetHolder holder : holders) {
             if (holder instanceof org.openpnp.model.Named && name.equals(((org.openpnp.model.Named) holder).getName())) {

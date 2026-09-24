@@ -32,7 +32,7 @@ import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.solutions.ActuatorSolutions;
-import org.openpnp.machine.reference.wizards.ReferenceActuatorConfigurationWizard;
+import org.openpnp.machine.reference.wizards.ActuatorForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -344,7 +344,7 @@ public class ReferenceActuator extends AbstractActuator implements HeadMountable
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceActuatorConfigurationWizard(getMachine(), this);
+        return ActuatorForm.reference(this);
     }
 
     @Override

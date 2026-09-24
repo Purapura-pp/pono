@@ -174,7 +174,7 @@ public final class CameraForm {
                     if (camera.getFocusSensingMethod() != focus[0]) {
                         // The auto focus tab comes and goes with the method.
                         focus[0] = camera.getFocusSensingMethod();
-                        SwingUtilities.invokeLater(() -> MainFrame.get().getMachineSetupTab().selectCurrentTreePath());
+                        SwingUtilities.invokeLater(() -> { if (MainFrame.get() != null) { MainFrame.get().getMachineSetupTab().selectCurrentTreePath(); } });
                     }
                 })
                 .build();

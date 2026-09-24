@@ -877,7 +877,8 @@ public class FormWizard extends AbstractConfigurationWizard {
     private JComponent choice(Field field) {
         JComboBox combo = Forms.dropdown(new JComboBox(field.items.toArray()));
         // A null among the items is the choice of none, an actuator not used say.
-        java.util.function.Function<Object, String> name = field.items.contains(null)
+        // Not items.contains(null): a List.of refuses the question with an exception.
+        java.util.function.Function<Object, String> name = field.items.stream().anyMatch(java.util.Objects::isNull)
                 ? v -> v == null ? org.openpnp.Translations.getString("Form.None") : DisplayNames.of(v) //$NON-NLS-1$
                 : DisplayNames::of;
         if (field.itemNote != null) {

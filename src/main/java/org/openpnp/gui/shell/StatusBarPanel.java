@@ -110,6 +110,14 @@ public class StatusBarPanel extends JPanel {
                 ((JComponent) c).setAlignmentY(CENTER_ALIGNMENT);
             }
         }
+        // On a narrow window a long status, "配置已保存 · 10:47:17", was cut at its edge: the
+        // version gives way first.
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                fit();
+            }
+        });
 
         // The units are a user preference that the settings can change while running.
         configuration.addListener(new ConfigurationListener.Adapter() {
@@ -126,7 +134,15 @@ public class StatusBarPanel extends JPanel {
     }
 
     private static JComponent item(int gap, JComponent... parts) {
-        JPanel item = new JPanel();
+        // Never wider than what it holds, as that changes: fixed when it was made, the status
+        // was a blank then, and "配置已保存 · 10:47:17" was cut at the blank's width.
+        @SuppressWarnings("serial")
+        JPanel item = new JPanel() {
+            @Override
+            public java.awt.Dimension getMaximumSize() {
+                return getPreferredSize();
+            }
+        };
         item.setOpaque(false);
         item.setLayout(new BoxLayout(item, BoxLayout.X_AXIS));
         for (int i = 0; i < parts.length; i++) {
@@ -136,7 +152,6 @@ public class StatusBarPanel extends JPanel {
             parts[i].setAlignmentY(CENTER_ALIGNMENT);
             item.add(parts[i]);
         }
-        item.setMaximumSize(item.getPreferredSize());
         return item;
     }
 
@@ -194,6 +209,19 @@ public class StatusBarPanel extends JPanel {
     /** What the machine is doing right now, in words. */
     public void setStatus(String status) {
         statusLabel.setText(status == null || status.isEmpty() ? " " : status); //$NON-NLS-1$
+        fit();
+    }
+
+    /** The version shown only while everything else fits beside it. */
+    private void fit() {
+        if (getWidth() <= 0) {
+            return;
+        }
+        versionLabel.setVisible(true);
+        if (getPreferredSize().width > getWidth()) {
+            versionLabel.setVisible(false);
+        }
+        revalidate();
     }
 
     /**

@@ -26,7 +26,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
-import org.openpnp.machine.reference.driver.wizards.GcodeAsyncDriverSettings;
+import org.openpnp.machine.reference.driver.wizards.DriverForms;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.spi.HeadMountable;
@@ -419,7 +419,7 @@ public class GcodeAsyncDriver extends GcodeDriver {
     @Override
     public PropertySheet[] getPropertySheets() {
         return Collect.concat(super.getPropertySheets(), new PropertySheet[] { 
-                new PropertySheetWizardAdapter(new GcodeAsyncDriverSettings(this), Translations.getString("GCodeAsyncDriver.AdvancedSettings.title")) //$NON-NLS-1$
+                new PropertySheetWizardAdapter(DriverForms.asyncSettings(this), Translations.getString("GCodeAsyncDriver.AdvancedSettings.title")) //$NON-NLS-1$
         });
     }
 }

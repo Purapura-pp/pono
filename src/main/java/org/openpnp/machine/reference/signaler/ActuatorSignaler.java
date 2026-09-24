@@ -1,7 +1,7 @@
 package org.openpnp.machine.reference.signaler;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.signaler.wizards.ActuatorSignalerConfigurationWizard;
+import org.openpnp.machine.reference.signaler.wizards.SignalerForms;
 import org.openpnp.model.Configuration;
 import org.openpnp.spi.Actuator;
 import org.openpnp.spi.Machine;
@@ -82,6 +82,6 @@ public class ActuatorSignaler extends AbstractSignaler {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ActuatorSignalerConfigurationWizard(this);
+        return SignalerForms.actuator(this);
     }
 }
