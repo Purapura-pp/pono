@@ -94,7 +94,7 @@ public final class ActuatorForm {
             if (actuator.getValueType() != type[0] || actuator.isInterlockActuator() != interlock[0]) {
                 type[0] = actuator.getValueType();
                 interlock[0] = actuator.isInterlockActuator();
-                SwingUtilities.invokeLater(() -> MainFrame.get().getMachineSetupTab().selectCurrentTreePath());
+                SwingUtilities.invokeLater(() -> { if (MainFrame.get() != null) { MainFrame.get().getMachineSetupTab().selectCurrentTreePath(); } });
             }
         });
     }

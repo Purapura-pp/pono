@@ -87,7 +87,7 @@ public final class ProfilesForm {
                         // The table's columns are the actuators chosen.
                         before.clear();
                         before.addAll(now);
-                        SwingUtilities.invokeLater(() -> MainFrame.get().getMachineSetupTab().selectCurrentTreePath());
+                        SwingUtilities.invokeLater(() -> { if (MainFrame.get() != null) { MainFrame.get().getMachineSetupTab().selectCurrentTreePath(); } });
                     }
                 })
                 .build();

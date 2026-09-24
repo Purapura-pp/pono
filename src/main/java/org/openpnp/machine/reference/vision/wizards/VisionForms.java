@@ -58,7 +58,7 @@ public final class VisionForms {
 
     /** Other settings bring other tabs: the tree shows the object again. */
     private static void reselect() {
-        SwingUtilities.invokeLater(() -> MainFrame.get().getMachineSetupTab().selectCurrentTreePath());
+        SwingUtilities.invokeLater(() -> { if (MainFrame.get() != null) { MainFrame.get().getMachineSetupTab().selectCurrentTreePath(); } });
     }
 
     public static FormWizard bottomVision(ReferenceBottomVision vision) {

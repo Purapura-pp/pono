@@ -58,7 +58,7 @@ public abstract class AbstractHeadMountable extends AbstractMachineElement imple
         return axisX;
     }
     public void setAxisX(AbstractAxis axisX) {
-        assert axisX.getType() == Axis.Type.X;
+        assert axisX == null || axisX.getType() == Axis.Type.X;
         this.axisX = axisX;
         this.axisXId = (axisX == null) ? null : axisX.getId();
     }
@@ -67,7 +67,7 @@ public abstract class AbstractHeadMountable extends AbstractMachineElement imple
         return axisY;
     }
     public void setAxisY(AbstractAxis axisY) {
-        assert axisY.getType() == Axis.Type.Y;
+        assert axisY == null || axisY.getType() == Axis.Type.Y;
         this.axisY = axisY;
         this.axisYId = (axisY == null) ? null : axisY.getId();
     }
@@ -76,7 +76,7 @@ public abstract class AbstractHeadMountable extends AbstractMachineElement imple
         return axisZ;
     }
     public void setAxisZ(AbstractAxis axisZ) {
-        assert axisZ.getType() == Axis.Type.Z;
+        assert axisZ == null || axisZ.getType() == Axis.Type.Z;
         this.axisZ = axisZ;
         this.axisZId = (axisZ == null) ? null : axisZ.getId();
     }
@@ -85,7 +85,7 @@ public abstract class AbstractHeadMountable extends AbstractMachineElement imple
         return axisRotation;
     }
     public void setAxisRotation(AbstractAxis axisRotation) {
-        assert axisRotation.getType() == Axis.Type.Rotation;
+        assert axisRotation == null || axisRotation.getType() == Axis.Type.Rotation;
         this.axisRotation = axisRotation;
         this.axisRotationId = (axisRotation == null) ? null : axisRotation.getId();
     }

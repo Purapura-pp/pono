@@ -50,8 +50,7 @@ import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis.BacklashCompensationMethod;
 import org.openpnp.machine.reference.axis.ReferenceLinearTransformAxis;
 import org.openpnp.machine.reference.axis.ReferenceMappedAxis;
-import org.openpnp.machine.reference.driver.wizards.GcodeDriverConsole;
-import org.openpnp.machine.reference.driver.wizards.GcodeDriverGcodes;
+import org.openpnp.machine.reference.driver.wizards.GcodeForms;
 import org.openpnp.machine.reference.driver.wizards.DriverForms;
 import org.openpnp.machine.reference.solutions.GcodeDriverSolutions;
 import org.openpnp.model.AxesLocation;
@@ -1670,9 +1669,9 @@ public class GcodeDriver extends AbstractReferenceDriver implements Named {
                 new PropertySheetWizardAdapter(super.getConfigurationWizard()),
                 new PropertySheetWizardAdapter(DriverForms.gcodeSettings(this), Translations.getString(
                         "GCodeDriver.GCodeDriverSettings.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new GcodeDriverGcodes(this), Translations.getString(
+                new PropertySheetWizardAdapter(GcodeForms.gcodes(this), Translations.getString(
                         "GCodeDriver.GCode.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(new GcodeDriverConsole(this), Translations.getString(
+                new PropertySheetWizardAdapter(GcodeForms.console(this), Translations.getString(
                         "GCodeDriver.Console.title")), //$NON-NLS-1$
         };
     }
