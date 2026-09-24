@@ -21,7 +21,6 @@
 
 package org.openpnp.machine.reference.feeder;
 
-
 import java.awt.Color;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.NoninvertibleTransformException;
@@ -46,8 +45,7 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.BlindsFeederArrayConfigurationWizard;
-import org.openpnp.machine.reference.feeder.wizards.BlindsFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.BlindsFeederForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -80,7 +78,6 @@ import org.openpnp.vision.pipeline.stages.SimpleOcr.OcrModel;
 import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Element;
-
 
 /**
  * Implementation of Feeder that indexes through an array of cut tape strips held
@@ -184,7 +181,6 @@ public class BlindsFeeder extends ReferenceFeeder {
     };
     @Attribute(required = false) 
     private OcrTextOrientation ocrTextOrientation = OcrTextOrientation.AwayFromTape;
-
 
     // These internal setting are not on the GUI but can be changed in the XML.
     @Attribute(required = false)
@@ -682,7 +678,6 @@ public class BlindsFeeder extends ReferenceFeeder {
                         .getExpectedListModel(RotatedRect.class, 
                                 null/*???new Exception("Feeder " + getName() + ": No features found.")*/);
 
-
                 Result ocrStageResult = pipeline.getResult("OCR"); 
                 if (ocrStageResult != null 
                         && pipeline.getProperty("SimpleOcr.alphabet") instanceof String
@@ -843,7 +838,6 @@ public class BlindsFeeder extends ReferenceFeeder {
                         return Double.compare(d1, d2);
                     }
                 });
-
 
                 // Try to determine the pocket size and center by evaluating the histogram of corner feeder local Y coordinates.
                 double bestLowerY = histogramLower.getMaximumKey();
@@ -1479,7 +1473,6 @@ public class BlindsFeeder extends ReferenceFeeder {
         return new NozzleAndTipForPushing(null, null, false);
     }
 
-
     @Override
     public Location getJobPreparationLocation() {
         if ((isVisionEnabled() && !isCalibrated())
@@ -1690,7 +1683,6 @@ public class BlindsFeeder extends ReferenceFeeder {
     private AffineTransform tx;
     private AffineTransform txInverse;
     private double txRotation;
-
 
     public void invalidateFeederTransformation() {
         tx = null;
@@ -2233,7 +2225,6 @@ public class BlindsFeeder extends ReferenceFeeder {
         return tapeLength;
     }
 
-
     public void setTapeLength(Length tapeLength) {
         Length oldValue = this.tapeLength;
         this.tapeLength = tapeLength;
@@ -2243,11 +2234,9 @@ public class BlindsFeeder extends ReferenceFeeder {
         }
     }
 
-
     public Length getFeederExtent() {
         return feederExtent;
     }
-
 
     public void setFeederExtent(Length feederExtent) {
         Length oldValue = this.feederExtent;
@@ -2258,11 +2247,9 @@ public class BlindsFeeder extends ReferenceFeeder {
         }
     }
 
-
     public Length getPocketCenterline() {
         return pocketCenterline;
     }
-
 
     public void setPocketCenterline(Length pocketCenterline) {
         Length oldValue = this.pocketCenterline;
@@ -2271,11 +2258,9 @@ public class BlindsFeeder extends ReferenceFeeder {
         updateTapeNumbering();
     }
 
-
     public Length getPocketPitch() {
         return pocketPitch;
     }
-
 
     public void setPocketPitch(Length pocketPitch) {
         Length oldValue = this.pocketPitch;
@@ -2283,11 +2268,9 @@ public class BlindsFeeder extends ReferenceFeeder {
         firePropertyChange("pocketPitch", oldValue, pocketPitch);
     }
 
-
     public Length getPocketSize() {
         return pocketSize;
     }
-
 
     public void setPocketSize(Length pocketSize) {
         Length oldValue = this.pocketSize;
@@ -2470,7 +2453,6 @@ public class BlindsFeeder extends ReferenceFeeder {
         firePropertyChange("feederNo", oldValue, feederNo);
     }
 
-
     public int getFeedersTotal() {
         return feedersTotal;
     }
@@ -2613,7 +2595,7 @@ public class BlindsFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new BlindsFeederConfigurationWizard(this);
+        return BlindsFeederForm.feeder(this);
     }
 
     @Override
@@ -2624,8 +2606,8 @@ public class BlindsFeeder extends ReferenceFeeder {
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
-                new PropertySheetWizardAdapter(getConfigurationWizard(), "Configuration"),
-                new PropertySheetWizardAdapter(new BlindsFeederArrayConfigurationWizard(this), "Feeder Array"),
+                new PropertySheetWizardAdapter(getConfigurationWizard()),
+                new PropertySheetWizardAdapter(BlindsFeederForm.array(this)),
         };
     }
 
