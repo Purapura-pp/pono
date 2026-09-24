@@ -7,7 +7,7 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.Clip;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.signaler.wizards.SoundSignalerConfigurationWizard;
+import org.openpnp.machine.reference.signaler.wizards.SignalerForms;
 import org.openpnp.model.Configuration;
 import org.openpnp.spi.base.AbstractJobProcessor;
 import org.openpnp.spi.base.AbstractSignaler;
@@ -85,7 +85,7 @@ public class SoundSignaler extends AbstractSignaler {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new SoundSignalerConfigurationWizard(this);
+        return SignalerForms.sound(this);
     }
 
     public boolean isEnableErrorSound() {

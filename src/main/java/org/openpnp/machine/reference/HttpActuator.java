@@ -30,7 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.wizards.HttpActuatorConfigurationWizard;
+import org.openpnp.machine.reference.wizards.ActuatorForm;
 import org.openpnp.model.Solutions;
 import org.openpnp.model.Solutions.Milestone;
 import org.openpnp.model.Solutions.Severity;
@@ -172,7 +172,7 @@ public class HttpActuator extends ReferenceActuator {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new HttpActuatorConfigurationWizard(getMachine(), this);
+        return ActuatorForm.http(this);
     }
 
     public String getOnUrl() {
