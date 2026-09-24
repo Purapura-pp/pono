@@ -231,7 +231,7 @@ public class IssuePanel extends JPanel {
             c.setVisible(false);
         }
         // Held at the column's width, the controls giving way down to their smallest.
-        scrollPane.setViewportView(new org.openpnp.gui.form.LegacyWizardAdapter.WidthTracking(panel));
+        scrollPane.setViewportView(new org.openpnp.gui.shell.WidthTracking(panel));
         return this;
     }
 

@@ -1091,13 +1091,18 @@ def unused_report():
     source = "\n".join(p.read_text(encoding="utf-8", errors="replace")
                        for p in SOURCES.rglob("*.java"))
     literals = set(re.findall(r'"([A-Za-z][\w.]*?)"', source))
-    builders = tuple(sorted(set(re.findall(r'"([A-Za-z][\w.]*?\.)"', source))))
+    builders = tuple(sorted(set(re.findall(r'"([A-Za-z][\w.]*?\.)"', source))
+                            | set(re.findall(r'"([A-Za-z]\w*\.[\w.]*)"\s*\+', source))))
+    # And the other way round: a literal with a suffix put after it, key + ".Title".
+    suffixes = set(re.findall(r'\+\s*"\.([A-Za-z][\w.]*)"', source))
 
     dead = []
     for key in sorted(Bundle(RESOURCES / "translations.properties").entries):
         if key in literals:
             continue
         if any(key.startswith(prefix) for prefix in builders):
+            continue
+        if any(key.endswith("." + suffix) and key[:-len(suffix) - 1] in literals for suffix in suffixes):
             continue
         dead.append(key)
     return dead

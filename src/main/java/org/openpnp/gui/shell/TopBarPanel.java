@@ -339,7 +339,7 @@ public class TopBarPanel extends JPanel {
     private JComponent brand() {
         JPanel brand = row(9);
         brand.add(new LogoTile());
-        JLabel name = new JLabel("Pono"); //$NON-NLS-1$
+        JLabel name = new JLabel(org.openpnp.Main.NAME);
         name.setFont(Ui.font(15f, Font.BOLD));
         brand.add(name);
         String version = Main.getVersionString();

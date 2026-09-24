@@ -60,6 +60,8 @@ import javassist.NotFoundException;
  *
  */
 public class Main {
+    /** The program's name, the same in every language. */
+    public static final String NAME = "Pono"; //$NON-NLS-1$
 
     public static String getVersion() {
         return getVersionString()+"_"+getBuildString();

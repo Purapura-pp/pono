@@ -148,8 +148,6 @@ public class PropertySheetPresenter {
             if (panel instanceof AbstractConfigurationWizard) {
                 ((AbstractConfigurationWizard) panel).setWizardContainer(container);
             }
-            // Until each wizard is redone as a declarative form, it is made to fit the column.
-            org.openpnp.gui.form.LegacyWizardAdapter.adapt(panel);
             String title = propertySheet.getPropertySheetTitle();
             if (title == null) {
                 title = Translations.getString("PropertySheetPresenter.Tab.Configuration"); //$NON-NLS-1$

@@ -643,7 +643,7 @@ public class CalibrationPanel extends JPanel {
 
         JPanel pane = new JPanel(new BorderLayout());
         pane.setOpaque(false);
-        JScrollPane scroll = new JScrollPane(new org.openpnp.gui.form.LegacyWizardAdapter.WidthTracking(sections));
+        JScrollPane scroll = new JScrollPane(new org.openpnp.gui.shell.WidthTracking(sections));
         scroll.setBorder(null);
         scroll.setOpaque(false);
         scroll.getViewport().setOpaque(false);

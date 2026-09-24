@@ -160,17 +160,17 @@ public class SubmitDiagnosticsDialog extends JDialog {
             contentPanel.add(lblInclude, "2, 18");
         }
         {
-            includeMachineXmlChk = new JCheckBox("machine.xml");
+            includeMachineXmlChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.MachineXml")); //$NON-NLS-1$
             includeMachineXmlChk.setSelected(true);
             contentPanel.add(includeMachineXmlChk, "2, 20");
         }
         {
-            includePartsXmlChk = new JCheckBox("parts.xml");
+            includePartsXmlChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.PartsXml")); //$NON-NLS-1$
             includePartsXmlChk.setSelected(true);
             contentPanel.add(includePartsXmlChk, "4, 20");
         }
         {
-            includePackagesXmlChk = new JCheckBox("packages.xml");
+            includePackagesXmlChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.PackagesXml")); //$NON-NLS-1$
             includePackagesXmlChk.setSelected(true);
             contentPanel.add(includePackagesXmlChk, "2, 22");
         }

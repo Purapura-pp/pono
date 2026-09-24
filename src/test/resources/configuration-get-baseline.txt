@@ -34,7 +34,6 @@ org/openpnp/gui/support/PackagesComboBoxModel.java	1
 org/openpnp/gui/support/PartsComboBoxModel.java	3
 org/openpnp/gui/support/TableComboBoxModel.java	1
 org/openpnp/gui/support/VisionSettingsComboBoxModel.java	1
-org/openpnp/gui/support/VolumeConverter.java	2
 org/openpnp/gui/tablemodel/FeedersTableModel.java	1
 org/openpnp/gui/tablemodel/FootprintTableModel.java	2
 org/openpnp/gui/tablemodel/HeadsTableModel.java	1
