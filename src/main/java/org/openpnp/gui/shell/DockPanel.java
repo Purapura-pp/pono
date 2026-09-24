@@ -363,7 +363,11 @@ public class DockPanel extends RoundedPanel {
         }
 
         private int overflow() {
-            int end = getWidth() - getInsets().right;
+            // Past what is seen of the row, as fitWords measures it: the row can be laid out
+            // wider than the card that shows it.
+            java.awt.Rectangle seen = getVisibleRect();
+            int shown = seen.width > 0 ? Math.min(getWidth(), seen.x + seen.width) : getWidth();
+            int end = shown - getInsets().right;
             int right = 0;
             for (Component c : getComponents()) {
                 if (c.isVisible()) {
@@ -386,6 +390,7 @@ public class DockPanel extends RoundedPanel {
         }
 
         private void fitWords() {
+            words.keySet().removeIf(button -> !javax.swing.SwingUtilities.isDescendingFrom(button, this));
             if (words.isEmpty() || getWidth() <= 0) {
                 return;
             }
@@ -429,6 +434,13 @@ public class DockPanel extends RoundedPanel {
                     if (!java.util.Objects.equals(button.getText(), text)) {
                         button.setText(text);
                         changed = true;
+                        // A panel of buttons on the row keeps the sizes it read too, and is not
+                        // told when it was already waiting to be laid out: it cut the button.
+                        for (java.awt.Container c = button.getParent(); c != null && c != this; c = c.getParent()) {
+                            if (c.getLayout() instanceof java.awt.LayoutManager2) {
+                                ((java.awt.LayoutManager2) c.getLayout()).invalidateLayout(c);
+                            }
+                        }
                     }
                 }
             }
@@ -439,6 +451,27 @@ public class DockPanel extends RoundedPanel {
                 // The layout keeps the sizes it read until it is told they changed.
                 ((BoxLayout) getLayout()).invalidateLayout(this);
             }
+        }
+
+        /**
+         * Lets a button put on the row with {@link #add} give up its words on a narrow row as the
+         * row's own buttons do, the words it is given later included - a button named after what
+         * is selected. One that is taken off the row again is forgotten when the row is laid out.
+         */
+        public void shedsWords(JButton button) {
+            if (button.getIcon() == null || words.containsKey(button)) {
+                return;
+            }
+            if (button.getText() != null && !button.getText().isEmpty()) {
+                worded(button);
+                return;
+            }
+            button.addPropertyChangeListener("text", e -> { //$NON-NLS-1$
+                if (!fitting && e.getNewValue() != null && !String.valueOf(e.getNewValue()).isEmpty()
+                        && !words.containsKey(button)) {
+                    worded(button);
+                }
+            });
         }
 
         /** Keeps the button's words, to be taken off and put back as the row's width asks. */

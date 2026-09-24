@@ -289,9 +289,11 @@ final class PresetsTopic extends Topic {
             }
             for (String line : lines) {
                 body.add(Box.createVerticalStrut(3));
-                JLabel label = Ui.t2(line);
+                // Wrapped rather than cut: at 1366 pixels a card is too narrow for the travel,
+                // the firmware and the baud rate on one line.
+                javax.swing.JTextArea label = Forms.paragraph(line);
                 label.setFont(Ui.font(Tokens.FS_AUX));
-                label.setToolTipText(line);
+                label.setForeground(Ui.text2());
                 label.setAlignmentX(Component.LEFT_ALIGNMENT);
                 body.add(label);
             }
@@ -376,10 +378,13 @@ final class PresetsTopic extends Topic {
             title.setAlignmentX(Component.CENTER_ALIGNMENT);
             column.add(title);
             column.add(Box.createVerticalStrut(2));
-            JLabel text = Ui.t2(Translations.getString("MachineSettings.Presets.New.Text")); //$NON-NLS-1$
-            text.setFont(Ui.font(Tokens.FS_SMALL));
-            text.setAlignmentX(Component.CENTER_ALIGNMENT);
-            column.add(text);
+            // A line each, centred under the title, where one line was cut on a narrow card.
+            for (String part : Translations.getString("MachineSettings.Presets.New.Text").split("\n")) { //$NON-NLS-1$ //$NON-NLS-2$
+                JLabel text = Ui.t2(part);
+                text.setFont(Ui.font(Tokens.FS_SMALL));
+                text.setAlignmentX(Component.CENTER_ALIGNMENT);
+                column.add(text);
+            }
             column.add(Box.createVerticalGlue());
             add(column, BorderLayout.CENTER);
             setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));

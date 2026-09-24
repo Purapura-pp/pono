@@ -108,9 +108,19 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
     private final JTable table;
     private final JTextField searchTextField;
     private final JButton newButton;
-    private final JPanel nodeActions = new JPanel();
+    /**
+     * The selected element's own buttons. Not squeezed below what they need, which cut a button
+     * in half inside the row; the row sees it is too narrow and takes their words off instead.
+     */
+    private final JPanel nodeActions = new JPanel() {
+        @Override
+        public java.awt.Dimension getMinimumSize() {
+            return getPreferredSize();
+        }
+    };
     private final JButton deleteButton;
     private Action deleteAction;
+    private final DockPanel.Toolbar toolbar;
     /** The nodes shown open, by where they are, "机器/贴装头/H1": kept as the tree is rebuilt. */
     private final Set<String> expanded = new HashSet<>();
     /** The toolbar and the tree, which the machine settings page shows as its advanced topic. */
@@ -178,7 +188,7 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
 
         // The toolbar in the tree's own order: making something under the selected element, what
         // else it does, opening and folding, the search - and deleting it, apart, at the far end.
-        DockPanel.Toolbar toolbar = new DockPanel.Toolbar();
+        toolbar = new DockPanel.Toolbar();
         newButton = toolbar.menu("MachineSetupPanel.New", "plus", this::newMenu); //$NON-NLS-1$ //$NON-NLS-2$
         nodeActions.setOpaque(false);
         nodeActions.setLayout(new BoxLayout(nodeActions, BoxLayout.X_AXIS));
@@ -221,6 +231,10 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
             }
         });
         toolbar.add(deleteButton);
+        // In the machine settings page's Advanced topic the row is narrower than a page's.
+        toolbar.shedsWords(expandAll);
+        toolbar.shedsWords(collapseAll);
+        toolbar.shedsWords(deleteButton);
 
         page = new JPanel(new BorderLayout());
         page.setOpaque(false);
@@ -468,6 +482,7 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
                 button.setFocusable(false);
                 nodeActions.add(javax.swing.Box.createHorizontalStrut(6));
                 nodeActions.add(button);
+                toolbar.shedsWords(button);
             }
         }
         deleteButton.setVisible(deleteAction != null);
