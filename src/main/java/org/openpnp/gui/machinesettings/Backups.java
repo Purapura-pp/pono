@@ -32,12 +32,12 @@ import org.pmw.tinylog.Logger;
  * The machine's configuration as it was before a change the page makes all at once - the nozzles
  * rebuilt, a preset applied - saved first and copied beside itself, as the calibration does.
  */
-final class Backups {
+public final class Backups {
     private Backups() {
     }
 
     /** machine.xml.before-nozzles-2026-09-24_20.10.05, in the configuration directory. */
-    static File backup(Configuration configuration, String what) throws Exception {
+    public static File backup(Configuration configuration, String what) throws Exception {
         configuration.save();
         return copy(configuration.getConfigurationDirectory(), "machine.xml", what, stamp()); //$NON-NLS-1$
     }

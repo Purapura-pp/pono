@@ -1150,6 +1150,15 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
         serializeObject(holder, file);
     }
 
+    /** The machine as machine.xml would have it now, without writing anything. */
+    public String machineXml() throws Exception {
+        MachineConfigurationHolder holder = new MachineConfigurationHolder();
+        holder.machine = machine;
+        java.io.StringWriter out = new java.io.StringWriter();
+        createSerializer().write(holder, out);
+        return out.toString();
+    }
+
     private void loadPackages(File file) throws Exception {
         Serializer serializer = createSerializer();
         PackagesConfigurationHolder holder =

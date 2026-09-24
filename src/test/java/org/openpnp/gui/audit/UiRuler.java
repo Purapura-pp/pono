@@ -51,7 +51,9 @@ import javax.swing.tree.TreeModel;
 import javax.swing.tree.TreePath;
 
 import org.openpnp.Main;
+import org.openpnp.gui.CalibrationPanel;
 import org.openpnp.gui.MainFrame;
+import org.openpnp.gui.calibration.CalibrationItem;
 import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.components.ThemeInfo;
 import org.openpnp.gui.components.ThemeSettingsPanel;
@@ -152,7 +154,7 @@ public class UiRuler {
                 { "PartsPanel", "parts" }, { "PackagesPanel", "packages" },
                 { "BoardsPanel", "boards" }, { "PanelsPanel", "panels" },
                 { "VisionSettingsPanel", "vision" }, { "MachineSettingsPanel", "machine" },
-                { "IssuesAndSolutionsPanel", "issues" }, { "CalibrationPanel", "calibration" },
+                { "IssuesAndSolutionsPanel", "issues" }, { "CalibrationPanel", "calibration-collected" },
                 { "LogPanel", "log" },
                 { "SettingsPanel", "settings" } };
         for (String[] id : ids) {
@@ -542,6 +544,14 @@ public class UiRuler {
                     sceneLabels.put(extra[0], extraLabel);
                 }
             }
+            if (id.equals("calibration-collected")) {
+                // Mockups 29 and 30: a measurement selected, and a measured row to confirm.
+                for (String[] extra : CALIBRATION_SCENES) {
+                    String extraLabel = label + " \u00b7 " + extra[1];
+                    scenes.add(new Scene(extra[0], extraLabel, page));
+                    sceneLabels.put(extra[0], extraLabel);
+                }
+            }
             if (id.equals("machine")) {
                 // The machine settings page's topics, mockups 24 to 28, each on its own.
                 for (String[] topic : TOPIC_SCENES) {
@@ -560,6 +570,13 @@ public class UiRuler {
         }
         return scenes;
     }
+
+    /** The calibration page besides its first suggestion: scene id, what. */
+    private static final String[][] CALIBRATION_SCENES = {
+            { "calibration-measure", "\u8981\u5148\u6d4b\u91cf" },
+            { "calibration-hints", "\u5176\u4ed6\u63d0\u793a" },
+            { "calibration-confirm", "\u6d4b\u5b8c\u5f85\u786e\u8ba4" },
+    };
 
     /** The machine settings page's topics: scene id, what, the topic's key. */
     private static final String[][] TOPIC_SCENES = {
@@ -729,6 +746,30 @@ public class UiRuler {
                 expect(missed, selectTreeNode(page, "Top") || selectRow(page, s -> s.endsWith(" Top")),
                         "\u76f8\u673a Top");
                 break;
+            case "calibration-collected":
+                frame.getCalibrationTab().discardPending();
+                frame.getCalibrationTab().refresh();
+                expect(missed, frame.getCalibrationTab().revealFirst(CalibrationItem.Kind.Suggestion),
+                        "\u7b2c\u4e00\u6761\u5efa\u8bae");
+                break;
+            case "calibration-measure":
+                frame.getCalibrationTab().refresh();
+                expect(missed, frame.getCalibrationTab().revealFirst(CalibrationItem.Kind.Measure),
+                        "\u7b2c\u4e00\u9879\u6d4b\u91cf");
+                break;
+            case "calibration-hints":
+                frame.getCalibrationTab().refresh();
+                expect(missed, frame.getCalibrationTab().revealFirst(CalibrationItem.Kind.Hint),
+                        "\u7b2c\u4e00\u6761\u5176\u4ed6\u63d0\u793a");
+                break;
+            case "calibration-confirm": {
+                CalibrationPanel calibration = frame.getCalibrationTab();
+                calibration.refresh();
+                boolean shown = calibration.revealFirst(CalibrationItem.Kind.Pending)
+                        || calibration.previewPending() && calibration.revealFirst(CalibrationItem.Kind.Pending);
+                expect(missed, shown, "\u6d4b\u5b8c\u7684\u4e00\u9879");
+                break;
+            }
             default: {
                 String[] topic = topicScene(scene.id);
                 if (topic != null) {

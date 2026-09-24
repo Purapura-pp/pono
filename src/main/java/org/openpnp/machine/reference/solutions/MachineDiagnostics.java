@@ -463,6 +463,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             private final int oldAllowMisdetections = calibration.getAllowMisdetections();
             private int proposed = DEFAULT_ALLOW_MISDETECTIONS;
 
+            {
+                withChange("Misdetections tolerated", () -> oldAllowMisdetections, () -> proposed);
+            }
+
             @Override
             protected String extendedDescription() {
                 return "The calibration measures at " + (calibration.getAngleSubdivisions() + 1)
@@ -533,6 +537,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                         "Switch super sampling on.",
                         Solutions.Severity.Suggestion,
                         "https://github.com/openpnp/openpnp/wiki/Vision-Solutions") {
+                    private final int oldSuperSampling = stage.getSuperSampling();
+
+                    {
+                        withChange("Super-sampling", () -> oldSuperSampling, () -> target);
+                    }
+
                     @Override
                     protected String extendedDescription() {
                         return "The pipeline's DetectCircularSymmetry stage has super sampling "
@@ -2345,6 +2355,13 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         public final List<String> changes;
         public final List<String> skipped;
         public final String message;
+        /** What takes a kept compensation out again; null once taken out, or when not kept. */
+        CompensationUndo undo;
+
+        /** Whether {@link MachineDiagnostics#undoCompensation} can take it out again. */
+        public boolean canBeUndone() {
+            return undo != null;
+        }
 
         CompensationOutcome(boolean kept, MachineCompensation compensation,
                 MachineDiagnosticsResults.Datum before, MachineDiagnosticsResults.Datum after,
@@ -2579,9 +2596,49 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                 Logger.warn(e, "Machine diagnostics: writing compensation.txt");
             }
         }
-        return new CompensationOutcome(converged, compensation, before, after, basis.readings,
-                verifications.size(), lineX, lineY, lineShear, includeSquareness, verdict, backup,
-                changes, applied.skipped, message);
+        CompensationOutcome outcome = new CompensationOutcome(converged, compensation, before, after,
+                basis.readings, verifications.size(), lineX, lineY, lineShear, includeSquareness, verdict,
+                backup, changes, applied.skipped, message);
+        if (converged) {
+            outcome.undo = new CompensationUndo(applied, generation, latestBefore);
+        }
+        return outcome;
+    }
+
+    /** What taking a kept compensation out again puts back. */
+    static final class CompensationUndo {
+        final MachineCompensation.Applied applied;
+        final int generation;
+        final MachineDiagnosticsResults.Datum latestBefore;
+
+        CompensationUndo(MachineCompensation.Applied applied, int generation,
+                MachineDiagnosticsResults.Datum latestBefore) {
+            this.applied = applied;
+            this.generation = generation;
+            this.latestBefore = latestBefore;
+        }
+    }
+
+    /**
+     * Takes a compensation that was kept out again, as one that failed its verification is: the
+     * transform axes and every coordinate carried across go back, and the board readings made
+     * under it go with it. The configuration is saved. Must run on the machine task thread.
+     */
+    public void undoCompensation(ReferenceMachine machine, CompensationOutcome outcome) throws Exception {
+        if (outcome == null || outcome.undo == null) {
+            throw new Exception("There is no kept compensation to take out.");
+        }
+        CompensationUndo undo = outcome.undo;
+        outcome.undo = null;
+        undo.applied.undo(machine);
+        if (lastResults != null) {
+            lastResults.setCompensationGeneration(undo.generation);
+            lastResults.removeDatumHistory(undo.generation + 1);
+            lastResults.setDatum(undo.latestBefore);
+            setLastResults(lastResults);
+        }
+        getConfiguration().save();
+        log("Compensation taken out again at the user's request.");
     }
 
     private void runGroup(ReferenceMachine machine, TestGroup group,
