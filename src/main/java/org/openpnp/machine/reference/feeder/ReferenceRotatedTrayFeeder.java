@@ -24,7 +24,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceRotatedTrayFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.RotatedTrayForm;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Nozzle;
@@ -275,7 +275,7 @@ public class ReferenceRotatedTrayFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceRotatedTrayFeederConfigurationWizard(this);
+        return RotatedTrayForm.build(this);
     }
 
     @Override
