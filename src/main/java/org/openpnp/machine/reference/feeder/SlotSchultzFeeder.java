@@ -4,7 +4,7 @@ import java.util.List;
 
 import org.openpnp.ConfigurationListener;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.feeder.wizards.SlotSchultzFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.SlotSchultzForm;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Identifiable;
@@ -169,7 +169,7 @@ public class SlotSchultzFeeder extends SchultzFeeder {
     
     @Override
     public Wizard getConfigurationWizard() {
-        return new SlotSchultzFeederConfigurationWizard(this);
+        return SlotSchultzForm.build(this);
     }
 
     @Root
