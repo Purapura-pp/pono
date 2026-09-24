@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 机器设置 · 机型与预设（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+<script src="ms.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+
+var card = function (o) {
+  return '<div class="pcard' + (o.on ? ' on' : '') + '"><div class="pv">' + MS.machinePic(o.nozzles) + (o.tag ? '<span class="tag">' + o.tag + '</span>' : '') + '</div>'
+    + '<div class="pb"><div class="pt">' + o.name + (o.by ? '<span class="muted" style="font-weight:500;font-size:12px">' + o.by + '</span>' : '') + '</div><div class="ps">' + o.spec + '</div></div>'
+    + '<div class="pa">' + o.acts + '</div></div>';
+};
+
+var builtIn = '<div class="pcards">'
+  + card({
+      on: true, nozzles: 2, tag: '当前', name: 'LumenPnP v4.1', by: 'Opulo',
+      spec: '2 个吸嘴，双吸嘴取反 · 6 个吸嘴头<br>行程 433 × 487 mm · Marlin 2.1 · 115200<br>顶部和底部相机 · Photon 飞达总线',
+      acts: '<button class="btn sm disabled">' + ic('check', 'sm') + '正在使用</button>' + F.btn('包含什么', 'list', 'ghost')
+    })
+  + '<div style="grid-column:span 2;align-self:center;padding:0 8px" class="muted"><span style="font-size:12px;line-height:1.6">内置预设随 Pono 版本更新，取自机器厂家发布的配置，端口和相机设备留空。<br>你自己的机型在下面「我的预设」里新建。</span></div>'
+  + '</div>';
+
+var mine = '<div class="pcards">'
+  + card({
+      nozzles: 2, name: '车间 2 号机',
+      spec: '基于 LumenPnP v4.1 · 换了底部相机镜头<br>Z 速度降到 150 mm/s<br>09-20 从当前机器新建',
+      acts: '<button class="btn sm primary">应用</button>' + F.btn('改名', 'edit', 'ghost') + '<span class="grow"></span><button class="btn icon xs ghost" title="更多：在文件夹中显示、删除">' + ic('more', 'sm') + '</button>'
+    })
+  + card({
+      nozzles: 1, name: '单吸嘴改装机',
+      spec: '1 个吸嘴 · 3 个吸嘴头<br>行程 300 × 400 mm · Grbl 1.1 · 115200<br>09-18 从配置目录导入',
+      acts: '<button class="btn sm primary">应用</button>' + F.btn('改名', 'edit', 'ghost') + '<span class="grow"></span><button class="btn icon xs ghost" title="更多：在文件夹中显示、删除">' + ic('more', 'sm') + '</button>'
+    })
+  + '<div class="pcard add"><div class="pi">' + ic('plus') + '</div><b>新建预设</b><span>把当前机器存成预设<br>或者从别的配置目录导入</span></div>'
+  + '</div>';
+
+var what = function (icon, color, title, text) {
+  return '<div style="display:flex;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-2)">'
+    + '<span style="color:' + color + ';flex:none;margin-top:1px">' + ic(icon, 'sm') + '</span><div><b style="font-size:12.5px">' + title + '</b>'
+    + '<div class="t2" style="font-size:12px;line-height:1.5;margin-top:2px">' + text + '</div></div></div>';
+};
+var effects = '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">'
+  + what('refresh', 'var(--accent)', '会换掉', '机器定义：轴和限位、吸嘴和吸嘴头、相机、驱动和 G 代码、视觉流程')
+  + what('lock', 'var(--ok)', '不会动', '飞达、元件、封装、单板、拼板和任务；应用前还会先备份整个配置')
+  + what('hand', 'var(--warn)', '之后要做', '在「连接」选本机端口，在「相机」选本机设备，再去校准页采集问题')
+  + '</div>';
+
+var body = F.sec('内置预设', 'layers', null, { rt: '1 个', after: builtIn })
+  + F.sec('我的预设', 'user', null, { rt: '存在 C:\\Users\\PP\\.openpnp2\\presets', after: mine })
+  + F.sec('应用一个预设会怎样', 'info', null, { after: effects });
+
+var guide = '<h4>怎样用预设</h4><ol>'
+  + '<li>选和你的机器同型号的预设，点「应用」。</li>'
+  + '<li>先看改动预览；确认后 Pono 先备份，再换掉机器定义，然后重启。</li>'
+  + '<li>重启后到「连接」选本机端口，到「相机」选本机的相机设备。</li>'
+  + '<li>去校准页点「采集问题」，按建议逐项确认。</li></ol>'
+  + '<h4>自己的机型</h4><ol>'
+  + '<li>先把机器调到能正常贴片。</li>'
+  + '<li>点「新建预设」，来源选「当前机器」，起个名字保存。</li>'
+  + '<li>以后重装系统、换电脑，或者再配一台同样的机器，选它点「应用」即可。</li></ol>'
+  + '<h4>别人给的配置</h4>'
+  + '<p>「新建预设」，来源选「从配置目录导入」，指向对方的配置目录（里面有 machine.xml）。只取机器定义，不带对方的飞达和任务。</p>';
+
+MS.app({
+  topic: 'presets', body: body, guide: guide,
+  status: { text: '机器设置 · 机型与预设', right: ['配置已保存 · 20:05'] }
+});
+</script>
+</body>
+</html>
