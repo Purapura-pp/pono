@@ -17,7 +17,11 @@
 
 package org.openpnp.gui.machinesettings;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.openpnp.Translations;
+import org.openpnp.machine.reference.presets.NozzleLayout;
 import org.openpnp.machine.reference.ReferenceHead.NozzleSolution;
 import org.openpnp.machine.reference.axis.ReferenceCamClockwiseAxis;
 import org.openpnp.machine.reference.axis.ReferenceCamCounterClockwiseAxis;
@@ -47,39 +51,17 @@ final class NozzleStructure {
     }
 
     static NozzleStructure of(Head head) {
-        int controller = 0;
-        int mapped = 0;
-        int cam = 0;
-        int other = 0;
+        List<NozzleLayout.Kind> kinds = new ArrayList<>();
         for (Nozzle nozzle : head.getNozzles()) {
             Axis z = nozzle.getAxisZ();
-            if (z instanceof ReferenceCamCounterClockwiseAxis || z instanceof ReferenceCamClockwiseAxis) {
-                cam++;
-            }
-            else if (z instanceof ReferenceMappedAxis) {
-                mapped++;
-            }
-            else if (z instanceof ReferenceControllerAxis) {
-                controller++;
-            }
-            else {
-                other++;
-            }
+            kinds.add(z instanceof ReferenceCamCounterClockwiseAxis || z instanceof ReferenceCamClockwiseAxis
+                    ? NozzleLayout.Kind.Cam
+                    : z instanceof ReferenceMappedAxis ? NozzleLayout.Kind.Mapped
+                            : z instanceof ReferenceControllerAxis ? NozzleLayout.Kind.Controller
+                                    : NozzleLayout.Kind.Other);
         }
-        int n = head.getNozzles().size();
-        if (n == 0 || other > 0) {
-            return new NozzleStructure(null, n, 0);
-        }
-        if (cam == n && n % 2 == 0) {
-            return new NozzleStructure(NozzleSolution.DualCam, n, n / 2);
-        }
-        if (mapped > 0 && mapped == controller && cam == 0) {
-            return new NozzleStructure(NozzleSolution.DualNegated, n, mapped);
-        }
-        if (controller == n) {
-            return new NozzleStructure(NozzleSolution.Standalone, n, n);
-        }
-        return new NozzleStructure(null, n, 0);
+        NozzleLayout layout = NozzleLayout.of(kinds);
+        return new NozzleStructure(layout.solution, layout.nozzles, layout.multiplier);
     }
 
     /** The number of nozzles a solution repeated so many times makes. */

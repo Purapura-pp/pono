@@ -2080,6 +2080,30 @@ public class MainFrame extends JFrame {
 
     public boolean quit() {
         Logger.info("Shutting down..."); //$NON-NLS-1$
+        if (!settleBeforeQuit() || !saveBeforeQuit()) {
+            return false;
+        }
+        shutDown(false);
+        return true;
+    }
+
+    /**
+     * Starts Pono again on a configuration written over the one loaded, a preset applied: the
+     * questions quitting asks were asked before it was written, and the machine loaded now is
+     * not saved over it.
+     */
+    public void restart() {
+        Logger.info("Restarting..."); //$NON-NLS-1$
+        configuration.freezeMachineFiles();
+        saveBeforeQuit();
+        shutDown(true);
+    }
+
+    /**
+     * What quitting asks about before anything is written: a running job, edits not applied, a
+     * job not saved. False when the user would rather stay.
+     */
+    public boolean settleBeforeQuit() {
         // A running job first: quitting under it used to save, ask about the job file and switch
         // the machine off in the middle of a placement, without a word about the job itself.
         if (jobPanel.isJobRunning()) {
@@ -2097,6 +2121,9 @@ public class MainFrame extends JFrame {
         if (inspectorPanel != null && !inspectorPanel.getPresenter().settleUnappliedEdits()) {
             return false;
         }
+        if (machineSettingsPanel != null && !machineSettingsPanel.settleUnappliedEdits()) {
+            return false;
+        }
         if (!jobPanel.checkForModifications()) {
             return false;
         }
@@ -2106,8 +2133,11 @@ public class MainFrame extends JFrame {
         catch (Exception e) {
             Logger.warn(e, "Failed to flush user preferences while shutting down."); //$NON-NLS-1$
         }
+        return true;
+    }
 
-        // Save the configuration
+    /** The configuration saved on the way out; false when the user would rather stay after it failed. */
+    private boolean saveBeforeQuit() {
         try {
             configuration.save();
         }
@@ -2126,23 +2156,34 @@ public class MainFrame extends JFrame {
                 return false;
             }
         }
-        // Attempt to stop the machine on quit
+        return true;
+    }
+
+    /** The machine switched off and closed, the program started again if asked, and this one ended. */
+    private void shutDown(boolean again) {
         try {
             configuration.getMachine().setEnabled(false);
         }
         catch (Exception e) {
             Logger.error(e, "Failed to disable the machine while shutting down."); //$NON-NLS-1$
         }
-        // Attempt to stop the machine on quit
         try {
             configuration.getMachine().close();
         }
         catch (Exception e) {
             Logger.error(e, "Failed to close the machine while shutting down."); //$NON-NLS-1$
         }
+        if (again) {
+            // Once the machine has let go of its port and cameras, which the new one opens.
+            try {
+                org.openpnp.util.Relaunch.start();
+            }
+            catch (Exception e) {
+                Logger.error(e, "Could not start again: start Pono by hand."); //$NON-NLS-1$
+            }
+        }
         Logger.info("Shutdown complete, exiting."); //$NON-NLS-1$
         System.exit(0);
-        return true;
     }
 
     public void setStatus(String status) {

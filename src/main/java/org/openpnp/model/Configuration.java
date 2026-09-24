@@ -741,9 +741,22 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
         setDirty(false);
     }
 
+    /**
+     * Set once machine.xml and vision-settings.xml on disk are newer than what is loaded - a
+     * preset was written over them and the program is about to start again on them. Saving then
+     * writes everything else and leaves those two alone.
+     */
+    private boolean machineFilesFrozen;
+
+    public void freezeMachineFiles() {
+        machineFilesFrozen = true;
+    }
+
     private void writeConfigurationFiles(LocalDateTime now, boolean backup) throws Exception {
         try {
-           saveMachine(configurationFile("machine.xml", now, backup)); //$NON-NLS-1$
+            if (!machineFilesFrozen) {
+                saveMachine(configurationFile("machine.xml", now, backup)); //$NON-NLS-1$
+            }
         }
         catch (Exception e) {
             throw new Exception("Error while saving machine.xml (" + e.getMessage() + ")", e);
@@ -773,7 +786,9 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
             throw new Exception("Error while saving panels.xml (" + e.getMessage() + ")", e);
         }
         try {
-            saveVisionSettings(configurationFile("vision-settings.xml", now, backup)); //$NON-NLS-1$
+            if (!machineFilesFrozen) {
+                saveVisionSettings(configurationFile("vision-settings.xml", now, backup)); //$NON-NLS-1$
+            }
         }
         catch (Exception e) {
             throw new Exception("Error while saving vision-settings.xml (" + e.getMessage() + ")", e);

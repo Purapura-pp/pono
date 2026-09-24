@@ -21,7 +21,9 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 
 import org.openpnp.model.Configuration;
 import org.pmw.tinylog.Logger;
@@ -37,12 +39,47 @@ final class Backups {
     /** machine.xml.before-nozzles-2026-09-24_20.10.05, in the configuration directory. */
     static File backup(Configuration configuration, String what) throws Exception {
         configuration.save();
-        File directory = configuration.getConfigurationDirectory();
-        String stamp = new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(new Date()); //$NON-NLS-1$
-        File backup = new File(directory, "machine.xml.before-" + what + "-" + stamp); //$NON-NLS-1$ //$NON-NLS-2$
-        Files.copy(new File(directory, "machine.xml").toPath(), backup.toPath(), //$NON-NLS-1$
-                StandardCopyOption.COPY_ATTRIBUTES);
-        Logger.info("Machine configuration backed up to {}", backup); //$NON-NLS-1$
+        return copy(configuration.getConfigurationDirectory(), "machine.xml", what, stamp()); //$NON-NLS-1$
+    }
+
+    /**
+     * machine.xml and vision-settings.xml, saved first and each copied beside itself, for a change
+     * that writes both: a preset applied.
+     */
+    static List<File> backupMachineFiles(Configuration configuration, String what) throws Exception {
+        configuration.save();
+        String stamp = stamp();
+        List<File> backups = new ArrayList<>();
+        for (String name : new String[] { "machine.xml", "vision-settings.xml" }) { //$NON-NLS-1$ //$NON-NLS-2$
+            if (new File(configuration.getConfigurationDirectory(), name).isFile()) {
+                backups.add(copy(configuration.getConfigurationDirectory(), name, what, stamp));
+            }
+        }
+        return backups;
+    }
+
+    /** Puts backed up files back where they were, over what was written since. */
+    static void restore(File directory, List<File> backups) {
+        for (File backup : backups) {
+            String name = backup.getName();
+            File original = new File(directory, name.substring(0, name.indexOf(".before-"))); //$NON-NLS-1$
+            try {
+                Files.copy(backup.toPath(), original.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            catch (Exception e) {
+                Logger.error(e, "Could not put {} back from {}.", original, backup); //$NON-NLS-1$
+            }
+        }
+    }
+
+    private static String stamp() {
+        return new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss").format(new Date()); //$NON-NLS-1$
+    }
+
+    private static File copy(File directory, String name, String what, String stamp) throws Exception {
+        File backup = new File(directory, name + ".before-" + what + "-" + stamp); //$NON-NLS-1$ //$NON-NLS-2$
+        Files.copy(new File(directory, name).toPath(), backup.toPath(), StandardCopyOption.COPY_ATTRIBUTES);
+        Logger.info("{} backed up to {}", name, backup); //$NON-NLS-1$
         return backup;
     }
 }

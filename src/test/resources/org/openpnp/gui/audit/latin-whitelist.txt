@@ -3,8 +3,10 @@
 # things - part numbers, feeder and camera names, file names - are read from the fixture and
 # need not be listed here.
 
-# The configuration folder's backup folder, named as it is on disk so that it can be found
+# The configuration folder's backup and preset folders, named as they are on disk so that they
+# can be found
 backups
+presets
 
 # Trade terms and abbreviations, kept in English on purpose
 Safe Z
@@ -53,6 +55,9 @@ DTR
 XON
 XOFF
 FPS
+
+# Makers of machines, as their presets name them
+Opulo
 
 # Firmware as a controller reports itself to M115
 Marlin
