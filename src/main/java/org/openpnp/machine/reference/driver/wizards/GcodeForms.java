@@ -139,7 +139,7 @@ public final class GcodeForms {
                 .hint("GcodeForms.Commands.Hint") //$NON-NLS-1$
                 .section("GcodeDriverGcodes.ImportExportPanel.Border.title", "download") //$NON-NLS-1$ //$NON-NLS-2$
                 .action("GcodeDriverGcodes.Action.Export", "download", () -> export(driver)) //$NON-NLS-1$ //$NON-NLS-2$
-                .button("GcodeDriverGcodes.Action.CopyProfile", "copy", f -> copy(driver)) //$NON-NLS-1$ //$NON-NLS-2$
+                .action("GcodeDriverGcodes.Action.CopyProfile", "copy", () -> copy(driver)) //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("GcodeForms.Export.Hint") //$NON-NLS-1$
                 .onReload(f -> commands.load())
                 .onApply(f -> commands.store())
@@ -195,7 +195,7 @@ public final class GcodeForms {
         private final GcodeDriver driver;
         private final JComboBox<Target> target;
         private final JComboBox<CommandType> type = new JComboBox<>();
-        private final JTextArea text = new JTextArea(6, 30);
+        private final JTextArea text = new JTextArea(6, 16);
         private final Map<List<Object>, String> changes = new HashMap<>();
         private boolean showing;
         FormWizard form;
@@ -207,13 +207,17 @@ public final class GcodeForms {
             target = new JComboBox<>(targets(driver).toArray(new Target[0]));
             DisplayNames.install(type);
             text.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-            JPanel choices = new JPanel(new java.awt.GridLayout(1, 2, 6, 0));
+            // One above the other: side by side, a head's actuator and a command's name made the
+            // row wider than the properties column.
+            JPanel choices = new JPanel(new java.awt.GridLayout(2, 1, 0, 6));
             choices.setOpaque(false);
+            target.setPrototypeDisplayValue(new Target(null));
+            type.setPrototypeDisplayValue(CommandType.CONNECT_COMMAND);
             choices.add(target);
             choices.add(type);
             add(choices, BorderLayout.NORTH);
             JScrollPane scroll = new JScrollPane(text);
-            scroll.setPreferredSize(new Dimension(360, 130));
+            scroll.setPreferredSize(new Dimension(280, 130));
             add(scroll, BorderLayout.CENTER);
             target.addItemListener(e -> types());
             type.addItemListener(e -> display());

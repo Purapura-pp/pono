@@ -386,7 +386,7 @@ public class UiRuler {
         });
     }
 
-    private static final String GCODE_DRIVER = "GcodeAsyncDriver";
+    private static final String GCODE_DRIVER = "\u4e3b\u63a7";
 
     private void openJob() throws Exception {
         Job job = configuration.loadJob(new File(config, "jobs/demo-board.job.xml"));
