@@ -450,6 +450,15 @@ public class UiRuler {
             { "axis-virtual", "\u8f74 zTop", "zTop", null },
             { "machine-planner", "\u8fd0\u52a8\u89c4\u5212", "#machine", "\u8fd0\u52a8\u89c4\u5212" },
             { "machine-planner-diag", "\u8fd0\u52a8\u89c4\u5212\u8bca\u65ad", "#machine", "\u8bca\u65ad" },
+            { "camera", "\u76f8\u673a Top", "Top", null },
+            { "camera-device", "\u76f8\u673a\u8bbe\u5907", "Top", "\u8bbe\u5907" },
+            { "camera-position", "\u76f8\u673a\u4f4d\u7f6e", "Top", "\u4f4d\u7f6e" },
+            { "camera-vision", "\u76f8\u673a\u89c6\u89c9", "Top", "\u89c6\u89c9" },
+            { "camera-calibration", "\u76f8\u673a\u6807\u5b9a", "Top", "\u6807\u5b9a" },
+            { "camera-bottom", "\u5e95\u90e8\u76f8\u673a", "Bottom", null },
+            { "camera-bottom-position", "\u5e95\u90e8\u76f8\u673a\u4f4d\u7f6e", "Bottom", "\u4f4d\u7f6e" },
+            { "vision-bottom", "\u5e95\u90e8\u89c6\u89c9", "#bottomVision", null },
+            { "vision-fiducials", "\u57fa\u51c6\u70b9\u5b9a\u4f4d", "#fiducials", null },
     };
 
     private static String[] machineScene(String id) {
@@ -923,11 +932,20 @@ public class UiRuler {
         if (name.equals("#jobs")) {
             return setup.selectPropertySheetHolder(machine.getPnpJobProcessor());
         }
+        if (name.equals("#bottomVision")) {
+            return !machine.getPartAlignments().isEmpty()
+                    && setup.selectPropertySheetHolder(machine.getPartAlignments().get(0));
+        }
+        if (name.equals("#fiducials")) {
+            return setup.selectPropertySheetHolder(machine.getFiducialLocator());
+        }
         java.util.List<org.openpnp.spi.PropertySheetHolder> holders = new ArrayList<>(machine.getAxes());
         for (org.openpnp.spi.Head head : machine.getHeads()) {
             holders.add(head);
             holders.addAll(head.getNozzles());
+            holders.addAll(head.getCameras());
         }
+        holders.addAll(machine.getCameras());
         holders.addAll(machine.getNozzleTips());
         for (org.openpnp.spi.PropertySheetHolder holder : holders) {
             if (holder instanceof org.openpnp.model.Named && name.equals(((org.openpnp.model.Named) holder).getName())) {

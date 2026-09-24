@@ -620,6 +620,26 @@ public class FormWizard extends AbstractConfigurationWizard {
      * Puts a value on screen as if chosen, for Apply to write: the text of a field, the item of
      * a choice or of segments, the state of a switch, the set of a checklist.
      */
+    /**
+     * The items a choice offers, where they follow another field: a capture device's formats.
+     * The chosen item stays when it is among them, the first is chosen otherwise.
+     */
+    @SuppressWarnings("unchecked")
+    public void setItems(String property, List<?> items) {
+        Field field = byProperty.get(property);
+        JComponent control = field == null ? null : controls.get(field);
+        if (!(control instanceof JComboBox)) {
+            throw new IllegalArgumentException("no choice for " + property); //$NON-NLS-1$
+        }
+        JComboBox<Object> combo = (JComboBox<Object>) control;
+        Object chosen = combo.getSelectedItem();
+        combo.removeAllItems();
+        for (Object item : items) {
+            combo.addItem(item);
+        }
+        combo.setSelectedItem(items.contains(chosen) ? chosen : items.isEmpty() ? null : items.get(0));
+    }
+
     public void set(String property, Object value) {
         Field field = byProperty.get(property);
         JComponent control = field == null ? null : controls.get(field);

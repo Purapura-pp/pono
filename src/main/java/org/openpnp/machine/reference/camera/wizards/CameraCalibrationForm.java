@@ -213,6 +213,16 @@ public final class CameraCalibrationForm {
         }
     }
 
+    private static boolean percent(Object text) {
+        try {
+            int value = Integer.parseInt(String.valueOf(text).trim());
+            return value >= 0 && value <= 100;
+        }
+        catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     static List<Length> heights(AdvancedCalibration calibration) {
         List<Length> heights = new ArrayList<>();
         double[][][] points = calibration.getSavedTestPattern3dPointsList();
@@ -240,7 +250,7 @@ public final class CameraCalibrationForm {
                 .toggle("enabled", "CameraCalibrationForm.Enabled", "CameraCalibrationForm.Enabled.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .visibleIf(f -> bean.isValid() && Boolean.TRUE.equals(f.value("overriding"))) //$NON-NLS-1$
                 .integer("alphaPercent", "CameraCalibrationForm.Alpha").unit("%").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                .validate(v -> v instanceof Integer && (Integer) v >= 0 && (Integer) v <= 100, "CameraCalibrationForm.Alpha.Range") //$NON-NLS-1$
+                .validate(CameraCalibrationForm::percent, "CameraCalibrationForm.Alpha.Range") //$NON-NLS-1$
                 .hint("CameraCalibrationForm.Alpha.Hint") //$NON-NLS-1$
                 .integer("radialLines", "CameraCalibrationForm.RadialLines").width(120) //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("CameraCalibrationForm.RadialLines.Hint") //$NON-NLS-1$

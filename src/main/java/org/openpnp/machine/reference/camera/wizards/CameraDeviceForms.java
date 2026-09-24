@@ -34,6 +34,10 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
 import org.openpnp.Translations;
+import org.openpnp.capture.CaptureDevice;
+import org.openpnp.capture.CaptureFormat;
+import org.openpnp.gui.shell.Forms;
+import org.openpnp.util.MovableUtils;
 import org.openpnp.gui.form.Form;
 import org.openpnp.gui.form.FormWizard;
 import org.openpnp.gui.support.Icons;
@@ -45,6 +49,8 @@ import org.openpnp.machine.reference.camera.OnvifIPCamera;
 import org.openpnp.machine.reference.camera.OpenCvCamera;
 import org.openpnp.machine.reference.camera.OpenCvCamera.OpenCvCaptureProperty;
 import org.openpnp.machine.reference.camera.OpenCvCamera.OpenCvCapturePropertyValue;
+import org.openpnp.machine.reference.camera.OpenPnpCaptureCamera;
+import org.openpnp.machine.reference.camera.OpenPnpCaptureCamera.CapturePropertyHolder;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.camera.SimulatedUpCamera;
 import org.openpnp.machine.reference.camera.SwitcherCamera;
@@ -311,6 +317,202 @@ public final class CameraDeviceForms {
                 .location("errorOffsets", "SimulatedUpCameraConfigurationWizard.GeneralPanel.PickErrorOffsetsLabel.text", true) //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("CameraForm.PickErrors.Hint") //$NON-NLS-1$
                 .build();
+    }
+
+    private static List<String> formats(CaptureDevice device) {
+        List<String> formats = new ArrayList<>();
+        if (device != null) {
+            // A format's equals() is not stable: its name is what is chosen.
+            for (CaptureFormat format : device.getFormats()) {
+                formats.add(format.toString());
+            }
+        }
+        return formats;
+    }
+
+    public static FormWizard openPnpCapture(OpenPnpCaptureCamera camera) {
+        List<CaptureDevice> devices = new ArrayList<>(camera.getCaptureDevices());
+        if (camera.getDevice() != null && !devices.contains(camera.getDevice())) {
+            devices.add(0, camera.getDevice());
+        }
+        List<String> formats = formats(camera.getDevice());
+        if (camera.getFormatName() != null && !formats.contains(camera.getFormatName())) {
+            formats.add(0, camera.getFormatName());
+        }
+        CaptureControls controls = new CaptureControls(camera);
+        javax.swing.JLabel fps = org.openpnp.gui.shell.Ui.t2("\u2014"); //$NON-NLS-1$
+        Object[] device = {camera.getDevice()};
+        FormWizard[] form = new FormWizard[1];
+        form[0] = Form.of(camera).named(TITLE)
+                .section(TITLE, "camera") //$NON-NLS-1$
+                .choice("device", "OpenPnpCaptureCameraConfigurationWizard.DevicePanel.DeviceLabel.text", devices, null) //$NON-NLS-1$ //$NON-NLS-2$
+                .choice("formatName", "OpenPnpCaptureCameraConfigurationWizard.DevicePanel.FormatLabel.text", formats, null) //$NON-NLS-1$ //$NON-NLS-2$
+                .custom("OpenPnpCaptureCameraConfigurationWizard.DevicePanel.CaptureFPSLabel.text", fps) //$NON-NLS-1$
+                .action("OpenPnpCaptureCameraConfigurationWizard.DevicePanel.TestButton.text", "activity", () -> { //$NON-NLS-1$ //$NON-NLS-2$
+                    form[0].apply();
+                    fps.setText(Translations.getString("OpenPnpCaptureCameraConfigurationWizard.DevicePanel.TestingLabel.text")); //$NON-NLS-1$
+                    javax.swing.SwingUtilities.invokeLater(() -> UiUtils.messageBoxOnException(() -> fps.setText(
+                            String.format(java.util.Locale.US, "%.0f fps", camera.estimateCaptureFps())))); //$NON-NLS-1$
+                })
+                .hint("CameraForm.Capture.Fps.Hint") //$NON-NLS-1$
+                .section("CameraForm.Capture.Properties", "sliders").collapsed() //$NON-NLS-1$ //$NON-NLS-2$
+                .custom("", controls) //$NON-NLS-1$
+                .toggle("freezeProperties", "CameraForm.Capture.Freeze", "CameraForm.Capture.Freeze.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                .action("OpenPnpCaptureCameraConfigurationWizard.PropertiesPanel.ReapplyToCameraButton.text", "refresh", () -> { //$NON-NLS-1$ //$NON-NLS-2$
+                    camera.reapplyProperties();
+                    MovableUtils.fireTargetedUserAction(camera);
+                })
+                .visibleWhen("freezeProperties", Boolean.TRUE::equals) //$NON-NLS-1$
+                .onChange(f -> {
+                    Object chosen = f.value("device"); //$NON-NLS-1$
+                    if (chosen != device[0]) {
+                        device[0] = chosen;
+                        f.setItems("formatName", formats((CaptureDevice) chosen)); //$NON-NLS-1$
+                    }
+                })
+                .onReload(f -> controls.load())
+                .onApply(f -> {
+                    controls.store();
+                    reopen(camera, true);
+                    controls.load();
+                })
+                .build();
+        controls.form = form[0];
+        return form[0];
+    }
+
+    /**
+     * The capture device's own controls, exposure, gain and the others: each automatic or at a
+     * value within the device's range, a control the device lacks greyed. The edits are the
+     * form's until Apply.
+     */
+    static final class CaptureControls extends JPanel {
+        private static final String[] NAMES = {"BackLightCompensation", "Brightness", "Contrast", "Exposure", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                "Focus", "Gain", "Gamma", "Hue", "PowerLineFrequency", "Saturation", "Sharpness", "WhiteBalance", "Zoom"}; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$
+        private final OpenPnpCaptureCamera camera;
+        private final List<JCheckBox> autos = new ArrayList<>();
+        private final List<JTextField> values = new ArrayList<>();
+        private final List<javax.swing.JLabel> ranges = new ArrayList<>();
+        private boolean showing;
+        FormWizard form;
+
+        CaptureControls(OpenPnpCaptureCamera camera) {
+            super(new java.awt.GridBagLayout());
+            this.camera = camera;
+            setOpaque(false);
+            java.awt.GridBagConstraints c = new java.awt.GridBagConstraints();
+            c.insets = new java.awt.Insets(2, 0, 2, 8);
+            c.anchor = java.awt.GridBagConstraints.WEST;
+            for (int i = 0; i < NAMES.length; i++) {
+                c.gridy = i;
+                c.gridx = 0;
+                add(org.openpnp.gui.shell.Ui.t2(Translations.getString("CameraForm.Capture." + NAMES[i])), c); //$NON-NLS-1$
+                JCheckBox auto = new JCheckBox(Translations.getString("OpenPnpCaptureCameraConfigurationWizard.PropertiesPanel.AutoLabel.text")); //$NON-NLS-1$
+                auto.setOpaque(false);
+                auto.addActionListener(e -> edited());
+                c.gridx = 1;
+                add(auto, c);
+                JTextField value = Forms.input(new JTextField(), true);
+                value.setColumns(6);
+                value.getDocument().addDocumentListener(new DocumentListener() {
+                    @Override
+                    public void insertUpdate(DocumentEvent e) {
+                        edited();
+                    }
+
+                    @Override
+                    public void removeUpdate(DocumentEvent e) {
+                        edited();
+                    }
+
+                    @Override
+                    public void changedUpdate(DocumentEvent e) {
+                        edited();
+                    }
+                });
+                c.gridx = 2;
+                add(value, c);
+                javax.swing.JLabel range = org.openpnp.gui.shell.Ui.t2(""); //$NON-NLS-1$
+                c.gridx = 3;
+                add(range, c);
+                autos.add(auto);
+                values.add(value);
+                ranges.add(range);
+            }
+        }
+
+        private CapturePropertyHolder holder(int i) {
+            switch (NAMES[i]) {
+                case "BackLightCompensation": //$NON-NLS-1$
+                    return camera.getBackLightCompensation();
+                case "Brightness": //$NON-NLS-1$
+                    return camera.getBrightness();
+                case "Contrast": //$NON-NLS-1$
+                    return camera.getContrast();
+                case "Exposure": //$NON-NLS-1$
+                    return camera.getExposure();
+                case "Focus": //$NON-NLS-1$
+                    return camera.getFocus();
+                case "Gain": //$NON-NLS-1$
+                    return camera.getGain();
+                case "Gamma": //$NON-NLS-1$
+                    return camera.getGamma();
+                case "Hue": //$NON-NLS-1$
+                    return camera.getHue();
+                case "PowerLineFrequency": //$NON-NLS-1$
+                    return camera.getPowerLineFrequency();
+                case "Saturation": //$NON-NLS-1$
+                    return camera.getSaturation();
+                case "Sharpness": //$NON-NLS-1$
+                    return camera.getSharpness();
+                case "WhiteBalance": //$NON-NLS-1$
+                    return camera.getWhiteBalance();
+                default:
+                    return camera.getZoom();
+            }
+        }
+
+        void load() {
+            showing = true;
+            for (int i = 0; i < NAMES.length; i++) {
+                CapturePropertyHolder holder = holder(i);
+                boolean supported = holder != null && holder.isSupported();
+                autos.get(i).setSelected(supported && holder.isAuto());
+                autos.get(i).setEnabled(supported && holder.isAutoSupported());
+                values.get(i).setText(supported ? String.valueOf(holder.getValue()) : ""); //$NON-NLS-1$
+                values.get(i).setEnabled(supported);
+                ranges.get(i).setText(supported ? String.format(Translations.getString("CameraForm.Capture.Range"), //$NON-NLS-1$
+                        holder.getMin(), holder.getMax(), holder.getDefault()) : Translations.getString("CameraForm.Capture.Unsupported")); //$NON-NLS-1$
+            }
+            showing = false;
+        }
+
+        void store() {
+            for (int i = 0; i < NAMES.length; i++) {
+                CapturePropertyHolder holder = holder(i);
+                if (holder == null || !holder.isSupported()) {
+                    continue;
+                }
+                if (holder.isAutoSupported() && holder.isAuto() != autos.get(i).isSelected()) {
+                    holder.setAuto(autos.get(i).isSelected());
+                }
+                try {
+                    int value = Integer.parseInt(values.get(i).getText().trim());
+                    if (value != holder.getValue()) {
+                        holder.setValue(value);
+                    }
+                }
+                catch (NumberFormatException e) {
+                    // Left as the device has it: the field shows it again after Apply.
+                }
+            }
+        }
+
+        private void edited() {
+            if (!showing && form != null) {
+                form.edit();
+            }
+        }
     }
 
     /**

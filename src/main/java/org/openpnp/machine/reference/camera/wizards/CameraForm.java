@@ -104,7 +104,7 @@ public final class CameraForm {
                 .section("CameraForm.Basics", "camera") //$NON-NLS-1$ //$NON-NLS-2$
                 .text("name", "CameraConfigurationWizard.PropertiesPanel.NameLabel.text") //$NON-NLS-1$ //$NON-NLS-2$
                 .segmented("looking", "CameraConfigurationWizard.PropertiesPanel.LookingLabel.text", Camera.Looking.class) //$NON-NLS-1$ //$NON-NLS-2$
-                .decimal("previewFps", "CameraForm.PreviewFps").unit("fps").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                .decimal("previewFps", "CameraForm.PreviewFps").format("%.1f").unit("fps").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
                 .toggle("suspendPreviewInTasks", "CameraForm.SuspendPreview", "CameraForm.SuspendPreview.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .toggle("autoVisible", "CameraForm.AutoVisible", "CameraForm.AutoVisible.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .toggle("shownInMultiCameraView", "CameraForm.MultiView", "CameraForm.MultiView.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
@@ -225,7 +225,7 @@ public final class CameraForm {
         }
 
         public Location getUnitsPerPixelPrimary() {
-            return camera.getUnitsPerPixelPrimary();
+            return orZero(camera.getUnitsPerPixelPrimary());
         }
 
         public void setUnitsPerPixelPrimary(Location upp) {
@@ -248,12 +248,17 @@ public final class CameraForm {
             camera.setDefaultZ(z);
         }
 
+        /** A pixel size not measured yet is none; zero says the same to the camera. */
+        private static Location orZero(Location upp) {
+            return upp == null ? new Location(LengthUnit.Millimeters) : upp;
+        }
+
         public Length getPrimaryUppZ() {
-            return camera.getUnitsPerPixelPrimary().getLengthZ();
+            return orZero(camera.getUnitsPerPixelPrimary()).getLengthZ();
         }
 
         public void setPrimaryUppZ(Length z) {
-            camera.setUnitsPerPixelPrimary(camera.getUnitsPerPixelPrimary().deriveLengths(null, null, z, null));
+            camera.setUnitsPerPixelPrimary(orZero(camera.getUnitsPerPixelPrimary()).deriveLengths(null, null, z, null));
         }
 
         public Length getCameraPrimaryZ() {
@@ -265,7 +270,7 @@ public final class CameraForm {
         }
 
         public Location getUnitsPerPixelSecondary() {
-            return camera.getUnitsPerPixelSecondary();
+            return orZero(camera.getUnitsPerPixelSecondary());
         }
 
         public void setUnitsPerPixelSecondary(Location upp) {
@@ -273,11 +278,11 @@ public final class CameraForm {
         }
 
         public Length getSecondaryUppZ() {
-            return camera.getUnitsPerPixelSecondary().getLengthZ();
+            return orZero(camera.getUnitsPerPixelSecondary()).getLengthZ();
         }
 
         public void setSecondaryUppZ(Length z) {
-            camera.setUnitsPerPixelSecondary(camera.getUnitsPerPixelSecondary().deriveLengths(null, null, z, null));
+            camera.setUnitsPerPixelSecondary(orZero(camera.getUnitsPerPixelSecondary()).deriveLengths(null, null, z, null));
         }
 
         public Length getCameraSecondaryZ() {
@@ -304,9 +309,11 @@ public final class CameraForm {
             if (pixelStep[0] == CalibrationStep.OtherCameraOffsets) {
                 builder.measuredBy(CalibrationStep.OtherCameraOffsets, camera);
             }
-            builder.location("headOffsets", "CameraForm.Offsets.Label", true) //$NON-NLS-1$ //$NON-NLS-2$
-                    .hint("CameraForm.Offsets.Hint") //$NON-NLS-1$
-                    .length("safeZ", "ReferenceCameraPositionConfigurationWizard.SafeZPanel.SafeZLabel.text").width(120); //$NON-NLS-1$ //$NON-NLS-2$
+            builder.location("headOffsets", "CameraForm.Offsets.Label", true); //$NON-NLS-1$ //$NON-NLS-2$
+            if (pixelStep[0] == CalibrationStep.PrimaryFiducial) {
+                builder.hint("CameraForm.Offsets.Hint"); //$NON-NLS-1$
+            }
+            builder.length("safeZ", "ReferenceCameraPositionConfigurationWizard.SafeZPanel.SafeZLabel.text").width(120); //$NON-NLS-1$ //$NON-NLS-2$
         }
         else {
             builder.section("ReferenceCameraPositionConfigurationWizard.LocationPanel.Border.title", "crosshair") //$NON-NLS-1$ //$NON-NLS-2$
@@ -458,8 +465,9 @@ public final class CameraForm {
                         : cameraLocation.derive(null, null, nozzleLocation.getZ(), nozzleLocation.getRotation());
                 measurementLocation = desired.subtract(new Location(units, 0, 0, thick, 0)).convertToUnits(units);
                 if (which == 2) {
-                    Length primaryZ = form.location("unitsPerPixelPrimary") == null ? null //$NON-NLS-1$
-                            : camera.getUnitsPerPixelPrimary().getLengthZ();
+                    Object shown = form.value("primaryUppZ"); //$NON-NLS-1$
+                    Length primaryZ = shown == null || String.valueOf(shown).trim().isEmpty() ? null
+                            : new LengthConverter().convertReverse(String.valueOf(shown));
                     if (primaryZ != null && Math.abs(measurementLocation.getZ() - primaryZ.convertToUnits(units).getValue())
                             < new Length(1, LengthUnit.Millimeters).convertToUnits(units).getValue()) {
                         throw new Exception(Translations.getString("CameraForm.Measure.SameZ")); //$NON-NLS-1$

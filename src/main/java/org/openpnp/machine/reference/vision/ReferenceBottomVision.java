@@ -17,7 +17,7 @@ import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.machine.reference.ReferenceNozzleTip;
 import org.openpnp.machine.reference.ReferenceNozzleTipCalibration;
 import org.openpnp.machine.reference.ReferenceNozzleTipCalibration.BackgroundCalibrationMethod;
-import org.openpnp.machine.reference.vision.wizards.ReferenceBottomVisionConfigurationWizard;
+import org.openpnp.machine.reference.vision.wizards.VisionForms;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.AbstractPartSettingsHolder;
 import org.openpnp.model.AbstractVisionSettings;
@@ -740,7 +740,7 @@ public class ReferenceBottomVision extends AbstractPartAlignment
 
     @Override
     public String getPropertySheetHolderTitle() {
-        return "Bottom Vision";
+        return org.openpnp.gui.support.DisplayNames.typeName(getClass());
     }
 
     public static CvPipeline createStockPipeline(String variant) {
@@ -762,7 +762,7 @@ public class ReferenceBottomVision extends AbstractPartAlignment
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
-                new PropertySheetWizardAdapter(new ReferenceBottomVisionConfigurationWizard(this)),
+                new PropertySheetWizardAdapter(VisionForms.bottomVision(this)),
                 new PropertySheetWizardAdapter(org.openpnp.machine.reference.vision.wizards.VisionSettingsForm
                         .bottom(getMachine().getConfiguration(), getBottomVisionSettings(), this))};
     }
