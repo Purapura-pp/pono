@@ -91,19 +91,36 @@ public class StatusBarPanel extends JPanel {
         lastPlacementSep.setVisible(false);
         lastPlacementLabel.setVisible(false);
         add(Box.createHorizontalGlue());
-        add(item(6, Ui.t2(Translations.getString("StatusBar.TotalProgress")), bold(totalLabel))); //$NON-NLS-1$
+        JComponent totalItem = item(6, Ui.t2(Translations.getString("StatusBar.TotalProgress")), bold(totalLabel)); //$NON-NLS-1$
+        add(totalItem);
         add(Box.createHorizontalStrut(14));
-        add(item(6, Ui.t2(Translations.getString("StatusBar.CurrentBoard")), bold(boardLabel))); //$NON-NLS-1$
+        JComponent boardItem = item(6, Ui.t2(Translations.getString("StatusBar.CurrentBoard")), bold(boardLabel)); //$NON-NLS-1$
+        add(boardItem);
         add(Box.createHorizontalStrut(14));
         remainingItem = item(6, Ui.t2(Translations.getString("StatusBar.Remaining")), bold(remainingLabel)); //$NON-NLS-1$
         remainingItem.setVisible(false);
         add(remainingItem);
         add(Box.createHorizontalStrut(14));
-        add(Ui.divider(14));
+        JComponent unitsDivider = Ui.divider(14);
+        add(unitsDivider);
         add(Box.createHorizontalStrut(14));
         add(unitsLabel);
+        // Production mode's instead: who runs the machine and the time.
+        operatorItem = item(4, Ui.muted(Translations.getString("StatusBar.Operator")), bold(operatorLabel)); //$NON-NLS-1$
+        operatorItem.setVisible(false);
+        add(operatorItem);
+        JComponent operatorDivider = Ui.divider(14);
+        operatorDivider.setVisible(false);
+        add(Box.createHorizontalStrut(14));
+        add(operatorDivider);
+        add(Box.createHorizontalStrut(14));
+        clockLabel.setFont(Ui.font(12f));
+        clockLabel.setVisible(false);
+        add(clockLabel);
         add(Box.createHorizontalStrut(14));
         add(versionLabel);
+        workbenchOnly = new JComponent[] { totalItem, boardItem, unitsDivider, unitsLabel };
+        operatorOnly = new JComponent[] { operatorItem, operatorDivider, clockLabel };
 
         for (Component c : getComponents()) {
             if (c instanceof JComponent) {
@@ -126,6 +143,46 @@ public class StatusBarPanel extends JPanel {
                 unitsLabel.setText(configuration.getSystemUnits().getShortName());
             }
         });
+    }
+
+    private final JLabel operatorLabel = Ui.t2(""); //$NON-NLS-1$
+    private final JLabel clockLabel = Ui.muted(""); //$NON-NLS-1$
+    private final JComponent operatorItem;
+    private final JComponent[] workbenchOnly;
+    private final JComponent[] operatorOnly;
+    private final javax.swing.Timer clock = new javax.swing.Timer(10000, e -> showClock());
+    private boolean operatorMode;
+
+    /**
+     * Production mode's status bar: what the machine is doing at the left, and at the right who
+     * runs it and the time, where the job's totals were - the column beside the camera has them.
+     */
+    public void setOperatorMode(boolean on, String operator) {
+        operatorMode = on;
+        for (JComponent c : workbenchOnly) {
+            c.setVisible(!on);
+        }
+        for (JComponent c : operatorOnly) {
+            c.setVisible(on);
+        }
+        remainingItem.setVisible(!on && !remainingLabel.getText().isEmpty());
+        lastPlacementSep.setVisible(!on && !lastPlacementLabel.getText().isEmpty());
+        lastPlacementLabel.setVisible(!on && !lastPlacementLabel.getText().isEmpty());
+        operatorLabel.setText(operator == null || operator.isEmpty()
+                ? Translations.getString("StatusBar.Operator.None") : operator); //$NON-NLS-1$
+        showClock();
+        if (on) {
+            clock.start();
+        }
+        else {
+            clock.stop();
+        }
+        revalidate();
+        repaint();
+    }
+
+    private void showClock() {
+        clockLabel.setText(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(new java.util.Date())); //$NON-NLS-1$
     }
 
     private static JLabel bold(JLabel label) {
@@ -270,8 +327,8 @@ public class StatusBarPanel extends JPanel {
     public void setLastPlacement(String text) {
         boolean shown = text != null && !text.isEmpty();
         lastPlacementLabel.setText(shown ? text : ""); //$NON-NLS-1$
-        lastPlacementSep.setVisible(shown);
-        lastPlacementLabel.setVisible(shown);
+        lastPlacementSep.setVisible(shown && !operatorMode);
+        lastPlacementLabel.setVisible(shown && !operatorMode);
         revalidateItems();
     }
 
@@ -279,7 +336,7 @@ public class StatusBarPanel extends JPanel {
     public void setRemaining(String text) {
         boolean shown = text != null && !text.isEmpty();
         remainingLabel.setText(shown ? text : ""); //$NON-NLS-1$
-        remainingItem.setVisible(shown);
+        remainingItem.setVisible(shown && !operatorMode);
         revalidateItems();
     }
 

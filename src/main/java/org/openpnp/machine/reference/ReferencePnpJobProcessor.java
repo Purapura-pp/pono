@@ -1381,6 +1381,7 @@ public class ReferencePnpJobProcessor extends AbstractPnpJobProcessor {
                  * Exception so that we can continue the loop.
                  */
                 try {
+                    job.getRun().feeding(runKey(jobPlacement), placement.getId(), feeder.getName());
                     feed(feeder, nozzle);
                 }
                 catch (Feeder.FeederEmptyException e) {

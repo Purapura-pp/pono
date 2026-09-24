@@ -792,6 +792,9 @@ public class MainFrame extends JFrame {
         JMenuItem settingsItem = new JMenuItem(Translations.getString("Menu.View.Settings")); //$NON-NLS-1$
         settingsItem.addActionListener(e -> showSettings());
         mnView.add(settingsItem);
+        JMenuItem operatorItem = new JMenuItem(Translations.getString("Menu.View.OperatorMode")); //$NON-NLS-1$
+        operatorItem.addActionListener(e -> setOperatorMode(true));
+        mnView.add(operatorItem);
         mnView.addSeparator();
 
         // View -> Tables Linked
@@ -951,13 +954,13 @@ public class MainFrame extends JFrame {
                     }
                     // The command search opens from anywhere in the main window, a text field
                     // included: Ctrl+K types nothing, so there is nothing for it to take away.
-                    if (Hotkeys.COMMAND_PALETTE.equals(ks) && ((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
+                    if (Hotkeys.COMMAND_PALETTE.equals(ks) && !operatorMode && ((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
                             && KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == MainFrame.this) {
                         SwingUtilities.invokeLater(MainFrame.this::openCommandPalette);
                         return;
                     }
                     // Ctrl+1 to Ctrl+9 go to the rail's pages, in its order, wherever the focus is.
-                    if (navigationRail != null && ((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
+                    if (navigationRail != null && !operatorMode && ((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
                             && ((KeyEvent) event).getModifiersEx() == KeyEvent.CTRL_DOWN_MASK
                             && ((KeyEvent) event).getKeyCode() >= KeyEvent.VK_1
                             && ((KeyEvent) event).getKeyCode() <= KeyEvent.VK_9
@@ -981,7 +984,7 @@ public class MainFrame extends JFrame {
                     if (((KeyEvent) event).getID() == KeyEvent.KEY_PRESSED
                             && (((KeyEvent) event).getKeyCode() == KeyEvent.VK_SLASH
                                     || ((KeyEvent) event).getKeyCode() == KeyEvent.VK_DIVIDE)
-                            && ((KeyEvent) event).getModifiersEx() == 0
+                            && ((KeyEvent) event).getModifiersEx() == 0 && !operatorMode
                             && KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow() == MainFrame.this
                             && !UiUtils.isTextInputFocused()) {
                         javax.swing.JTextField filter = org.openpnp.gui.shell.Ui.filterFor(KeyboardFocusManager
@@ -1000,7 +1003,8 @@ public class MainFrame extends JFrame {
                     // text too.
                     if (machineHotkeysApply() && !UiUtils.isTextInputFocused()) {
                         Action action = hotkeyActionMap.get(ks);
-                        if (action != null && action.isEnabled()) {
+                        // Production mode runs the job and nothing else: no jogging, no parking.
+                        if (action != null && action.isEnabled() && (!operatorMode || Hotkeys.runsTheJob(ks))) {
                             action.actionPerformed(null);
                             return;
                         }
@@ -1435,6 +1439,18 @@ public class MainFrame extends JFrame {
         buildCameraModeControls();
         panelCameraAndInstructions.add(cameraStage, BorderLayout.CENTER);
 
+        operatorView = new org.openpnp.gui.operator.OperatorView(configuration, jobPanel);
+        operatorBanner = cameraStage.overlay(operatorView.getBanner(), Anchor.North);
+        operatorBanner.setVisible(false);
+        operatorView.onRefresh(s -> {
+            int empty = 0;
+            for (org.openpnp.gui.operator.OperatorSummary.Attention a : s.attention) {
+                empty += a.empty ? 1 : 0;
+            }
+            topBarPanel.showOperator(empty, s.attention.size() - empty);
+        });
+        topBarPanel.setOperatorActions(() -> setOperatorMode(true), () -> setOperatorMode(false), hotkeysAction);
+
         splitPaneMachineAndTabs.setResizeWeight(0.5);
 
         addImporterMenuOptions();
@@ -1789,6 +1805,74 @@ public class MainFrame extends JFrame {
         }
     }
 
+    private org.openpnp.gui.operator.OperatorView operatorView;
+    private OverlayCard operatorBanner;
+    private boolean operatorMode;
+    private JPanel operatorHolder;
+
+    public boolean isOperatorMode() {
+        return operatorMode;
+    }
+
+    /**
+     * Production mode, mockup 03: the camera in the middle with what is being placed over it, the
+     * job's progress, the big buttons, the feeders to see to and the latest events beside it. The
+     * pages, the properties and the menus are out of reach until it is left, and of the machine's
+     * keys only those that run the job and stop the machine are taken.
+     */
+    public void setOperatorMode(boolean on) {
+        if (on == operatorMode || operatorView == null) {
+            return;
+        }
+        if (on && inspectorPanel != null && !inspectorPanel.getPresenter().settleUnappliedEdits()) {
+            return;
+        }
+        operatorMode = on;
+        boolean stageAtHome = on ? panelCameraAndInstructions.getParent() == panelMachine
+                : panelCameraAndInstructions.getParent() == operatorView.getStage();
+        if (on) {
+            if (stageAtHome) {
+                panelMachine.remove(panelCameraAndInstructions);
+                operatorView.getStage().add(panelCameraAndInstructions, BorderLayout.CENTER);
+            }
+            if (operatorHolder == null) {
+                operatorHolder = new JPanel(new BorderLayout());
+                operatorHolder.setBackground(org.openpnp.gui.shell.Ui.bg());
+                operatorHolder.setBorder(new EmptyBorder(org.openpnp.gui.shell.Tokens.GAP_CARD + 2,
+                        org.openpnp.gui.shell.Tokens.GAP_CARD + 2, org.openpnp.gui.shell.Tokens.GAP_CARD + 2, 0));
+                operatorHolder.add(operatorView, BorderLayout.CENTER);
+            }
+            contentPane.remove(splitPaneInspector);
+            contentPane.add(operatorHolder, BorderLayout.CENTER);
+            navigationRail.setVisible(false);
+            // The image and what is being placed over it; the controls that move the machine by
+            // hand and the view tools are the workbench's.
+            for (Component c : new Component[] { jogCard, cameraToolsBar, cameraModeCard, stripHandle, unitsStrip }) {
+                if (c != null) {
+                    c.setVisible(false);
+                }
+            }
+            instructionsCard.setVisible(false);
+        }
+        else {
+            operatorBanner.setVisible(false);
+            if (stageAtHome) {
+                operatorView.getStage().remove(panelCameraAndInstructions);
+                panelMachine.add(panelCameraAndInstructions, BorderLayout.CENTER);
+            }
+            contentPane.remove(operatorHolder);
+            contentPane.add(splitPaneInspector, BorderLayout.CENTER);
+            navigationRail.setVisible(true);
+            applyPageLayout(navigationRail.getSelectedComponent());
+        }
+        topBarPanel.setOperatorMode(on);
+        statusBarPanel.setOperatorMode(on, java.util.prefs.Preferences.userNodeForPackage(SettingsPanel.class)
+                .get(SettingsPanel.PREF_OPERATOR, "")); //$NON-NLS-1$
+        operatorView.setActive(on);
+        contentPane.revalidate();
+        contentPane.repaint();
+    }
+
     /** Whether a key that moves the machine or changes the job should be taken now. */
     private boolean machineHotkeysApply() {
         Window active = KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow();
@@ -1808,7 +1892,7 @@ public class MainFrame extends JFrame {
 
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (navigationRail.getSelectedComponent() != jobPanel) {
+                if (!operatorMode && navigationRail.getSelectedComponent() != jobPanel) {
                     setStatus(Translations.getString("MainFrame.Hotkey.JobPageOnly")); //$NON-NLS-1$
                     return;
                 }

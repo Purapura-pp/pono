@@ -47,6 +47,11 @@ public final class Hotkeys {
     public static final KeyStroke JOB_STEP = KeyStroke.getKeyStroke(KeyEvent.VK_N, CTRL_SHIFT);
     public static final KeyStroke JOB_ABORT = KeyStroke.getKeyStroke(KeyEvent.VK_A, CTRL_SHIFT);
 
+    /** The keys production mode keeps: those that start, pause, step and abort the job. */
+    public static boolean runsTheJob(KeyStroke stroke) {
+        return JOB_START_PAUSE.equals(stroke) || JOB_STEP.equals(stroke) || JOB_ABORT.equals(stroke);
+    }
+
     public static final KeyStroke PARK_XY = KeyStroke.getKeyStroke(KeyEvent.VK_P, CTRL_SHIFT);
     public static final KeyStroke PARK_Z = KeyStroke.getKeyStroke(KeyEvent.VK_L, CTRL_SHIFT);
     public static final KeyStroke SAFE_Z = KeyStroke.getKeyStroke(KeyEvent.VK_U, CTRL_SHIFT);

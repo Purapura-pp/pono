@@ -517,6 +517,12 @@ public class UiRuler {
             String label = rail.getLabel(page);
             scenes.add(new Scene(id, label, page));
             sceneLabels.put(id, label);
+            if (id.equals("job")) {
+                // Production mode, P10: the job page's camera and the run, mockup 03.
+                String operatorLabel = "\u751f\u4ea7\u6a21\u5f0f";
+                scenes.add(new Scene(OPERATOR_SCENE, operatorLabel, page));
+                sceneLabels.put(OPERATOR_SCENE, operatorLabel);
+            }
             if (id.equals("feeders")) {
                 // The kinds of feeder whose forms P9 W5 redid, each on the feeders page.
                 for (String[] extra : FEEDER_SCENES) {
@@ -715,9 +721,17 @@ public class UiRuler {
 
     // ----- photographing -----------------------------------------------------------------------
 
+    private static final String OPERATOR_SCENE = "operator-mode";
+
     private void photograph(Round round, String theme, Scene scene) throws Exception {
         String label = round.label(theme);
+        boolean operator = scene.id.equals(OPERATOR_SCENE);
+        edt(() -> frame.setOperatorMode(false));
         edt(() -> frame.showTab(scene.page));
+        if (operator) {
+            simulateRun();
+            edt(() -> frame.setOperatorMode(true));
+        }
         settle(800);
         List<String> missed = edtGet(() -> setUp(scene));
         for (String what : missed) {
@@ -754,6 +768,41 @@ public class UiRuler {
                 frame.getRootPane(), shot, scale, scene.label, label).run());
         findings.addAll(found);
         say(name + ": " + found.size() + " findings" + (pair == null ? "" : ", paired"));
+        if (operator) {
+            edt(() -> frame.setOperatorMode(false));
+            org.openpnp.model.Job job = frame.getJobTab().getJob();
+            if (job != null) {
+                job.getRun().start();
+            }
+        }
+    }
+
+    /**
+     * A run as far as mockup 03 has it, without the machine: the fiducials checked, four parts
+     * placed a moment apart, a pick retried, and R12 aligned and on its way.
+     */
+    private void simulateRun() throws Exception {
+        org.openpnp.model.Job job = frame.getJobTab().getJob();
+        if (job == null || job.getBoardLocations().isEmpty()) {
+            return;
+        }
+        org.openpnp.model.JobRun run = job.getRun();
+        run.start();
+        org.openpnp.model.BoardLocation board = job.getBoardLocations().get(0);
+        run.fiducials(board.getPlacementsHolder().getName(), null);
+        for (String id : new String[] { "C12", "C13", "R10", "R11" }) {
+            String key = org.openpnp.model.JobRun.key(board, id);
+            run.placing(key, id, "N1");
+            run.feeding(key, id, "F-01");
+            Thread.sleep(700);
+            run.placed(key, id);
+        }
+        run.pickFailed(org.openpnp.model.JobRun.key(board, "D2"), "D2", "F-05");
+        String key = org.openpnp.model.JobRun.key(board, "R12");
+        run.placing(key, "R12", "N1");
+        run.feeding(key, "R12", "F-01");
+        run.aligned(key, "R12", new org.openpnp.model.Location(org.openpnp.model.LengthUnit.Millimeters,
+                0.012, 0.016, 0, 0.1));
     }
 
     /** The control gallery in the current theme: one half of 06-design-system. */
