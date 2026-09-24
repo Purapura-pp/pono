@@ -243,8 +243,9 @@ public class UiRuler {
         Thread.sleep(4000);
         closeStrayDialogs("\u542f\u52a8");
         inventory();
-        rules = rules();
+        // The names of what the machine is given for the scenes are data like the fixture's.
         prepareMachine();
+        rules = rules();
         openJob();
         landmarks = edtGet(this::landmarks);
 
