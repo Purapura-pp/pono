@@ -22,7 +22,6 @@
 package org.openpnp.machine.reference.axis;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.axis.wizards.ReferenceMappedAxisConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -52,7 +51,7 @@ public class ReferenceMappedAxis extends AbstractSingleTransformedAxis {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceMappedAxisConfigurationWizard(getMachine(), this);
+        return org.openpnp.machine.reference.axis.wizards.AxisForm.mapped(this);
     }
 
     protected double getScale() {

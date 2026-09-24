@@ -47,6 +47,7 @@ import org.openpnp.gui.components.SimpleGraphView;
 import org.openpnp.gui.components.TemplateImageControl;
 import org.openpnp.gui.form.Form;
 import org.openpnp.gui.form.FormWizard;
+import org.openpnp.gui.form.WeakForward;
 import org.openpnp.gui.shell.Chip;
 import org.openpnp.gui.shell.Dialogs;
 import org.openpnp.gui.shell.Forms;

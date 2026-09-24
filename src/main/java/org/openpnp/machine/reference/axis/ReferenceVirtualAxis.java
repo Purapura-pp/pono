@@ -22,7 +22,6 @@
 package org.openpnp.machine.reference.axis;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.axis.wizards.ReferenceVirtualAxisConfigurationWizard;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Length;
 import org.openpnp.spi.Axis;
@@ -44,7 +43,7 @@ public class ReferenceVirtualAxis extends AbstractCoordinateAxis implements Virt
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceVirtualAxisConfigurationWizard(this);
+        return org.openpnp.machine.reference.axis.wizards.AxisForm.virtual(this);
     }
 
     @Override

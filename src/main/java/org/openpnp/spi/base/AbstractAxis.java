@@ -149,7 +149,7 @@ public abstract class AbstractAxis extends AbstractMachineElement implements Axi
     public Action deleteAction = new AbstractAction("Delete Axis") {
         {
             putValue(SMALL_ICON, Icons.delete);
-            putValue(NAME, "Delete Axis");
+            putValue(NAME, Translations.getString("AbstractAxis.Action.Delete")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("AbstractAxis.Action.Delete.Description")); //$NON-NLS-1$
         }
 
@@ -159,7 +159,8 @@ public abstract class AbstractAxis extends AbstractMachineElement implements Axi
             for (Head head : getMachine().getHeads()) {
                 for (HeadMountable hm : head.getHeadMountables()) {
                     if (hm.getAxis(AbstractAxis.this.getType()) == AbstractAxis.this) {
-                        message += "<li>"+hm.getClass().getSimpleName()+" "+hm.getName()+"</li>";    
+                        message += "<li>" + org.openpnp.gui.support.DisplayNames.typeName(hm.getClass()) //$NON-NLS-1$
+                                + " " + hm.getName() + "</li>"; //$NON-NLS-1$ //$NON-NLS-2$
                     }
                  }
             }
@@ -185,7 +186,7 @@ public abstract class AbstractAxis extends AbstractMachineElement implements Axi
     public Action permutateUpAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.arrowUp);
-            putValue(NAME, "Permutate Up");
+            putValue(NAME, Translations.getString("AbstractAxis.Action.PermutateUp")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("AbstractAxis.Action.PermutateUp.Description")); //$NON-NLS-1$
         }
 
@@ -199,7 +200,7 @@ public abstract class AbstractAxis extends AbstractMachineElement implements Axi
     public Action permutateDownAction = new AbstractAction() {
         {
             putValue(SMALL_ICON, Icons.arrowDown);
-            putValue(NAME, "Permutate Down");
+            putValue(NAME, Translations.getString("AbstractAxis.Action.PermutateDown")); //$NON-NLS-1$
             putValue(SHORT_DESCRIPTION, Translations.getString("AbstractAxis.Action.PermutateDown.Description")); //$NON-NLS-1$
         }
 

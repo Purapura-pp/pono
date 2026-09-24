@@ -105,6 +105,9 @@ public class UiFixture {
         feeders(machine);
         camera(machine);
         nozzleTip(machine);
+        // The advanced planner, whose two tabs are on the machine's sheets.
+        ((org.openpnp.machine.reference.ReferenceMachine) machine)
+                .setMotionPlanner(new org.openpnp.machine.reference.driver.ReferenceAdvancedMotionPlanner());
 
         Board board = demoBoard();
         Board cell = demoCell();
