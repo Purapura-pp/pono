@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 校准页 · 采集问题之后（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var chk = function (on) { return '<span class="check' + (on ? ' on' : '') + '"></span>'; };
+var tw = function (open) { return '<span class="tw">' + ic(open ? 'chevdown' : 'chevright') + '</span>'; };
+var none = '<span class="tw"></span>';
+var ch = function (a, b) { return '<span class="chg">' + a + '<span class="ar">→</span><span class="to">' + b + '</span></span>'; };
+var tbd = function (a) { return '<span class="chg">' + a + '<span class="ar">→</span><span class="tbd">测完给出</span></span>'; };
+var hand = ' <span class="hand-tag">' + ic('hand') + '要人</span>';
+var act = function (label, cls, moves) { return '<div class="act"><button class="btn xs' + (cls ? ' ' + cls : '') + '">' + label + (moves ? ic('zap', 'moves') : '') + '</button></div>'; };
+var go = function (topic) { return '<div class="act"><span class="link" style="font-size:12px">机器设置 · ' + topic + ' ›</span></div>'; };
+var warn = '<span style="color:var(--warn)">' + ic('alert', 'sm') + '</span>';
+var st = {
+  sug: '<span class="status run">有建议值</span>', measure: '<span class="status warn">要先测量</span>',
+  hint: '<span class="status pending">机器设置</span>'
+};
+
+var rows = [
+  '有建议值 · 3 项 · 勾上后点「应用所选」，或者逐项点「应用」',
+  [chk(true), tw(true) + '<b>跳动标定允许的漏检次数</b>', '6 个吸嘴头', st.sug, ch('5 次', '1 次'), act('应用', 'primary')],
+  { cls: 'sub', cells: ['', 'N045', '', '', ch('5', '1'), ''] },
+  { cls: 'sub', cells: ['', 'N08', '', '', ch('5', '1'), ''] },
+  { cls: 'sub', cells: ['', '<span class="muted">另外 4 个同样：N14、N24、N40、N75</span>', '', '', ch('5', '1'), ''] },
+  [chk(true), tw() + '<b>圆检测超采样</b>', '6 个吸嘴头', st.sug, ch('1 倍', '8 倍'), act('应用')],
+  [chk(true), tw() + '<b>背景校准方式</b>', '6 个吸嘴头', st.sug, ch('无', '亮度与色键'), act('应用')],
+  '要先测量 · 4 项 · 测完给出建议值，再由你确认',
+  [chk(false), none + '<b>主基准点位置</b>' + hand, '头 H1', st.measure, tbd('217.29, 196.53'), act('测量', '', true)],
+  [chk(false), tw() + '<b>相机稳定方式</b>', '相机 Top、Bottom', st.measure, tbd('固定 1000 ms'), act('测量', '', true)],
+  [chk(false), tw() + '<b>吸嘴偏移精测</b>', '吸嘴 N1、N2', st.measure, tbd('手动对准的值'), act('测量', '', true)],
+  [chk(false), none + '<b>XY 间隙</b>', '轴 x、y', st.measure, tbd('单侧 0.100 mm'), act('测量', '', true)],
+  '其他提示 · 4 条 · 不属于校准，要到机器设置里改',
+  [warn, none + '<b>串口 ttyACM0 在本机不存在</b>', '驱动', st.hint, ch('ttyACM0', '本机端口'), go('连接')],
+  [warn, none + '<b>相机设备在本机找不到</b>', '相机 Top、Bottom', st.hint, '<span class="muted">要重新选</span>', go('相机')],
+  [warn, tw() + '<b>最小元件直径是 0，无效</b>', '6 个吸嘴头', st.hint, '<span class="muted">要填上</span>', go('吸嘴')],
+  [warn, none + '<b>没设真空泵</b>', '头 H1', st.hint, '<span class="muted">多数不需要</span>', go('吸嘴')],
+  tw() + '已完成 · 11 项'
+];
+
+var banner = '<div class="banner info">' + ic('info') + '<div class="bt"><b>19:40 采集完成</b><span>3 项已经有建议值，确认后点「应用」就生效；4 项要先测量，测完给出建议值再由你确认；4 条其他提示要到机器设置里改。应用之前自动备份。</span></div></div>';
+
+var dock = F.dock({
+  tabs: [{ icon: 'target', t: '校准', n: 7 }, { icon: 'file', t: '报告' }],
+  toolbar: '<button class="btn sm">' + ic('refresh', 'sm') + '采集问题</button>'
+    + '<button class="btn sm primary">' + ic('check', 'sm') + '应用所选（3）</button>'
+    + '<button class="btn sm">' + ic('play', 'sm') + '一键校准 · 测 4 项' + ic('zap', 'moves') + '</button>'
+    + F.btn('忽略所选', 'x', 'ghost') + '<span class="grow"></span>' + F.seg(['要处理的', '全部'], 0, true),
+  banner: banner,
+  body: F.table([{ t: '', w: 22 }, { t: '项目' }, { t: '对象', w: 120 }, { t: '状态', w: 92 }, { t: '现在 → 建议', w: 178 }, { t: '', w: 112, r: true }], rows, 1)
+});
+
+var tip = function (name) { return ['<b>' + name + '</b>', '<span class="mono t2">5</span>', '<div class="inp mono cell" style="width:90px">1<span class="u">次</span></div>']; };
+var change = '<div class="boxed">' + F.table([{ t: '吸嘴头' }, { t: '现在', w: 80 }, { t: '改成', w: 120 }],
+  [tip('N045'), tip('N08'), tip('N14'), tip('N24'), tip('N40'), tip('N75')]) + '</div>'
+  + '<div class="row" style="gap:8px;margin-top:10px"><span class="t2" style="font-size:12px">统一改成</span>' + F.inp('1', { mono: true, u: '次', w: 90 }) + '<span class="muted" style="font-size:11.5px">可以填 0 – 4</span></div>';
+
+var side = F.side({
+  icon: 'target', title: '跳动标定允许的漏检次数', sub: '有建议值 · 6 个吸嘴头 · 不会移动机器',
+  body:
+    F.sec('为什么要改', 'info', null, { after: '<p class="note">跳动标定绕着吸嘴在 6 个角度拍照找圆心。现在允许 5 次找不到，最少只剩 3 个点也算成功，而 3 个点总能连成一个圆，这样的标定成功了也说明不了什么。</p><p class="note">建议最多允许 1 次：偶尔一张坏图不影响，吸嘴真有偏心也藏不住。</p>' })
+    + F.sec('将改什么', 'edit', null, { rt: '可以改建议值', after: change })
+    + F.sec('出处', 'clock', [['采集于', '<span class="t2">今天 19:40</span>'], ['校准步骤', '<span class="t2">吸嘴头跳动标定</span>'], ['应用之前', '<span class="t2">自动备份配置</span>']]),
+  foot: '<button class="btn">忽略</button><button class="btn primary" style="flex:2">' + ic('check', 'sm') + '应用到 6 个吸嘴头</button>'
+});
+
+F.app({
+  page: 'calibration', nav: F.NAV_REDO, centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], 'machine-settings': ['warn', 4], calibration: ['warn', 7] },
+  center: F.strip() + dock,
+  side: side,
+  status: { chip: '<span class="status run" style="height:18px">有建议 3</span>', text: '采集于 19:40 · 3 项有建议值 · 4 项要先测量 · 4 条其他提示', right: ['已完成 <b class="mono t2">11 / 18</b>'] },
+  scene: Scene.pcb({ footprintLabel: 'FID1' })
+});
+</script>
+</body>
+</html>

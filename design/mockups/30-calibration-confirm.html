@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 校准页 · 测完等你确认（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var chk = function (on) { return '<span class="check' + (on ? ' on' : '') + '"></span>'; };
+var tw = function (open) { return '<span class="tw">' + ic(open ? 'chevdown' : 'chevright') + '</span>'; };
+var none = '<span class="tw"></span>';
+var ch = function (a, b) { return '<span class="chg">' + a + '<span class="ar">→</span><span class="to">' + b + '</span></span>'; };
+var tbd = function (a) { return '<span class="chg">' + a + '<span class="ar">→</span><span class="tbd">测完给出</span></span>'; };
+var hand = ' <span class="hand-tag">' + ic('hand') + '要人</span>';
+var act = function (html) { return '<div class="act">' + html + '</div>'; };
+var st = {
+  confirm: '<span class="status warn">测完 · 待确认</span>', measure: '<span class="status pending">要先测量</span>',
+  done: function (t) { return '<span class="status ok">已应用 ' + t + '</span>'; }
+};
+
+var rows = [
+  '测完 · 待确认 · 1 项 · 新值已经临时生效，还没保存',
+  [chk(true), none + '<b>XY 间隙</b>', '轴 x、y', st.confirm, '<span class="chg">x 0.100<span class="ar">→</span><span class="to">0.220</span>　y 0.100<span class="ar">→</span><span class="to">0.150</span></span>',
+    act('<button class="btn xs">放弃</button><button class="btn xs primary">应用</button>')],
+  '要先测量 · 2 项',
+  [chk(false), tw() + '<b>吸嘴偏移精测</b>', '吸嘴 N1、N2', st.measure, tbd('手动对准的值'), act('<button class="btn xs">测量' + ic('zap', 'moves') + '</button>')],
+  [chk(false), none + '<b>主基准点位置</b>' + hand, '头 H1', st.measure, tbd('217.29, 196.53'), act('<button class="btn xs">测量' + ic('zap', 'moves') + '</button>')],
+  '已完成 · 15 项',
+  [ic('check', 'sm'), tw() + '<b>相机稳定方式</b>', '相机 Top、Bottom', st.done('19:52'), ch('固定 1000 ms', '自适应 · 实测 180 ms'), ''],
+  [ic('check', 'sm'), tw() + '<b>跳动标定允许的漏检次数</b>', '6 个吸嘴头', st.done('19:41'), ch('5 次', '1 次'), ''],
+  [ic('check', 'sm'), tw() + '<b>圆检测超采样</b>', '6 个吸嘴头', st.done('19:41'), ch('1 倍', '8 倍'), ''],
+  [ic('check', 'sm'), tw() + '<b>背景校准方式</b>', '6 个吸嘴头', st.done('19:41'), ch('无', '亮度与色键'), ''],
+  { cls: 'dim', cells: ['', tw() + '另外 11 项', '', '', '', ''] },
+  tw() + '其他提示 · 2 条'
+];
+
+var banner = '<div class="banner warn">' + ic('alert') + '<div class="bt"><b>XY 间隙测完了，等你确认</b><span>新值已经临时生效，方便你试一下效果，但还没有保存。点「应用」保留；点「放弃」恢复成测量前的值。不确认就关掉 Pono，按放弃处理。</span></div>'
+  + '<div class="acts"><button class="btn sm">放弃</button><button class="btn sm primary">应用</button></div></div>';
+
+var dock = F.dock({
+  tabs: [{ icon: 'target', t: '校准', n: 3 }, { icon: 'file', t: '报告' }],
+  toolbar: '<button class="btn sm">' + ic('refresh', 'sm') + '采集问题</button>'
+    + '<button class="btn sm primary">' + ic('check', 'sm') + '应用所选（1）</button>'
+    + '<button class="btn sm">' + ic('play', 'sm') + '一键校准 · 测 2 项' + ic('zap', 'moves') + '</button>'
+    + F.btn('忽略所选', 'x', 'ghost') + '<span class="grow"></span>' + F.seg(['要处理的', '全部'], 1, true),
+  banner: banner,
+  body: F.table([{ t: '', w: 22 }, { t: '项目' }, { t: '对象', w: 120 }, { t: '状态', w: 104 }, { t: '现在 → 建议', w: 214 }, { t: '', w: 112, r: true }], rows, 1)
+});
+
+var bars = '<div class="chart"><div class="ct">' + ic('activity', 'sm') + '换向误差<span class="rt">目标 &lt; 0.020 mm</span></div>'
+  + '<svg viewBox="0 0 440 92" preserveAspectRatio="none">'
+  + '<line x1="0" y1="80" x2="440" y2="80" stroke="var(--border-strong)"/>'
+  + '<line x1="0" y1="72" x2="440" y2="72" stroke="var(--ok)" stroke-dasharray="4 3" opacity=".8"/>'
+  + '<rect x="40" y="8" width="54" height="72" rx="3" fill="var(--warn)" opacity=".8"/><rect x="104" y="73" width="54" height="7" rx="2" fill="var(--ok)"/>'
+  + '<rect x="262" y="30" width="54" height="50" rx="3" fill="var(--warn)" opacity=".8"/><rect x="326" y="75" width="54" height="5" rx="2" fill="var(--ok)"/>'
+  + '</svg><div class="row" style="justify-content:space-around;font-size:11.5px;margin-top:4px"><span class="t2"><b>X</b> 0.206 → <b style="color:var(--ok)">0.012</b></span><span class="t2"><b>Y</b> 0.143 → <b style="color:var(--ok)">0.009</b></span></div>'
+  + '<div class="row" style="gap:14px;font-size:11px;margin-top:6px" ><span class="row" style="gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--warn);display:inline-block"></i>补偿前</span><span class="row" style="gap:5px"><i style="width:10px;height:10px;border-radius:2px;background:var(--ok);display:inline-block"></i>补偿后复测</span></div></div>';
+
+var change = '<div class="boxed">' + F.table([{ t: '设置' }, { t: '测量前', w: 100 }, { t: '测量后', w: 100 }], [
+  ['x · 间隙偏移', '<span class="mono t2">0.100 mm</span>', '<b class="mono">0.220 mm</b>'],
+  ['y · 间隙偏移', '<span class="mono t2">0.100 mm</span>', '<b class="mono">0.150 mm</b>'],
+  { cls: 'dim', cells: ['x、y · 补偿方法', '单侧定位', '不变'] }
+]) + '</div>';
+
+var side = F.side({
+  icon: 'target', title: 'XY 间隙', sub: '测完 · 等你确认 · 19:58 · 用时 3 分 40 秒',
+  body:
+    F.sec('测到了什么', 'activity', null, { after: '<p class="note">每根轴从两个方向走到同一点，用顶部相机看基准点，量出换向时少走的距离；按新值补偿后又复测了一遍。</p>' + bars })
+    + F.sec('将改什么', 'edit', null, { after: change })
+    + F.sec('放弃会怎样', 'undo', null, { after: '<p class="note">两个间隙偏移恢复成测量前的 0.100 mm，机器不动。测量数据留在报告里。</p>' }),
+  foot: '<button class="btn">' + ic('undo', 'sm') + '放弃，恢复原值</button><button class="btn primary" style="flex:2">' + ic('check', 'sm') + '应用</button>'
+});
+
+F.app({
+  page: 'calibration', nav: F.NAV_REDO, centerClass: 'strip-top',
+  badges: { feeders: ['warn', 1], 'machine-settings': ['warn', 2], calibration: ['warn', 3] },
+  center: F.strip({ dro: ['217.287', '196.534', '15.000', '0.00'] }) + dock,
+  side: side,
+  status: { chip: '<span class="status warn" style="height:18px">待确认 1</span>', text: 'XY 间隙测完 · 等你确认', right: ['已完成 <b class="mono t2">15 / 18</b>', '19:49 已备份'] },
+  scene: Scene.pcb({ footprint: false })
+});
+</script>
+</body>
+</html>

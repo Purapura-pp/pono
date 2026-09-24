@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 机器设置 · 运动与轴（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+<script src="ms.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var m = function (t) { return '<span class="mono">' + t + '</span>'; };
+var off = '<span class="muted">关</span>';
+var lim = function (a, b, u) { return '<span class="mono">' + a + ' – ' + b + '</span> <span class="muted">' + u + '</span>'; };
+
+var axes = '<div class="boxed">' + F.table(
+  [{ t: '轴', w: 54 }, { t: '类型', w: 60 }, { t: '控制器', w: 60 }, { t: '软限位' }, { t: '最大速度', r: true, w: 104 }, { t: '加速度', r: true, w: 110 }, { t: '加加速度', r: true, w: 96 }],
+  [
+    ['<b>x</b>', '直线', 'X', lim('0.000', '<b style="color:var(--accent)">430.000</b>', 'mm'), m('200 mm/s'), m('1000 mm/s²'), m('0')],
+    ['<b>y</b>', '直线', 'Y', lim('0.000', '487.000', 'mm'), m('200 mm/s'), m('1000 mm/s²'), m('0')],
+    ['<b>z1</b>', '直线', 'Z', off + ' <span class="muted">· 安全区</span> ' + lim('26.500', '36.500', 'mm'), m('200 mm/s'), m('1000 mm/s²'), m('0')],
+    ['<b>z2</b>', '映射', '—', '<span class="t2">跟着 z1 反向走：z2 = 63 − z1</span>', '<span class="muted">—</span>', '<span class="muted">—</span>', '<span class="muted">—</span>'],
+    ['<b>a</b>', '旋转', 'A', lim('−200', '200', '°'), m('50000 °/s'), m('500 °/s²'), m('2000')],
+    ['<b>b</b>', '旋转', 'B', off, m('50000 °/s'), m('500 °/s²'), m('2000')]
+  ], 0) + '</div>';
+
+var edited = function (t, u, w) { return '<div class="inp mono edited" style="flex:0 0 ' + w + 'px;width:' + w + 'px">' + t + '<span class="u">' + u + '</span></div>'; };
+var readBtn = F.btn('读取当前位置', 'crosshair');
+
+var detail = F.sec('轴 x', 'edit', [
+  ['软限位', F.toggle(true, '启用：超出范围的移动在发给控制器之前就被拦下')],
+  ['范围', '<div class="row" style="gap:6px">' + F.inp('0.000', { mono: true, u: 'mm', w: 130 }) + readBtn + '<span class="muted" style="margin:0 6px">到</span>' + edited('430.000', 'mm', 130) + readBtn + '</div>'],
+  ['速度', '<div class="row" style="gap:6px">' + F.inp('200', { mono: true, u: 'mm/s', w: 130 }) + F.inp('1000', { mono: true, u: 'mm/s²', w: 140 }) + F.inp('0', { mono: true, u: 'mm/s³', w: 130 }) + '<span class="muted" style="font-size:11.5px">最大速度 · 加速度 · 加加速度（0 = 不限）</span></div>'],
+  ['归位坐标', F.inp('0.000', { mono: true, u: 'mm', w: 130 })],
+  ['间隙补偿', '<div class="row" style="gap:10px"><span class="t2">单侧定位 · 0.100 mm</span><span class="src">' + ic('target') + '由校准测定</span><span class="link" style="font-size:12px">去校准页 ›</span></div>']
+], { rt: '直线轴 · 控制器轴 X · 驱动 GcodeDriver' });
+
+var park = F.sec('安全高度与停靠', 'park', [
+  ['Z 安全区', '<div class="row" style="gap:6px">' + F.inp('26.500', { mono: true, u: 'mm', w: 130 }) + '<span class="muted" style="margin:0 6px">到</span>' + F.inp('36.500', { mono: true, u: 'mm', w: 130 }) + F.btn('读取当前 Z', 'crosshair') + '<span class="muted" style="font-size:11.5px">z1 的；z2 跟着对称变</span></div>'],
+  ['停靠位置', '<div class="row" style="gap:6px">' + F.inp('302.300', { mono: true, pre: 'X', u: 'mm', w: 130 }) + F.inp('411.900', { mono: true, pre: 'Y', u: 'mm', w: 130 }) + readBtn + '<button class="btn sm">' + ic('move', 'sm') + '移过去' + ic('zap', 'moves') + '</button></div>'],
+  ['回零后', F.toggle(true, '移到停靠位置')]
+]);
+
+var body = F.sec('轴', 'move', null, { rt: '点一行，在下面改它', after: axes }) + detail + park;
+
+var guide = '<h4>软限位怎么定</h4><ol>'
+  + '<li>先回零，再用手动控制把轴慢慢移向一端，停在离机械极限 1–2 mm 的地方。</li>'
+  + '<li>点「读取当前位置」，把位置填进范围的这一头；另一头同样做。</li>'
+  + '<li>打开「启用」，点「应用」。以后超出范围的移动在发出之前就会被拦下。</li></ol>'
+  + '<h4>速度和加速度</h4><ul>'
+  + '<li>先用预设里的值。</li>'
+  + '<li>移动时抖动、丢步或撞停：先把加速度降 30%，速度不用动。</li>'
+  + '<li>控制器固件里也有上限，两边以小的为准。</li></ul>'
+  + '<h4>这里不改的</h4>'
+  + '<p>间隙补偿、相机像素尺寸这些要测才知道的值，由校准页测定，这里只显示结果和出处。</p>'
+  + '<div class="go"><span class="link">去校准页 ›</span></div>';
+
+MS.app({
+  topic: 'motion', body: body, guide: guide, top: { machine: 'on' },
+  foot: '1 项改动未应用：x 的范围上限 433.000 → 430.000 mm',
+  status: { text: '机器设置 · 运动与轴', right: ['配置已保存 · 20:05'] }
+});
+</script>
+</body>
+</html>

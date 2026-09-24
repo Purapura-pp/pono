@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Pono · 新建预设与应用预设（深色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+<script src="ms.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+var ck = function (on, text, note) {
+  return '<div class="ck"><span class="check' + (on ? ' on' : '') + '"></span><span>' + text + '</span>' + (note ? '<span class="muted">' + note + '</span>' : '') + '</div>';
+};
+
+var create = '<div class="dialog" style="left:96px;top:74px;width:640px">'
+  + '<div class="dh"><div class="di info">' + ic('plus') + '</div><div><b>新建机型预设</b></div></div>'
+  + '<div class="db">'
+  + '<div class="form">'
+  + '<label>名称</label>' + F.inp('车间 2 号机')
+  + '<label>说明</label>' + F.inp('从旧电脑的配置目录导入')
+  + '<label>来源</label>' + F.seg(['当前机器', '从配置目录导入'], 1)
+  + '<label>目录</label><div class="inp-row">' + F.inp('D:\\备份\\2号机\\.openpnp2', { mono: true }) + '<button class="btn sm">' + ic('folder', 'sm') + '浏览…</button></div>'
+  + '<label></label><div class="fhint info" style="color:var(--ok)">' + ic('check') + '找到 machine.xml 和 vision-settings.xml：2 个吸嘴，6 个吸嘴头，Marlin</div>'
+  + '</div>'
+  + '<p style="color:var(--text);font-weight:600;margin:4px 0 8px">预设里包含</p>'
+  + '<div class="checklist">'
+  + ck(true, '机型信息、轴、限位和速度')
+  + ck(true, '吸嘴结构、吸嘴头和气路')
+  + ck(true, '相机', '不含设备，每台电脑不同')
+  + ck(true, '连接和 G 代码', '不含端口')
+  + ck(true, '视觉流程', 'vision-settings.xml')
+  + ck(false, '校准结果', '像素尺寸、偏移、间隙；另一台同型号的机器要自己测')
+  + ck(false, '飞达', '通常每台机器不同')
+  + '</div>'
+  + '<p style="margin-top:12px;font-size:12px">存到 C:\\Users\\PP\\.openpnp2\\presets\\车间 2 号机，之后在「我的预设」里能改名和删除。</p>'
+  + '</div>'
+  + '<div class="df"><button class="btn sm ghost">取消</button><button class="btn sm primary">' + ic('save', 'sm') + '保存预设</button></div></div>';
+
+var diff = F.table([{ t: '项目', w: 96 }, { t: '现在' }, { t: '应用后' }], [
+  ['吸嘴', '1 个 · N1', '<b>2 个 · 双吸嘴取反</b>'],
+  ['吸嘴头', '1 个 · NT1', '<b>6 个 · N045 到 N75</b>'],
+  ['行程', '没设软限位', '<b>433 × 487 mm</b>'],
+  ['相机', 'Top 图片 · Bottom 仿真', '<b>Top、Bottom · 设备待选</b>'],
+  ['驱动', '仿真，不连真机', '<b>Marlin · 115200 · 端口待选</b>'],
+  ['视觉流程', '默认', '<b>LumenPnP 的</b>']
+]);
+
+var apply = '<div class="dialog" style="left:776px;top:74px;width:720px">'
+  + '<div class="dh"><div class="di warn">' + ic('layers') + '</div><div><b>应用预设「LumenPnP v4.1」？</b></div></div>'
+  + '<div class="db">'
+  + '<p class="what">机器定义会换成这个预设。飞达、元件、封装、单板、拼板和任务都不变。</p>'
+  + '<div class="boxed">' + diff + '</div>'
+  + '<p>端口和相机设备每台电脑不同，重启之后在「连接」和「相机」里选一次，然后去校准页采集问题。</p>'
+  + '<p class="muted" style="font-size:12px">应用前自动备份到 backups\\machine.xml.before-preset-2026-09-24_20.10；应用后 Pono 重启。</p>'
+  + '</div>'
+  + '<div class="df"><div class="left"><button class="btn sm ghost">' + ic('list', 'sm') + '看全部改动（42 项）</button></div><button class="btn sm ghost">取消</button><button class="btn sm primary">' + ic('refresh', 'sm') + '应用并重启</button></div></div>';
+
+var notes = '<div class="card" style="position:absolute;left:96px;top:670px;width:640px;z-index:9"><div class="ch">' + ic('info', 'sm') + '两个对话框的规则</div>'
+  + '<div style="padding:10px 16px 14px;font-size:12px;color:var(--text-2);line-height:1.7">'
+  + '<b style="color:var(--text)">新建预设</b>：默认只存机器定义；校准结果和飞达默认不勾，因为另一台机器要自己测、自己装。<br>'
+  + '<b style="color:var(--text)">应用预设</b>：先列出会改什么，再备份、替换机器定义、重启。不确认什么都不改；Esc 等于取消。</div></div>';
+
+var body = F.sec('内置预设', 'layers', null, { after: '<div class="pcards"><div class="pcard on"><div class="pv">' + MS.machinePic(2) + '</div><div class="pb"><div class="pt">LumenPnP v4.1</div><div class="ps">2 个吸嘴 · 433 × 487 mm</div></div></div></div>' })
+  + F.sec('我的预设', 'user', null, { after: '<div class="pcards"><div class="pcard add" style="min-height:160px"><div class="pi">' + ic('plus') + '</div><b>新建预设</b></div></div>' });
+
+MS.app({
+  topic: 'presets', body: body,
+  machine: { name: '默认机器', tag: '没用预设', sub: '新装时的仿真机器 · 1 个吸嘴 · 不连真机' },
+  status: { text: '机器设置 · 机型与预设', right: ['配置已保存 · 20:05'] },
+  overlay: '<div class="scrim"></div>' + create + apply + notes
+});
+</script>
+</body>
+</html>

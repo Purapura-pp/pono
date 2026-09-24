@@ -50,10 +50,20 @@ window.Frame = (function () {
     return s + '</header>';
   }
 
-  function rail(active, badges) {
+  // The rail after the machine settings and calibration redo: the machine's own settings page in
+  // place of the element tree, and no separate issues page.
+  var NAV_REDO = [
+    ['job', '任务', 'job'], ['feeders', '飞达', 'feeder'], ['parts', '元件', 'parts'],
+    ['packages', '封装', 'pkg'], ['boards', '单板', 'board'], ['panels', '拼板', 'layers'],
+    ['vision', '视觉', 'eye'], null,
+    ['machine-settings', '机器设置', 'sliders'], ['calibration', '校准', 'target'],
+    ['log', '日志', 'log']
+  ];
+
+  function rail(active, badges, nav) {
     badges = badges || {};
     var s = '<aside class="rail">';
-    NAV.forEach(function (n) {
+    (nav || NAV).forEach(function (n) {
       if (!n) {
         s += '<div class="sep"></div>';
         return;
@@ -124,7 +134,10 @@ window.Frame = (function () {
         s += '<tr class="grp"><td colspan="' + cols.length + '">' + row + '</td></tr>';
         return;
       }
-      s += '<tr' + (i === sel ? ' class="sel"' : '') + '>';
+      // A row may come as { cls: 'sub', cells: [...] } to carry a class of its own.
+      var trc = [i === sel ? 'sel' : '', row.cls || ''].join(' ').trim();
+      if (row.cells) row = row.cells;
+      s += '<tr' + (trc ? ' class="' + trc + '"' : '') + '>';
       row.forEach(function (cell, j) {
         var c = cols[j] || {};
         var cls = [c.cls || '', c.r ? 'r' : ''].join(' ').trim();
@@ -214,7 +227,7 @@ window.Frame = (function () {
 
   function app(o) {
     var cls = 'app side-500' + (o.side ? '' : ' no-side');
-    var s = '<div class="' + cls + '">' + topbar(o.top) + rail(o.page, o.badges)
+    var s = '<div class="' + cls + '">' + topbar(o.top) + rail(o.page, o.badges, o.nav)
       + '<main class="center' + (o.centerClass ? ' ' + o.centerClass : '') + '">' + o.center + '</main>'
       + (o.side || '') + status(o.status) + '</div>' + (o.overlay || '');
     document.body.insertAdjacentHTML('beforeend', s);
@@ -225,6 +238,6 @@ window.Frame = (function () {
   return {
     ic: ic, app: app, topbar: topbar, rail: rail, status: status, strip: strip, camera: camera,
     dro: dro, table: table, btn: btn, sep: sep, filter: filter, seg: seg, dock: dock, sec: sec,
-    side: side, inp: inp, toggle: toggle
+    side: side, inp: inp, toggle: toggle, NAV_REDO: NAV_REDO
   };
 })();

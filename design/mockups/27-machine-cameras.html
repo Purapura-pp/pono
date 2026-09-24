@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Pono · 机器设置 · 相机（浅色）</title>
+<link rel="stylesheet" href="mock.css">
+<script src="icons.js"></script>
+<script src="scene.js"></script>
+<script src="frame.js"></script>
+<script src="ms.js"></script>
+</head>
+<body>
+<script>
+var F = Frame, ic = F.ic;
+
+var cam = function (name, text, state, on) {
+  return '<div class="camcard' + (on ? ' on' : '') + '"><div class="ci">' + ic('camera') + '</div><div class="grow" style="min-width:0"><b>' + name + '</b><span>' + text + '</span></div>' + state + '</div>';
+};
+var cams = F.sec('相机', 'camera', null, {
+  rt: '2 个',
+  after: '<div class="camcards">'
+    + cam('Top', '下视 · 装在头 H1 · 1600 × 1200', '<span class="status ok">已选好 · 待应用</span>', true)
+    + cam('Bottom', '上视 · 固定在机器上', '<span class="status warn">本机找不到设备</span>')
+    + '</div>'
+});
+
+var device = '<div class="row" style="gap:6px"><div class="inp edited" style="flex:0 0 300px;width:300px">USB 2.0 Camera · 第 1 个' + ic('chevdown', 'sm caret') + '</div>' + F.btn('刷新', 'refresh') + '</div>';
+var form = '<div class="form">'
+  + '<label>设备</label>' + device
+  + '<div class="fhint" style="grid-column:2">' + ic('alert') + '配置里记的设备在这台电脑上没有。选好之后看右边的预览，确认是顶部相机的画面。</div>'
+  + '<label>格式</label><div class="row" style="gap:6px">' + F.inp('1600 × 1200', { select: true, w: 170 }) + F.inp('MJPG · 30 fps', { select: true, w: 150 }) + '</div>'
+  + '<label>朝向</label>' + F.seg(['下视 · 装在头上', '上视 · 固定'], 0)
+  + '<label>装在</label>' + F.inp('头 H1', { select: true, w: 170 })
+  + '<label>补光</label><div class="row" style="gap:10px">' + F.inp('LED', { select: true, w: 170 }) + F.toggle(true, '拍照前开灯') + '</div>'
+  + '</div>';
+var preview = '<div class="preview">' + Scene.pcb({ footprint: false }) + '<div class="glass">' + ic('camera', 'sm') + 'Top · 预览</div></div>';
+var setup = F.sec('Top · 设备与安装', 'sliders', null, {
+  after: '<div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start">' + form + preview + '</div>'
+});
+
+var measured = F.sec('由校准测定', 'target', [
+  ['像素尺寸', '<div class="row" style="gap:10px"><span class="mono t2">0.01302 × 0.01309 mm/px</span><span class="src">' + ic('target') + '校准 · 相机初标</span></div>'],
+  ['默认高度', '<div class="row" style="gap:10px"><span class="mono t2">15.000 mm</span><span class="src">' + ic('target') + '校准 · 相机初标</span></div>'],
+  ['稳定方式', '<div class="row" style="gap:10px"><span class="mono t2">固定等待 1000 ms</span><span class="src">' + ic('alert') + '校准页建议改成自适应</span><span class="link" style="font-size:12px">去校准页 ›</span></div>']
+], { rt: '只读，改动在校准页确认' });
+
+var body = cams + setup + measured;
+
+var guide = '<h4>相机设备怎么选</h4><ol>'
+  + '<li>相机插在哪个 USB 口，决定它在列表里的名字和序号；换了口或换了电脑，都要重新选一次。</li>'
+  + '<li>两个相机型号一样时，逐个选中看预览：看到台面和板子的是顶部相机，看到吸嘴的是底部相机。</li>'
+  + '<li>格式先选相机支持的最高分辨率；画面卡顿就降一档，或者改用 MJPG。</li></ol>'
+  + '<h4>哪些在这里设，哪些要测</h4><ul>'
+  + '<li>在这里设：设备、格式、朝向、装在哪、补光灯。</li>'
+  + '<li>由校准页测定：像素尺寸、底部相机的位置、镜头畸变、稳定时间。这里只显示结果和出处。</li></ul>'
+  + '<div class="go"><span class="link">去校准页 ›</span></div>';
+
+MS.app({
+  topic: 'cameras', body: body, guide: guide,
+  foot: '1 项改动未应用：Top 的设备 → USB 2.0 Camera · 第 1 个',
+  status: { text: '机器设置 · 相机', right: ['配置已保存 · 20:05'] }
+});
+</script>
+</body>
+</html>
