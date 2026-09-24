@@ -384,9 +384,43 @@ public class UiRuler {
                 say("no G-code driver: " + e);
             }
         });
+        addSampleFeeders(machine);
     }
 
     private static final String GCODE_DRIVER = "\u4e3b\u63a7";
+
+    /**
+     * One feeder of each kind P9 W5 redid, for the feeders page's own scenes: added only when
+     * they are asked for, so that the feeders page itself is photographed as it is.
+     */
+    private void addSampleFeeders(Machine machine) {
+        if (sceneFilter.stream().noneMatch(s -> s.startsWith("feeder-"))) {
+            return;
+        }
+        Object[][] samples = {
+                { new org.openpnp.machine.reference.feeder.ReferenceTrayFeeder(), "\u6599\u76d8-1" },
+                { new org.openpnp.machine.reference.feeder.ReferenceAutoFeeder(), "\u81ea\u52a8-1" },
+                { new org.openpnp.machine.reference.feeder.ReferenceDragFeeder(), "\u62d6\u62fd-1" },
+                { new org.openpnp.machine.reference.feeder.ReferencePushPullFeeder(), "\u63a8\u62c9-1" },
+                { new org.openpnp.machine.reference.feeder.BlindsFeeder(), "\u767e\u53f6\u7a97-1" },
+                { new org.openpnp.machine.reference.feeder.ReferenceHeapFeeder(), "\u5806\u6599-1" },
+        };
+        edt(() -> {
+            for (Object[] sample : samples) {
+                Feeder feeder = (Feeder) sample[0];
+                try {
+                    feeder.setName((String) sample[1]);
+                    if (!configuration.getParts().isEmpty()) {
+                        feeder.setPart(configuration.getParts().get(0));
+                    }
+                    ((org.openpnp.spi.base.AbstractMachine) machine).addFeeder(feeder);
+                }
+                catch (Exception e) {
+                    say("no sample feeder " + sample[1] + ": " + e);
+                }
+            }
+        });
+    }
 
     private void openJob() throws Exception {
         Job job = configuration.loadJob(new File(config, "jobs/demo-board.job.xml"));
@@ -437,6 +471,14 @@ public class UiRuler {
             String label = rail.getLabel(page);
             scenes.add(new Scene(id, label, page));
             sceneLabels.put(id, label);
+            if (id.equals("feeders")) {
+                // The kinds of feeder whose forms P9 W5 redid, each on the feeders page.
+                for (String[] extra : FEEDER_SCENES) {
+                    String extraLabel = label + " \u00b7 " + extra[1];
+                    scenes.add(new Scene(extra[0], extraLabel, page));
+                    sceneLabels.put(extra[0], extraLabel);
+                }
+            }
             if (id.equals("machine")) {
                 // The machine page shows one element's sheets at a time: the core ones of P9 W1
                 // each get a photograph of their own.
@@ -485,7 +527,33 @@ public class UiRuler {
             { "actuator-machine", "\u6267\u884c\u5668 LIGHT_BOTTOM", "LIGHT_BOTTOM", null },
     };
 
+    /** The feeders page's own scenes: {id, label, feeder name, tab or null}. */
+    private static final String[][] FEEDER_SCENES = {
+            { "feeder-tray", "\u6599\u76d8\u98de\u8fbe", "\u6599\u76d8-1", null },
+            { "feeder-auto", "\u81ea\u52a8\u98de\u8fbe", "\u81ea\u52a8-1", null },
+            { "feeder-drag", "\u62d6\u62fd\u98de\u8fbe", "\u62d6\u62fd-1", null },
+            { "feeder-pushpull", "\u63a8\u62c9\u98de\u8fbe", "\u63a8\u62c9-1", null },
+            { "feeder-pushpull-motion", "\u63a8\u62c9\u8fd0\u52a8", "\u63a8\u62c9-1", "\u63a8\u62c9\u8fd0\u52a8" },
+            { "feeder-blinds", "\u767e\u53f6\u7a97\u98de\u8fbe", "\u767e\u53f6\u7a97-1", null },
+            { "feeder-blinds-array", "\u767e\u53f6\u7a97\u9635\u5217", "\u767e\u53f6\u7a97-1", "\u98de\u8fbe\u9635\u5217" },
+            { "feeder-heap", "\u5806\u6599\u98de\u8fbe", "\u5806\u6599-1", null },
+    };
+
+    private static boolean feederScene(String id) {
+        for (String[] extra : FEEDER_SCENES) {
+            if (extra[0].equals(id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static String[] machineScene(String id) {
+        for (String[] extra : FEEDER_SCENES) {
+            if (extra[0].equals(id)) {
+                return extra;
+            }
+        }
         for (String[] extra : MACHINE_SCENES) {
             if (extra[0].equals(id)) {
                 return extra;
@@ -561,7 +629,11 @@ public class UiRuler {
                 break;
             default: {
                 String[] extra = machineScene(scene.id);
-                if (extra != null) {
+                if (extra != null && feederScene(scene.id)) {
+                    String name = extra[2];
+                    expect(missed, selectRow(page, name::equals), extra[1]);
+                }
+                else if (extra != null) {
                     // By its name: a group's note lists the names of what is under it.
                     String name = extra[2];
                     expect(missed, name.startsWith("#") ? selectHolder(page, name)
