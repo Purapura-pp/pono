@@ -5,7 +5,7 @@ import javax.swing.SwingUtilities;
 import org.openpnp.Translations;
 import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.neoden4.wizards.Neoden4SignalerConfigurationWizard;
+import org.openpnp.machine.neoden4.wizards.Neoden4Forms;
 import org.openpnp.spi.Driver;
 import org.openpnp.spi.base.AbstractJobProcessor;
 import org.openpnp.spi.base.AbstractSignaler;
@@ -126,7 +126,7 @@ public class Neoden4Signaler extends AbstractSignaler implements Runnable {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new Neoden4SignalerConfigurationWizard(this);
+        return Neoden4Forms.signaler(this);
     }
 
     public boolean isEnableErrorSound() {

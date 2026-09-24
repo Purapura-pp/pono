@@ -23,7 +23,7 @@ import java.awt.image.BufferedImage;
 
 import org.opencv.core.Mat;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.neoden4.wizards.Neoden4CameraConfigurationWizard;
+import org.openpnp.machine.neoden4.wizards.Neoden4Forms;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.model.Configuration;
 import org.openpnp.spi.PropertySheetHolder;
@@ -225,7 +225,7 @@ public class Neoden4Camera extends ReferenceCamera {
 
 	@Override
 	public Wizard getConfigurationWizard() {
-		return new Neoden4CameraConfigurationWizard(this);
+		return Neoden4Forms.camera(this);
 	}
 
 	@Override

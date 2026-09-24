@@ -6,7 +6,7 @@ import java.util.concurrent.TimeoutException;
 
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 // import org.openpnp.logging.CalibrationLogger;
-import org.openpnp.machine.neoden4.wizards.Neoden4DriverConfigurationWizard;
+import org.openpnp.machine.neoden4.wizards.Neoden4Forms;
 import org.openpnp.machine.reference.ReferenceActuator;
 import org.openpnp.machine.reference.ReferenceHead;
 import org.openpnp.machine.reference.ReferenceMachine;
@@ -1263,7 +1263,8 @@ public class NeoDen4Driver extends AbstractReferenceDriver {
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
             new PropertySheetWizardAdapter(super.getConfigurationWizard()),
-            new PropertySheetWizardAdapter(new Neoden4DriverConfigurationWizard(this), "Machine")
+            new PropertySheetWizardAdapter(Neoden4Forms.driver(this),
+                    org.openpnp.Translations.getString("Neoden4Forms.Machine")) //$NON-NLS-1$
         };
     }
 

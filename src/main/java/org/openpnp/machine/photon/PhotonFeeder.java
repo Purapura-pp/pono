@@ -361,7 +361,7 @@ public class PhotonFeeder extends ReferenceFeeder {
             sheets.add(new FeederPropertySheet(this));
         }
 
-        sheets.add(new GlobalConfigPropertySheet());
+        sheets.add(new GlobalConfigPropertySheet(getMachine()));
 
         return sheets.toArray(new PropertySheet[0]);
     }

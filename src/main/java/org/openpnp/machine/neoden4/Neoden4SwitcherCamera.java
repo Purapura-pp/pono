@@ -5,7 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.neoden4.wizards.Neoden4SwitcherCameraConfigurationWizard;
+import org.openpnp.machine.neoden4.wizards.Neoden4Forms;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.PropertySheetHolder;
@@ -97,7 +97,7 @@ public class Neoden4SwitcherCamera extends ReferenceCamera {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new Neoden4SwitcherCameraConfigurationWizard(this);
+        return Neoden4Forms.switcher(this);
     }
 
     public String getCameraId() {
