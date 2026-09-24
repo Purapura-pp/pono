@@ -366,6 +366,15 @@ public class FeedersPanel extends JPanel implements WizardContainer {
      * as a pill and the last pick as a time ago with the time itself in the tooltip.
      */
     private void installRenderers() {
+        // What gives way on a narrow window: the type and the last pick, which the inspector has
+        // too. The names, the part included, and the status are not cut below what they say.
+        org.openpnp.gui.support.TableUtils.setColumnKinds(table, org.openpnp.gui.support.TableUtils.Kind.Check,
+                org.openpnp.gui.support.TableUtils.Kind.Id, org.openpnp.gui.support.TableUtils.Kind.Secondary,
+                org.openpnp.gui.support.TableUtils.Kind.Id, org.openpnp.gui.support.TableUtils.Kind.Id,
+                org.openpnp.gui.support.TableUtils.Kind.Number, org.openpnp.gui.support.TableUtils.Kind.Number,
+                org.openpnp.gui.support.TableUtils.Kind.Status, org.openpnp.gui.support.TableUtils.Kind.Secondary,
+                org.openpnp.gui.support.TableUtils.Kind.Secondary, org.openpnp.gui.support.TableUtils.Kind.Secondary,
+                org.openpnp.gui.support.TableUtils.Kind.Secondary);
         javax.swing.table.TableColumnModel columns = table.getColumnModel();
         columns.getColumn(FeedersTableModel.NAME).setCellRenderer(new DefaultTableCellRenderer() {
             @Override

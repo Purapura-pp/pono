@@ -478,7 +478,9 @@ public class TableUtils {
                     max = natural + 24;
                     break;
                 case Secondary:
-                    min = Math.min(header, natural);
+                    // Whole or not at all: squeezed to its header, it cut every value short
+                    // where hiding it would have left the others whole.
+                    min = natural;
                     max = Integer.MAX_VALUE;
                     break;
                 case Name:

@@ -346,6 +346,18 @@ public class DockPanel extends RoundedPanel {
             super.doLayout();
         }
 
+        /**
+         * Narrower than its parts: the row takes off its buttons' words to fit the width it is
+         * given, and it has to be given the width there is for that. With the sum of its parts as
+         * its minimum, the page laid it out wider than the dock and the dock cut its end off.
+         */
+        @Override
+        public Dimension getMinimumSize() {
+            Dimension size = super.getMinimumSize();
+            size.width = Math.min(size.width, com.formdev.flatlaf.util.UIScale.scale(160));
+            return size;
+        }
+
         private void fitWords() {
             if (words.isEmpty() || getWidth() <= 0) {
                 return;
