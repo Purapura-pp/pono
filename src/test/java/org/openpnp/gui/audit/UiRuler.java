@@ -393,7 +393,7 @@ public class UiRuler {
      * One feeder of each kind P9 W5 redid, for the feeders page's own scenes: added only when
      * they are asked for, so that the feeders page itself is photographed as it is.
      */
-    private void addSampleFeeders(Machine machine) {
+    private void addSampleFeeders(Machine machine) throws Exception {
         if (sceneFilter.stream().noneMatch(s -> s.startsWith("feeder-"))) {
             return;
         }
