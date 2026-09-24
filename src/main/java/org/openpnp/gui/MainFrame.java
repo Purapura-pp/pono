@@ -551,7 +551,8 @@ public class MainFrame extends JFrame {
      * view tools and the machine controls.
      */
     private void showCameraMode(org.openpnp.gui.shell.PageLayouts.Camera camera) {
-        if (cameraStage == null) {
+        // Production mode keeps the camera's own overlays hidden whatever page is switched to.
+        if (cameraStage == null || operatorMode) {
             return;
         }
         boolean strip = camera == org.openpnp.gui.shell.PageLayouts.Camera.Small;
