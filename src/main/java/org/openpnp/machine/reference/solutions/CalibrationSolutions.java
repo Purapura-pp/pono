@@ -1307,7 +1307,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                         done.complete(false);
                     }
                     MainFrame.get()
-                             .getIssuesAndSolutionsTab()
+                             .getCalibrationTab()
                              .solutionChanged();
                 }
 
@@ -1327,7 +1327,7 @@ public class CalibrationSolutions implements Solutions.Subject {
                     // It can be called twice, from a worker thread; a future completes once.
                     done.complete(false);
                     MainFrame.get()
-                             .getIssuesAndSolutionsTab()
+                             .getCalibrationTab()
                              .solutionChanged();
                 }
             };

@@ -154,7 +154,7 @@ public class UiRuler {
                 { "PartsPanel", "parts" }, { "PackagesPanel", "packages" },
                 { "BoardsPanel", "boards" }, { "PanelsPanel", "panels" },
                 { "VisionSettingsPanel", "vision" }, { "MachineSettingsPanel", "machine" },
-                { "IssuesAndSolutionsPanel", "issues" }, { "CalibrationPanel", "calibration-collected" },
+                { "CalibrationPanel", "calibration-collected" },
                 { "LogPanel", "log" },
                 { "SettingsPanel", "settings" } };
         for (String[] id : ids) {

@@ -183,7 +183,6 @@ public class MainFrame extends JFrame {
     private JPanel panelCameraAndInstructions;
     private JPanel panelMachine;
     private MachineSetupPanel machineSetupPanel;
-    private IssuesAndSolutionsPanel issuesAndSolutionsPanel;
     private VisionSettingsPanel visionSettingsPanel;
     private JDialog frameCamera;
     private Map<KeyStroke, Action> hotkeyActionMap;
@@ -290,8 +289,8 @@ public class MainFrame extends JFrame {
 
     private org.openpnp.gui.machinesettings.MachineSettingsPanel machineSettingsPanel;
 
-    public IssuesAndSolutionsPanel getIssuesAndSolutionsTab() {
-        return issuesAndSolutionsPanel;
+    public TopBarPanel getTopBar() {
+        return topBarPanel;
     }
 
     private JPanel contentPane;
@@ -748,7 +747,6 @@ public class MainFrame extends JFrame {
         machineSetupPanel = new MachineSetupPanel(configuration);
         machineSettingsPanel = new org.openpnp.gui.machinesettings.MachineSettingsPanel(configuration, this,
                 machineSetupPanel);
-        issuesAndSolutionsPanel = new IssuesAndSolutionsPanel(configuration, this);
         visionSettingsPanel = new VisionSettingsPanel(configuration, this);
 
         menuBar = new JMenuBar();
@@ -1263,9 +1261,8 @@ public class MainFrame extends JFrame {
         navigationRail.addGap();
         // The machine's own settings by topic, the element tree the last of them.
         addNavigation("MachineSettings", org.openpnp.gui.shell.Ui.icon("sliders", 20), machineSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        // The issues page finds and measures; the calibration page after it carries out. The
-        // diagnostics page they replace was both, and neither.
-        addNavigation("IssuesAndSolutions", org.openpnp.gui.shell.Ui.icon("alert", 20), issuesAndSolutionsPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        // Collects what the machine needs and carries it out; the issues page and the
+        // diagnostics page before it are in it.
         calibrationPanel = new CalibrationPanel(configuration, this);
         addNavigation("Calibration", org.openpnp.gui.shell.Ui.icon("target", 20), calibrationPanel); //$NON-NLS-1$ //$NON-NLS-2$
         logPanel = new LogPanel(configuration);
@@ -1324,7 +1321,7 @@ public class MainFrame extends JFrame {
             }});
         
         topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel, menuBar,
-                () -> showTab(issuesAndSolutionsPanel), this::openCommandPalette,
+                () -> showCalibrationStep(null, null), this::openCommandPalette,
                 stopMachineAction, this::saveConfig);
         contentPane.add(topBarPanel, BorderLayout.NORTH);
         // The top bar is the title bar, where the look and feel can put the window's buttons in

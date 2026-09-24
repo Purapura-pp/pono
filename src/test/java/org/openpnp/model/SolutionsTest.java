@@ -21,7 +21,7 @@ import org.openpnp.model.Solutions.Subject;
 /**
  * Solutions used to be a Swing table model that also put up its own dialogs, which is why it sits
  * in the model package but could only really run under a GUI. It now reports through property
- * changes and asks questions through UserInteraction; the table lives in SolutionsTableModel.
+ * changes and asks questions through UserInteraction; the calibration page lays its issues out.
  * <p>
  * These run with no GUI: MainFrame is never constructed and no Swing table is attached.
  */

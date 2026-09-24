@@ -137,25 +137,21 @@ public final class SetupChecks {
     }
 
     /**
-     * Whether an issue of Issues and Solutions says what one of these checks says, or what the
-     * nozzles topic's structure section is for: the calibration page leaves it to the machine
-     * settings page, which shows it where it is fixed.
+     * Whether an issue of Issues and Solutions says what one of these checks says: the calibration
+     * page leaves it to the machine settings page, which shows it where it is fixed.
      */
     public static boolean covers(org.openpnp.model.Solutions.Issue issue) {
         Object subject = issue.getSubject();
         String text = issue.getUntranslatedIssue();
-        if (text == null) {
+        if (text == null || !(issue instanceof org.openpnp.model.Solutions.PlainIssue)) {
             return false;
         }
-        if (subject instanceof ReferenceNozzleTip && issue instanceof org.openpnp.model.Solutions.PlainIssue) {
+        if (subject instanceof ReferenceNozzleTip) {
             return text.contains("Max. Pick Tolerance") || text.contains("Min. Part Diameter") //$NON-NLS-1$ //$NON-NLS-2$
                     || text.contains("Max. Part Diameter"); //$NON-NLS-1$
         }
-        if (subject instanceof OpenPnpCaptureCamera && issue instanceof org.openpnp.model.Solutions.PlainIssue) {
-            return text.equals(Translations.getString("CameraSolutions.Connect.Issue")); //$NON-NLS-1$
-        }
-        if (subject instanceof Head) {
-            return text.equals(Translations.getString("HeadSolutions.Issue.CreateNozzles")); //$NON-NLS-1$
+        if (subject instanceof OpenPnpCaptureCamera) {
+            return text.equals(org.openpnp.machine.reference.solutions.CameraSolutions.NOT_CONNECTED);
         }
         return false;
     }

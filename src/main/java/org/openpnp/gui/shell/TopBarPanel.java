@@ -87,58 +87,20 @@ public class TopBarPanel extends JPanel {
     /** The bell, with how many things want attention in a badge on it. */
     private final BadgeIcon bellIcon = new BadgeIcon(Ui.icon("bell")); //$NON-NLS-1$
 
-    /**
-     * The count on the bell: the issues still open, and the calibration steps they call for, each
-     * counted once however many of its issues there are. It was a bell that only opened the issues
-     * page, saying nothing about whether there was anything there.
-     */
-    private void followNotifications(JButton bell) {
-        configuration.addListener(new org.openpnp.ConfigurationListener.Adapter() {
-            @Override
-            public void configurationComplete(Configuration configuration) throws Exception {
-                if (!(configuration.getMachine() instanceof org.openpnp.machine.reference.ReferenceMachine)) {
-                    return;
-                }
-                org.openpnp.model.Solutions solutions =
-                        ((org.openpnp.machine.reference.ReferenceMachine) configuration.getMachine()).getSolutions();
-                java.beans.PropertyChangeListener recount = e -> javax.swing.SwingUtilities.invokeLater(() -> {
-                    int[] counts = countNotifications(solutions.getIssues());
-                    bellIcon.setCount(counts[0] + counts[1], counts[2] > 0);
-                    bell.setToolTipText(counts[0] + counts[1] == 0
-                            ? Translations.getString("TopBar.Notifications.toolTipText") //$NON-NLS-1$
-                            : String.format(Translations.getString("TopBar.Notifications.Count"), //$NON-NLS-1$
-                                    counts[0], counts[1]));
-                    bell.repaint();
-                });
-                solutions.addPropertyChangeListener("issues", recount); //$NON-NLS-1$
-                solutions.addPropertyChangeListener("issue", recount); //$NON-NLS-1$
-            }
-        });
-    }
+    private JButton bell;
 
     /**
-     * @return The open issues that are not about calibrating, the calibration steps the others
-     *         call for, and how many of the first are warnings or worse.
+     * The count on the bell: what the calibration page has to do and its other hints, as its rows
+     * count them - the same suggestion about six nozzle tips is one. Red while something measured
+     * waits to be confirmed or the machine settings lack something the machine needs.
      */
-    static int[] countNotifications(java.util.List<org.openpnp.model.Solutions.Issue> issues) {
-        java.util.Set<String> steps = new java.util.HashSet<>();
-        int others = 0;
-        int severe = 0;
-        for (org.openpnp.model.Solutions.Issue issue : issues) {
-            if (issue.getState() != org.openpnp.model.Solutions.State.Open) {
-                continue;
-            }
-            if (issue.getCalibrationStep() != null) {
-                steps.add(issue.getCalibrationStep() + "@" + System.identityHashCode(issue.getCalibrationSubject())); //$NON-NLS-1$
-            }
-            else {
-                others++;
-                if (issue.getSeverity().ordinal() >= org.openpnp.model.Solutions.Severity.Warning.ordinal()) {
-                    severe++;
-                }
-            }
+    public void setNotifications(int toDo, int hints, boolean severe) {
+        bellIcon.setCount(toDo + hints, severe);
+        if (bell != null) {
+            bell.setToolTipText(toDo + hints == 0 ? Translations.getString("TopBar.Notifications.toolTipText") //$NON-NLS-1$
+                    : String.format(Translations.getString("TopBar.Notifications.Count"), toDo, hints)); //$NON-NLS-1$
+            bell.repaint();
         }
-        return new int[] { others, steps.size(), severe };
     }
 
     /** An icon with a count in a small capsule at its top right, red when something is serious. */
@@ -286,11 +248,10 @@ public class TopBarPanel extends JPanel {
         operatorEntry.setVisible(false);
         add(neverNarrower(operatorEntry));
         add(Box.createHorizontalStrut(6));
-        JButton bell = Ui.iconButton(bellIcon, Ui.Size.Md, Ui.Variant.Ghost,
+        bell = Ui.iconButton(bellIcon, Ui.Size.Md, Ui.Variant.Ghost,
                 Translations.getString("TopBar.Notifications.toolTipText")); //$NON-NLS-1$
         bell.addActionListener(e -> openIssues.run());
         add(neverNarrower(bell));
-        followNotifications(bell);
         add(Box.createHorizontalStrut(6));
         themeButton = Ui.iconButton(Ui.icon(FlatLaf.isLafDark() ? "moon" : "sun"), Ui.Size.Md, //$NON-NLS-1$ //$NON-NLS-2$
                 Ui.Variant.Ghost, Translations.getString("TopBar.Theme.toolTipText")); //$NON-NLS-1$

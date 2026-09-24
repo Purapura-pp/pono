@@ -25,8 +25,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-import org.openpnp.Translations;
-import org.openpnp.gui.support.Icons;
 import org.openpnp.machine.reference.ReferenceActuator;
 import org.openpnp.machine.reference.ReferenceHead;
 import org.openpnp.machine.reference.ReferenceHead.NozzleSolution;
@@ -76,115 +74,15 @@ public class HeadSolutions implements Solutions.Subject {
     @Override
     public void findIssues(Solutions solutions) {
         Camera camera = null;
-        boolean isDefaultHead = false;
         try {
             camera = head.getDefaultCamera();
-            isDefaultHead = (head.getMachine().getDefaultHead() == head); 
         }
         catch (Exception e) {
             // Ignore missing camera, the head solutions are simply skipped.
         }
         if (camera != null) {
-
-            final Camera theCamera = camera;
-            if (isDefaultHead && solutions.isTargeting(Milestone.Welcome)) { 
-                solutions.add(new Solutions.Issue(
-                        head,
-                        Translations.getString("HeadSolutions.Issue.CreateNozzles"), //$NON-NLS-1$
-                        Translations.getString("HeadSolutions.Solution.CreateNozzles"), //$NON-NLS-1$
-                        Solutions.Severity.Fundamental,
-                        "https://github.com/openpnp/openpnp/wiki/Setup-and-Calibration%3A-Nozzle-Setup") {
-
-                    {
-                        NozzleSolution nozzleSolution = head.getNozzleSolution();
-                        if (nozzleSolution == null) {
-                            // This is a first time evaluation. Determine the current machine configuration.
-                            // Note, this will fail, if this is a mixed or otherwise exotic solution machine, but the user is responsible to 
-                            // not accept the solution then.
-                            int multiplier = 0;
-                            nozzleSolution = NozzleSolution.Standalone;
-                            for (Nozzle nozzle : head.getNozzles()) {
-                                if (nozzle.getAxisZ() instanceof ReferenceCamCounterClockwiseAxis) {
-                                    multiplier++; // counts dual cam
-                                    nozzleSolution = NozzleSolution.DualCam;
-                                }
-                                else if (nozzle.getAxisZ() instanceof ReferenceMappedAxis) {
-                                    // not counted (will be counted by its ReferenceControllerAxis counterpart)
-                                    nozzleSolution = NozzleSolution.DualNegated;
-                                }
-                                else if (nozzle.getAxisZ() instanceof ReferenceControllerAxis) {
-                                    multiplier++; // counts standalone or dual negated 
-                                }
-                            }
-                            if (multiplier == 0) {
-                                multiplier++;
-                            }
-                            head.setNozzleSolution(nozzleSolution);
-                            head.setNozzleSolutionsMultiplier(multiplier);
-                            if (! solutions.isAtMostTargeting(Milestone.Welcome)) {
-                                // If this is not a fresh machine i.e. not starting with the Welcome Milestone, 
-                                // remember this as already solved (it can be revisited by re-opening it).
-                                solutions.setSolutionsIssueSolved(this, true);
-                            }
-                        }
-                        setChoice(nozzleSolution);
-                        multiplier = head.getNozzleSolutionsMultiplier();
-                    }
-                    @Override
-                    public void setState(Solutions.State state) throws Exception {
-                        if (state == State.Solved) {
-                            if (solutions.confirm(Translations.getString(
-                                    "HeadSolutions.Issue.CreateNozzles.Confirm"), true)) { //$NON-NLS-1$
-                                createNozzleSolution(theCamera, (NozzleSolution) getChoice(), multiplier);
-                                // Remember this is solved (it can be revisited).
-                                solutions.setSolutionsIssueSolved(this, true);
-                                super.setState(state);
-                            }
-                        }
-                        else {
-                            solutions.setSolutionsIssueSolved(this, false);
-                            super.setState(state);
-                        }
-                    }
-
-                    private int multiplier;
-
-                    @Override
-                    public Solutions.Issue.CustomProperty[] getProperties() {
-                        return new Solutions.Issue.CustomProperty[] {
-                                new Solutions.Issue.IntegerProperty(
-                                        Translations.getString(
-                                                "HeadSolutions.Solution.CreateNozzles.NumberOfNozzlesLabel.text"), //$NON-NLS-1$
-                                        Translations.getString(
-                                                "HeadSolutions.Solution.CreateNozzles.NumberOfNozzlesLabel.toolTipText" //$NON-NLS-1$
-                                        ), 1, 8) {
-                                    @Override
-                                    public int get() {
-                                        return multiplier;
-                                    }
-                                    @Override
-                                    public void set(int value) {
-                                        multiplier = value;
-                                    }
-                                },
-                        };
-                    }
-                    @Override
-                    public Solutions.Issue.Choice[] getChoices() {
-                        return new Solutions.Issue.Choice[]{
-                                new Solutions.Issue.Choice(NozzleSolution.Standalone, Translations.getString(
-                                        "HeadSolutions.Solution.CreateNozzles.Choice.0"), //$NON-NLS-1$
-                                        Icons.nozzleSingle),
-                                new Solutions.Issue.Choice(NozzleSolution.DualNegated, Translations.getString(
-                                        "HeadSolutions.Solution.CreateNozzles.Choice.1"), //$NON-NLS-1$
-                                        Icons.nozzleDualNeg),
-                                new Solutions.Issue.Choice(NozzleSolution.DualCam, Translations.getString(
-                                        "HeadSolutions.Solution.CreateNozzles.Choice.2"), //$NON-NLS-1$
-                                        Icons.nozzleDualCam),
-                        };
-                    }
-                });
-            }
+            // The nozzles' structure is the machine settings page's: its nozzles topic reads it off
+            // the axes, and changes it after listing what it makes, renames and removes.
             if (solutions.isTargeting(Milestone.Basics)) {
                 if (camera.getAxisX() == null || camera.getAxisX() instanceof ReferenceVirtualAxis) {
                     addMissingAxisIssue(solutions, camera, Axis.Type.X);

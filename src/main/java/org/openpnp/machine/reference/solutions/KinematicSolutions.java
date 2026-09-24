@@ -201,7 +201,7 @@ public class KinematicSolutions implements Solutions.Subject {
                                             public void setState(Solutions.State state) throws Exception {
                                                 axisZ.setSafeZoneLowEnabled(state != State.Solved);
                                                 axisZ.setSafeZoneHighEnabled(state != State.Solved);
-                                                MainFrame.get().getIssuesAndSolutionsTab().findIssuesAndSolutions();
+                                                MainFrame.get().getCalibrationTab().collect();
                                             }
                                         }.withCalibrationStep(CalibrationStep.SafeZ));
                                     }
