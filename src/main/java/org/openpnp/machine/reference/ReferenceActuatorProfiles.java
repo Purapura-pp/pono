@@ -27,7 +27,7 @@ import java.util.List;
 import javax.swing.table.AbstractTableModel;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.wizards.ReferenceActuatorProfilesWizard;
+import org.openpnp.machine.reference.wizards.ProfilesForm;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Named;
@@ -233,7 +233,7 @@ public class ReferenceActuatorProfiles extends AbstractTableModel {
 
     Wizard getConfigurationWizard(ReferenceActuator actuator) {
         setContainingActuator(actuator);
-        return new ReferenceActuatorProfilesWizard(actuator, this);
+        return ProfilesForm.build(actuator, this);
     }
 
     static public class Profile extends AbstractModelObject implements Named {
