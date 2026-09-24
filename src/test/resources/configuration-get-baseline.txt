@@ -40,7 +40,6 @@ org/openpnp/gui/tablemodel/FootprintTableModel.java	2
 org/openpnp/gui/tablemodel/HeadsTableModel.java	1
 org/openpnp/machine/neoden4/Neoden4Feeder.java	2
 org/openpnp/machine/photon/PhotonFeeder.java	2
-org/openpnp/machine/photon/sheets/gui/FeederSlotUpdateStep.java	1
 org/openpnp/machine/reference/ContactProbeNozzle.java	2
 org/openpnp/machine/reference/ReferenceHead.java	1
 org/openpnp/machine/reference/ReferenceNozzleTip.java	5

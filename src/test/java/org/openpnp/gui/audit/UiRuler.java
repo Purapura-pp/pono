@@ -385,6 +385,7 @@ public class UiRuler {
             }
         });
         addSampleFeeders(machine);
+        addNeodenSamples(machine);
     }
 
     private static final String GCODE_DRIVER = "\u4e3b\u63a7";
@@ -404,6 +405,8 @@ public class UiRuler {
                 { new org.openpnp.machine.reference.feeder.ReferencePushPullFeeder(), "\u63a8\u62c9-1" },
                 { new org.openpnp.machine.reference.feeder.BlindsFeeder(), "\u767e\u53f6\u7a97-1" },
                 { new org.openpnp.machine.reference.feeder.ReferenceHeapFeeder(), "\u5806\u6599-1" },
+                { new org.openpnp.machine.neoden4.Neoden4Feeder(), "NeoDen4-1" },
+                { photon(), "\u5149\u5b50-1" },
         };
         edt(() -> {
             for (Object[] sample : samples) {
@@ -418,6 +421,48 @@ public class UiRuler {
                 catch (Exception e) {
                     say("no sample feeder " + sample[1] + ": " + e);
                 }
+            }
+        });
+    }
+
+    /** A Photon feeder the bus has answered for, in slot 5, the slot's location known. */
+    private static Feeder photon() {
+        org.openpnp.machine.photon.PhotonFeeder feeder = new org.openpnp.machine.photon.PhotonFeeder();
+        feeder.setHardwareId("00112233445566778899aabb");
+        feeder.setSlotAddress(5);
+        feeder.getSlot().setLocation(new org.openpnp.model.Location(org.openpnp.model.LengthUnit.Millimeters,
+                120, 40, -12, 0));
+        feeder.setOffset(new org.openpnp.model.Location(org.openpnp.model.LengthUnit.Millimeters, 2, 0, 0, 0));
+        return feeder;
+    }
+
+    /** The NeoDen4's driver, feeders' actuator, buzzer and switched camera, for their scenes. */
+    private void addNeodenSamples(Machine machine) throws Exception {
+        if (sceneFilter.stream().noneMatch(s -> s.startsWith("neoden-"))) {
+            return;
+        }
+        edt(() -> {
+            try {
+                org.openpnp.spi.base.AbstractMachine m = (org.openpnp.spi.base.AbstractMachine) machine;
+                org.openpnp.machine.neoden4.NeoDen4Driver driver = new org.openpnp.machine.neoden4.NeoDen4Driver();
+                driver.setName(NEODEN_DRIVER);
+                m.addDriver(driver);
+                org.openpnp.machine.neoden4.NeoDen4FeederActuator actuator =
+                        new org.openpnp.machine.neoden4.NeoDen4FeederActuator();
+                actuator.setName(NEODEN_ACTUATOR);
+                actuator.setDriver(driver);
+                m.addActuator(actuator);
+                org.openpnp.machine.neoden4.Neoden4Signaler signaler = new org.openpnp.machine.neoden4.Neoden4Signaler();
+                signaler.setName(NEODEN_SIGNALER);
+                m.addSignaler(signaler);
+                org.openpnp.machine.neoden4.Neoden4SwitcherCamera camera =
+                        new org.openpnp.machine.neoden4.Neoden4SwitcherCamera();
+                camera.setName(NEODEN_SWITCHER);
+                camera.setSwitcher(1);
+                m.addCamera(camera);
+            }
+            catch (Exception e) {
+                say("no NeoDen4 samples: " + e);
             }
         });
     }
@@ -493,6 +538,12 @@ public class UiRuler {
     }
 
     /** The machine page's elements photographed besides the camera: id, what, row, inspector tab. */
+    /** The NeoDen4's parts on the machine page, added only when their scenes are asked for. */
+    private static final String NEODEN_DRIVER = "NeoDen4";
+    private static final String NEODEN_ACTUATOR = "N4 \u9001\u6599";
+    private static final String NEODEN_SIGNALER = "N4 \u8702\u9e23\u5668";
+    private static final String NEODEN_SWITCHER = "N4 \u5e95\u90e8";
+
     private static final String[][] MACHINE_SCENES = {
             { "machine-root", "\u673a\u5668", "#machine", null },
             { "machine-jobs", "\u4f5c\u4e1a\u5904\u7406\u5668", "#jobs", null },
@@ -525,6 +576,10 @@ public class UiRuler {
             { "gcode-async", "G \u4ee3\u7801\u9ad8\u7ea7\u8bbe\u7f6e", "#gcode", "\u9ad8\u7ea7\u8bbe\u7f6e" },
             { "actuator", "\u6267\u884c\u5668 LIGHT_TOP", "LIGHT_TOP", null },
             { "actuator-machine", "\u6267\u884c\u5668 LIGHT_BOTTOM", "LIGHT_BOTTOM", null },
+            { "neoden-driver", "NeoDen4 \u9a71\u52a8", NEODEN_DRIVER, "\u673a\u5668\u53c2\u6570" },
+            { "neoden-actuator", "NeoDen4 \u9001\u6599\u6267\u884c\u5668", NEODEN_ACTUATOR, null },
+            { "neoden-signaler", "NeoDen4 \u8702\u9e23\u5668", NEODEN_SIGNALER, null },
+            { "neoden-switcher", "NeoDen4 \u5207\u6362\u76f8\u673a", NEODEN_SWITCHER, "\u8bbe\u5907" },
     };
 
     /** The feeders page's own scenes: {id, label, feeder name, tab or null}. */
@@ -537,6 +592,9 @@ public class UiRuler {
             { "feeder-blinds", "\u767e\u53f6\u7a97\u98de\u8fbe", "\u767e\u53f6\u7a97-1", null },
             { "feeder-blinds-array", "\u767e\u53f6\u7a97\u9635\u5217", "\u767e\u53f6\u7a97-1", "\u98de\u8fbe\u9635\u5217" },
             { "feeder-heap", "\u5806\u6599\u98de\u8fbe", "\u5806\u6599-1", null },
+            { "feeder-neoden", "NeoDen4 \u98de\u8fbe", "NeoDen4-1", null },
+            { "feeder-photon", "Photon \u98de\u8fbe", "\u5149\u5b50-1", null },
+            { "feeder-photon-global", "Photon \u5168\u5c40\u8bbe\u7f6e", "\u5149\u5b50-1", "\u5168\u5c40\u8bbe\u7f6e" },
     };
 
     private static boolean feederScene(String id) {
@@ -630,8 +688,9 @@ public class UiRuler {
             default: {
                 String[] extra = machineScene(scene.id);
                 if (extra != null && feederScene(scene.id)) {
+                    // A Photon feeder's name ends in the slot it is in.
                     String name = extra[2];
-                    expect(missed, selectRow(page, name::equals), extra[1]);
+                    expect(missed, selectRow(page, s -> s.equals(name) || s.startsWith(name + " (")), extra[1]);
                 }
                 else if (extra != null) {
                     // By its name: a group's note lists the names of what is under it.
@@ -1055,6 +1114,8 @@ public class UiRuler {
         holders.addAll(machine.getCameras());
         holders.addAll(machine.getActuators());
         holders.addAll(machine.getNozzleTips());
+        holders.addAll(machine.getDrivers());
+        holders.addAll(machine.getSignalers());
         for (org.openpnp.spi.PropertySheetHolder holder : holders) {
             if (holder instanceof org.openpnp.model.Named && name.equals(((org.openpnp.model.Named) holder).getName())) {
                 return ((org.openpnp.gui.MachineSetupPanel) page).selectPropertySheetHolder(holder);
