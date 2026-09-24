@@ -133,6 +133,8 @@ public final class Dialogs {
         String more;
         String list;
         String details;
+        JComponent body;
+        java.util.function.Consumer<JButton> asked;
         int width = 560;
 
         public Content tone(Tone tone, String icon) {
@@ -172,6 +174,21 @@ public final class Dialogs {
 
         public Content width(int width) {
             this.width = width;
+            return this;
+        }
+
+        /** Fields of the caller's own under the first sentence: a name to give, a folder to choose. */
+        public Content body(JComponent body) {
+            this.body = body;
+            return this;
+        }
+
+        /**
+         * Hands over the button the title asks about once it is made, for a body whose fields
+         * decide when it may be pressed.
+         */
+        public Content asked(java.util.function.Consumer<JButton> asked) {
+            this.asked = asked;
             return this;
         }
     }
@@ -287,6 +304,11 @@ public final class Dialogs {
         if (content.what != null) {
             body.add(paragraph(content.what, Ui.text(), textWidth));
         }
+        if (content.body != null) {
+            content.body.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(content.body);
+            body.add(Box.createVerticalStrut(10));
+        }
         if (content.list != null) {
             body.add(Box.createVerticalStrut(6));
             JLabel list = new JLabel(html(content.list, textWidth - 24));
@@ -352,6 +374,9 @@ public final class Dialogs {
             buttons.add(button);
         }
         root.add(foot, BorderLayout.SOUTH);
+        if (content.asked != null && !buttons.isEmpty() && buttons.get(buttons.size() - 1) != null) {
+            content.asked.accept(buttons.get(buttons.size() - 1));
+        }
 
         // Esc is the cancel choice, or closing.
         JRootPane rootPane = dialog.getRootPane();

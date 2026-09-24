@@ -277,6 +277,9 @@ public class UiRuler {
                 if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("dialogs"))) {
                     photographDialogs(round, theme);
                 }
+                if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("preset-dialogs"))) {
+                    photographPresetDialogs(round, theme);
+                }
                 if (round.id.equals("base") && (sceneFilter.isEmpty() || sceneFilter.contains("welcome"))) {
                     photographWelcome(round, theme);
                 }
@@ -957,6 +960,52 @@ public class UiRuler {
         double[][] at = { { 0.075, 0.12 }, { 0.54, 0.15 }, { 0.54, 0.47 } };
         BufferedImage shot = overPage(images, at);
         writeComposed(round, theme, "dialogs", "\u5bf9\u8bdd\u6846", shot);
+    }
+
+    /**
+     * The new preset and the apply preset questions, 31-preset-dialogs, over the presets topic;
+     * the answers handed back are Cancel.
+     */
+    private void photographPresetDialogs(Round round, String theme) throws Exception {
+        String label = round.label(theme);
+        List<javax.swing.JDialog> shown = new ArrayList<>();
+        org.openpnp.gui.shell.Dialogs.setPresenter(dialog -> {
+            shown.add(dialog);
+            return -1;
+        });
+        List<BufferedImage> images = new ArrayList<>();
+        try {
+            edt(() -> frame.getMachineSettings().showTopic("Presets")); //$NON-NLS-1$
+            settle(800);
+            edt(() -> {
+                frame.getMachineSettings().newPreset();
+                frame.getMachineSettings().applyPreset("LumenPnP v4.1"); //$NON-NLS-1$
+            });
+            settle(1200);
+            edt(() -> {
+                for (javax.swing.JDialog dialog : shown) {
+                    JRootPane pane = dialog.getRootPane();
+                    layoutAll(pane);
+                    BufferedImage image = paint(pane, scale);
+                    images.add(image);
+                    findings.addAll(new UiAudit(rules, new IdentityHashMap<>(), pane, image, scale,
+                            "\u9884\u8bbe\u5bf9\u8bdd\u6846", label).run());
+                }
+            });
+        }
+        finally {
+            org.openpnp.gui.shell.Dialogs.setPresenter(null);
+            edt(() -> shown.forEach(Window::dispose));
+        }
+        if (images.size() != 2) {
+            findings.add(new UiAudit.Finding(UiAudit.Check.SceneSetup, "\u9884\u8bbe\u5bf9\u8bdd\u6846", label,
+                    "\u9884\u8bbe\u5bf9\u8bdd\u6846", "\u53ea\u62cd\u5230 " + images.size() + " \u4e2a\u5bf9\u8bdd\u6846"));
+        }
+        // Where 31-preset-dialogs puts them: the new preset at the left, the apply question at the right.
+        double[][] at = { { 0.06, 0.074 }, { 0.485, 0.074 } };
+        BufferedImage shot = overPage(images, at.length > images.size()
+                ? java.util.Arrays.copyOf(at, images.size()) : at);
+        writeComposed(round, theme, "preset-dialogs", "\u9884\u8bbe\u5bf9\u8bdd\u6846", shot);
     }
 
     /** The welcome window, 20-welcome, over the job page. */

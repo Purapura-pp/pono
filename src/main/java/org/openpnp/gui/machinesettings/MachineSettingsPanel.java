@@ -186,6 +186,11 @@ public class MachineSettingsPanel extends JPanel {
         nav.add(Box.createVerticalStrut(6));
         add(new AdvancedTopic(tree));
         nav.add(Box.createVerticalGlue());
+        JButton save = Ui.button(Translations.getString("MachineSettings.Head.SaveAsPreset"), Ui.iconSm("save"), //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Size.Sm, Ui.Variant.Default);
+        save.setToolTipText(Translations.getString("MachineSettings.Head.SaveAsPreset.ToolTip")); //$NON-NLS-1$
+        save.addActionListener(e -> ((PresetsTopic) topics.get(PRESETS)).create(true));
+        header.actions.add(save);
         header.show(machine, units());
         refreshChecks();
         select(topics.get(OVERVIEW));
@@ -215,6 +220,24 @@ public class MachineSettingsPanel extends JPanel {
         Topic topic = topics.get(key);
         if (topic != null) {
             select(topic);
+        }
+    }
+
+    /** The presets topic with the new preset dialog open over it. */
+    public void newPreset() {
+        showTopic(PRESETS);
+        Topic presets = topics.get(PRESETS);
+        if (presets instanceof PresetsTopic) {
+            ((PresetsTopic) presets).create(false);
+        }
+    }
+
+    /** The presets topic, applying the preset of that name: what it changes is asked first. */
+    public void applyPreset(String name) {
+        showTopic(PRESETS);
+        Topic presets = topics.get(PRESETS);
+        if (presets instanceof PresetsTopic) {
+            ((PresetsTopic) presets).apply(name);
         }
     }
 
