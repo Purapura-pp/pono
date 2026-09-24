@@ -46,6 +46,21 @@ Neoden
 NeoDen
 Pono
 
+# A serial port's signals and flow control, and a frame rate, as the hardware names them
+RTS
+CTS
+DTR
+XON
+XOFF
+FPS
+
+# Firmware as a controller reports itself to M115
+Marlin
+bugfix
+Smoothieware
+Duet
+Grbl
+
 # Units and axes
 mm
 µm

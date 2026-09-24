@@ -326,6 +326,27 @@ public class OpenPnpCaptureCamera extends ReferenceCamera implements Runnable {
         return device;
     }
 
+    /** The device the configuration names, by the id it keeps; null when none was ever chosen. */
+    public String getDeviceId() {
+        return uniqueId;
+    }
+
+    /**
+     * Whether the device the configuration names is attached to this computer. A configuration
+     * made on another computer names that one's device, and the camera then opens nothing.
+     */
+    public boolean isDeviceAvailable() {
+        if (uniqueId == null) {
+            return false;
+        }
+        for (CaptureDevice candidate : capture.getDevices()) {
+            if (uniqueId.equals(candidate.getUniqueId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void setDevice(CaptureDevice device) {
         this.device = device;
         if (device == null) {

@@ -67,8 +67,11 @@ public final class PageLayouts {
         this.prefs = prefs;
     }
 
-    /** Pages with no use for the camera at all. */
-    private static final Set<String> NO_CAMERA = Set.of("Settings"); //$NON-NLS-1$
+    /**
+     * Pages with no use for the camera at all. The machine settings page's topics are forms; its
+     * tree keeps the machine page's layout, the camera large.
+     */
+    private static final Set<String> NO_CAMERA = Set.of("Settings", "MachineSettings"); //$NON-NLS-1$ //$NON-NLS-2$
 
     /** What a page starts with before the user has changed anything. */
     public static Camera defaultCamera(String page) {
@@ -141,7 +144,7 @@ public final class PageLayouts {
     }
 
     /** Pages with nothing of their own to show in the column. */
-    private static final Set<String> NO_PROPERTIES = Set.of("Log", "Settings"); //$NON-NLS-1$ //$NON-NLS-2$
+    private static final Set<String> NO_PROPERTIES = Set.of("Log", "Settings", "MachineSettings"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
     /**
      * Whether the column shows on a page, given whether there is anything in it. Left to itself

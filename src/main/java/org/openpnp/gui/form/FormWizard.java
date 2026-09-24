@@ -922,28 +922,28 @@ public class FormWizard extends AbstractConfigurationWizard {
             switch (field.kind) {
                 case Text:
                 case TextArea:
-                    addWrappedBinding(spec.bean, field.property, control, "text"); //$NON-NLS-1$
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "text")); //$NON-NLS-1$
                     break;
                 case Integer: {
                     // A long property, a time in milliseconds say, takes the long converter.
                     Class<?> type = Form.requireProperty(spec.bean.getClass(), field.property, true)
                             .getPropertyType();
-                    addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
                             type == long.class || type == Long.class
-                                    ? new org.openpnp.gui.support.LongConverter() : integer);
+                                    ? new org.openpnp.gui.support.LongConverter() : integer));
                     break;
                 }
                 case Decimal:
                 case Angle:
-                    addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
-                            field.format == null ? decimal : new DoubleConverter(field.format));
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
+                            field.format == null ? decimal : new DoubleConverter(field.format)));
                     break;
                 case Percent:
-                    addWrappedBinding(spec.bean, field.property, control, "text", PERCENT); //$NON-NLS-1$
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "text", PERCENT)); //$NON-NLS-1$
                     break;
                 case Length:
-                    addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
-                            field.format == null ? length : new LengthConverter(field.format));
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
+                            field.format == null ? length : new LengthConverter(field.format)));
                     break;
                 case Location: {
                     MutableLocationProxy proxy = new MutableLocationProxy();
@@ -953,24 +953,24 @@ public class FormWizard extends AbstractConfigurationWizard {
                     for (JTextField input : (List<JTextField>) control.getClientProperty("Pono.form.fields")) { //$NON-NLS-1$
                         String axis = (String) input.getClientProperty("Pono.form.axis"); //$NON-NLS-1$
                         if (axis.equals("C")) { //$NON-NLS-1$
-                            addWrappedBinding(proxy, "rotation", input, "text", decimal); //$NON-NLS-1$ //$NON-NLS-2$
+                            track(field, axis, addWrappedBinding(proxy, "rotation", input, "text", decimal)); //$NON-NLS-1$ //$NON-NLS-2$
                         }
                         else {
-                            addWrappedBinding(proxy, "length" + axis, input, "text", //$NON-NLS-1$ //$NON-NLS-2$
-                                    axis.equals("Z") ? length : axisLength); //$NON-NLS-1$
+                            track(field, axis, addWrappedBinding(proxy, "length" + axis, input, "text", //$NON-NLS-1$ //$NON-NLS-2$
+                                    axis.equals("Z") ? length : axisLength)); //$NON-NLS-1$
                         }
                     }
                     break;
                 }
                 case Choice:
                 case Segmented:
-                    addWrappedBinding(spec.bean, field.property, control, "selectedItem"); //$NON-NLS-1$
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "selectedItem")); //$NON-NLS-1$
                     break;
                 case Toggle:
-                    addWrappedBinding(spec.bean, field.property, control, "selected"); //$NON-NLS-1$
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "selected")); //$NON-NLS-1$
                     break;
                 case Checklist:
-                    addWrappedBinding(spec.bean, field.property, control, "selection"); //$NON-NLS-1$
+                    track(field, null, addWrappedBinding(spec.bean, field.property, control, "selection")); //$NON-NLS-1$
                     break;
                 case ReadOnly:
                     bind(UpdateStrategy.READ, spec.bean, field.property, control, "text", TO_TEXT); //$NON-NLS-1$
@@ -979,6 +979,91 @@ public class FormWizard extends AbstractConfigurationWizard {
                     break;
             }
         }
+    }
+
+    /** A buffered binding and the field it is for, with the axis for one of a location's. */
+    private static final class Tracked {
+        final Field field;
+        final String axis;
+        final org.openpnp.gui.support.JBindings.WrappedBinding binding;
+
+        Tracked(Field field, String axis, org.openpnp.gui.support.JBindings.WrappedBinding binding) {
+            this.field = field;
+            this.axis = axis;
+            this.binding = binding;
+        }
+    }
+
+    private final List<Tracked> tracked = new ArrayList<>();
+
+    private void track(Field field, String axis, org.openpnp.gui.support.JBindings.WrappedBinding binding) {
+        tracked.add(new Tracked(field, axis, binding));
+    }
+
+    /** An edit on screen that Apply would write: the field, what the object holds, what it would. */
+    public static final class Change {
+        public final String label;
+        public final String before;
+        public final String after;
+
+        Change(String label, String before, String after) {
+            this.label = label;
+            this.before = before;
+            this.after = after;
+        }
+
+        @Override
+        public String toString() {
+            return label + " " + before + " \u2192 " + after; //$NON-NLS-1$ //$NON-NLS-2$
+        }
+    }
+
+    /** The edits waiting for Apply, in the order the fields are shown. */
+    public List<Change> changes() {
+        List<Change> changes = new ArrayList<>();
+        for (Tracked t : tracked) {
+            if (t.binding.isChanged()) {
+                String label = t.axis == null ? t.field.label : t.field.label + " " + t.axis; //$NON-NLS-1$
+                changes.add(new Change(label, shown(t, t.binding.getSourceValue()),
+                        shown(t, t.binding.getWrapper().getValue())));
+            }
+        }
+        return changes;
+    }
+
+    /** A value as the field shows it, with its unit, for saying what an edit changes. */
+    private String shown(Tracked t, Object value) {
+        Field field = t.field;
+        if (value == null) {
+            return "\u2014"; //$NON-NLS-1$
+        }
+        if (value instanceof Boolean) {
+            return org.openpnp.Translations.getString((Boolean) value ? "Form.Change.On" : "Form.Change.Off"); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        String unit = field.unit;
+        if (value instanceof Length) {
+            LengthConverter converter = field.format == null || "Z".equals(t.axis) //$NON-NLS-1$
+                    ? new LengthConverter(getDisplayPreferences()) : new LengthConverter(field.format);
+            return converter.convertForward((Length) value) + " " //$NON-NLS-1$
+                    + (unit != null ? unit : getDisplayPreferences().getSystemUnits().getShortName());
+        }
+        if (field.kind == Kind.Percent && value instanceof Double) {
+            return PERCENT.convertForward((Double) value) + " %"; //$NON-NLS-1$
+        }
+        if (value instanceof Double) {
+            String format = field.format != null && t.axis == null ? field.format
+                    : getDisplayPreferences().getLengthDisplayFormat();
+            return String.format(java.util.Locale.US, format, value) + (unit != null ? " " + unit //$NON-NLS-1$
+                    : "C".equals(t.axis) ? "\u00b0" : ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        }
+        if (value instanceof java.util.Collection) {
+            List<String> names = new ArrayList<>();
+            for (Object item : (java.util.Collection<?>) value) {
+                names.add(DisplayNames.of(item));
+            }
+            return names.isEmpty() ? "\u2014" : String.join("\u3001", names); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        return DisplayNames.of(value) + (unit != null && value instanceof Number ? " " + unit : ""); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     /** A fraction as a percentage, the unit beside the field: 0.05 is "5.0". */
@@ -1032,6 +1117,7 @@ public class FormWizard extends AbstractConfigurationWizard {
         if (spec.onReload != null) {
             spec.onReload.accept(this);
         }
+        blockEdited = false;
         refresh();
     }
 
@@ -1041,12 +1127,29 @@ public class FormWizard extends AbstractConfigurationWizard {
         if (spec.onApply != null) {
             spec.onApply.accept(this);
         }
+        if (!Boolean.TRUE.equals(isDirty())) {
+            blockEdited = false;
+        }
     }
 
     /** A block of the form's own was edited: Apply is to write it, as it does a field. */
     public void edit() {
+        blockEdited = true;
         notifyChange();
         edited();
+    }
+
+    /** Set by a block of the form's own reporting an edit, until the form is loaded or applied. */
+    private boolean blockEdited;
+
+    /**
+     * Whether something on screen differs from what the object holds: a field, or a block of the
+     * form's own that said it was edited. Apply can light up without either, when the object
+     * reports a property changing to the value it already had - a camera without its device does
+     * so each time it fails to open.
+     */
+    public boolean hasEdits() {
+        return Boolean.TRUE.equals(isDirty()) && (blockEdited || !changes().isEmpty());
     }
 
     @Override

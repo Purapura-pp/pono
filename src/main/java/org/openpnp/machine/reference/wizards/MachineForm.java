@@ -44,7 +44,7 @@ public final class MachineForm {
     public static class Bean extends AbstractModelObject {
         private final ReferenceMachine machine;
 
-        Bean(ReferenceMachine machine) {
+        public Bean(ReferenceMachine machine) {
             this.machine = machine;
         }
 

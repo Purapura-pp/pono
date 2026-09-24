@@ -111,6 +111,11 @@ public class FormTest {
             this.location = location;
             firePropertyChange("location", old, location);
         }
+
+        /** Announces the name changing to what it was, as a camera without its device does. */
+        public void touch() {
+            firePropertyChange("name", null, null);
+        }
     }
 
     private static final WizardContainer CONTAINER = new WizardContainer() {
@@ -216,6 +221,41 @@ public class FormTest {
         assertEquals(5, sample.getCount());
         assertEquals(300.0, sample.getLocation().getX(), 1e-9);
         assertEquals(44.125, sample.getLocation().getY(), 1e-9);
+    }
+
+    @Test
+    public void theChangesSayWhatApplyWouldWriteFieldByField() {
+        Sample sample = new Sample();
+        FormWizard form = form(sample);
+        assertTrue(form.changes().isEmpty());
+        assertFalse(form.hasEdits());
+
+        field(form, "8.000").setText("10");
+        form.set("enabled", false);
+        field(form, "44.125").setText("40");
+        List<String> changes = new ArrayList<>();
+        for (FormWizard.Change change : form.changes()) {
+            changes.add(change.label + ": " + change.before + " -> " + change.after);
+        }
+        assertEquals(List.of(
+                "Enabled: " + org.openpnp.Translations.getString("Form.Change.On") + " -> "
+                        + org.openpnp.Translations.getString("Form.Change.Off"),
+                "Tape width: 8.000 mm -> 10.000 mm",
+                "Reference hole Y: 44.125 mm -> 40.000 mm"), changes);
+        assertTrue(form.hasEdits());
+
+        form.apply();
+        assertTrue(form.changes().isEmpty());
+        assertFalse(form.hasEdits());
+    }
+
+    @Test
+    public void aPropertyAnnouncedUnchangedIsNotAnEdit() {
+        Sample sample = new Sample();
+        FormWizard form = form(sample);
+        sample.touch();
+        assertTrue(form.changes().isEmpty());
+        assertFalse(form.hasEdits(), "Apply may light up, but nothing on screen differs");
     }
 
     @Test
