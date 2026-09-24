@@ -221,12 +221,23 @@ public class PropertySheetPresenter {
     /** Whether any sheet on show has edits that were never applied. */
     public boolean isDirty() {
         for (Component component : sheets.getComponents()) {
-            if (component instanceof AbstractConfigurationWizard
-                    && Boolean.TRUE.equals(((AbstractConfigurationWizard) component).isDirty())) {
+            if (hasEdits(component)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /**
+     * A form has edits when Apply would write something: a camera whose device is not on this
+     * computer marks its form changed as it loads, with nothing to write.
+     */
+    private static boolean hasEdits(Component component) {
+        if (component instanceof org.openpnp.gui.form.FormWizard) {
+            return ((org.openpnp.gui.form.FormWizard) component).hasEdits();
+        }
+        return component instanceof AbstractConfigurationWizard
+                && Boolean.TRUE.equals(((AbstractConfigurationWizard) component).isDirty());
     }
 
     /** What is on show, or null. */

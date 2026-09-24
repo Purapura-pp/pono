@@ -1264,11 +1264,13 @@ public class UiRuler {
      * tips are under a group that starts closed.
      */
     private boolean selectHolder(Component page, String name) {
-        if (!(page instanceof org.openpnp.gui.MachineSetupPanel)) {
+        // The element tree is the machine settings page's Advanced topic, not a page of its own.
+        org.openpnp.gui.MachineSetupPanel setup = page instanceof org.openpnp.gui.MachineSetupPanel
+                ? (org.openpnp.gui.MachineSetupPanel) page : frame.getMachineSetupTab();
+        if (setup == null) {
             return false;
         }
         org.openpnp.spi.Machine machine = configuration.getMachine();
-        org.openpnp.gui.MachineSetupPanel setup = (org.openpnp.gui.MachineSetupPanel) page;
         if (name.equals("#machine")) {
             return setup.selectPropertySheetHolder(machine);
         }
@@ -1306,7 +1308,7 @@ public class UiRuler {
         holders.addAll(machine.getSignalers());
         for (org.openpnp.spi.PropertySheetHolder holder : holders) {
             if (holder instanceof org.openpnp.model.Named && name.equals(((org.openpnp.model.Named) holder).getName())) {
-                return ((org.openpnp.gui.MachineSetupPanel) page).selectPropertySheetHolder(holder);
+                return setup.selectPropertySheetHolder(holder);
             }
         }
         return false;

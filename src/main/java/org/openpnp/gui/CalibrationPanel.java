@@ -1898,11 +1898,13 @@ public class CalibrationPanel extends JPanel {
                 List<Pending> measured = part != null ? List.of(part.getPending()) : item.getPending();
                 List<String> firsts = new ArrayList<>();
                 int more = 0;
+                // x and y both; of six nozzle tips the first, the rest counted.
+                int named = measured.size() > 2 ? 1 : 2;
                 for (Pending p : measured) {
                     if (p.getDifferences().isEmpty()) {
                         continue;
                     }
-                    if (firsts.size() == 2) {
+                    if (firsts.size() == named) {
                         more += p.getDifferences().size();
                         continue;
                     }
