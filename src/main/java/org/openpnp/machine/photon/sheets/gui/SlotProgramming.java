@@ -20,6 +20,7 @@
 package org.openpnp.machine.photon.sheets.gui;
 
 import java.awt.BorderLayout;
+import java.awt.FlowLayout;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -31,7 +32,6 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 
 import org.openpnp.Translations;
-import org.openpnp.gui.shell.Forms;
 import org.openpnp.gui.shell.Ui;
 import org.openpnp.machine.photon.PhotonFeeder;
 import org.openpnp.machine.photon.PhotonProperties;
@@ -85,7 +85,12 @@ final class SlotProgramming extends JPanel {
                 status.setText(String.format(Translations.getString("PhotonForms.Program.Waiting"), next.get())); //$NON-NLS-1$
             }
         });
-        add(Forms.row(address, start), BorderLayout.NORTH);
+        ((JSpinner.DefaultEditor) address.getEditor()).getTextField().setColumns(4);
+        JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        line.setOpaque(false);
+        line.add(address);
+        line.add(start);
+        add(line, BorderLayout.NORTH);
         add(status, BorderLayout.CENTER);
         status.setText(Translations.getString("PhotonForms.Program.Idle")); //$NON-NLS-1$
     }

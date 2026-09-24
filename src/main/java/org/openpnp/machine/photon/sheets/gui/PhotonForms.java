@@ -131,7 +131,7 @@ public final class PhotonForms {
                 .hint("PhotonForms.SlotLocation.Hint") //$NON-NLS-1$
                 .visibleIf(inSlot)
                 .location("offset", "FeederConfigurationWizard.LocationPanel.offsetLabel.text", true) //$NON-NLS-1$ //$NON-NLS-2$
-                .iconButton("capture", "PhotonForms.Offset.Capture", PhotonForms::captureOffset) //$NON-NLS-1$ //$NON-NLS-2$
+                .iconButton("camera", "PhotonForms.Offset.Capture", PhotonForms::captureOffset) //$NON-NLS-1$ //$NON-NLS-2$
                 .iconButton("crosshair", "PhotonForms.Offset.Move", PhotonForms::moveToPick).movesMachine() //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("PhotonForms.Offset.Hint") //$NON-NLS-1$
                 .visibleIf(inSlot)

@@ -310,6 +310,7 @@ public final class DragFeederForm {
             this.target = target;
             setOpaque(false);
             add(image, BorderLayout.CENTER);
+            cancel.setToolTipText(Translations.getString("DragFeederForm.Cancel.Tip")); //$NON-NLS-1$
             add(Forms.row(select, cancel), BorderLayout.SOUTH);
             select.addActionListener(e -> {
                 if (selecting == 1) {

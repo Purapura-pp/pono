@@ -1316,6 +1316,9 @@ public class UiRuler {
         }
         for (Feeder feeder : machine.getFeeders()) {
             data(data, feeder.getName());
+            if (feeder instanceof org.openpnp.machine.photon.PhotonFeeder) {
+                data(data, ((org.openpnp.machine.photon.PhotonFeeder) feeder).getHardwareId());
+            }
         }
         for (Head head : machine.getHeads()) {
             data(data, head.getName());
