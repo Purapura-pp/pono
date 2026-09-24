@@ -57,7 +57,6 @@ org/openpnp/machine/reference/feeder/ReferenceLeverFeeder.java	2
 org/openpnp/machine/reference/feeder/ReferencePushPullFeeder.java	1
 org/openpnp/machine/reference/feeder/ReferenceSlotAutoFeeder.java	1
 org/openpnp/machine/reference/feeder/SlotSchultzFeeder.java	2
-org/openpnp/machine/reference/feeder/wizards/ReferenceHeapFeederConfigurationWizard.java	2
 org/openpnp/machine/reference/psh/ActuatorsPropertySheetHolder.java	1
 org/openpnp/machine/reference/psh/AxesPropertySheetHolder.java	1
 org/openpnp/machine/reference/psh/CamerasPropertySheetHolder.java	2
