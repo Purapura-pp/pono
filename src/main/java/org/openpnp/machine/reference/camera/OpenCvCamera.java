@@ -28,7 +28,7 @@ import org.opencv.core.Mat;
 import org.opencv.videoio.VideoCapture;
 import org.opencv.videoio.Videoio;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.OpenCvCameraConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.spi.PropertySheetHolder;
 import org.openpnp.util.OpenCvUtils;
 import org.pmw.tinylog.Logger;
@@ -195,7 +195,7 @@ public class OpenCvCamera extends ReferenceCamera implements Runnable {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new OpenCvCameraConfigurationWizard(this);
+        return CameraDeviceForms.openCv(this);
     }
 
     @Override

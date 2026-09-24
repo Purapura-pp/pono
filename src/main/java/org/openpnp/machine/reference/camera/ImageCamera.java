@@ -41,7 +41,7 @@ import org.opencv.imgproc.Imgproc;
 import org.openpnp.Translations;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.SimulationModeMachine;
-import org.openpnp.machine.reference.camera.wizards.ImageCameraConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.machine.reference.solutions.CameraSolutions;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Footprint;
@@ -682,7 +682,7 @@ public class ImageCamera extends ReferenceCamera {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ImageCameraConfigurationWizard(this);
+        return CameraDeviceForms.image(this);
     }
 
     @Override

@@ -27,7 +27,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.SwitcherCameraConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.spi.Actuator;
 import org.openpnp.spi.Camera;
 import org.openpnp.spi.Machine;
@@ -203,7 +203,7 @@ public class SwitcherCamera extends ReferenceCamera {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new SwitcherCameraConfigurationWizard(this);
+        return CameraDeviceForms.switcher(this);
     }
 
     public String getCameraId() {

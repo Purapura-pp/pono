@@ -21,7 +21,7 @@ import org.openpnp.gui.components.CameraView;
 import org.openpnp.gui.support.LengthConverter;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.vision.wizards.ReferenceFiducialLocatorConfigurationWizard;
+import org.openpnp.machine.reference.vision.wizards.VisionForms;
 import org.openpnp.model.Abstract2DLocatable.Side;
 import org.openpnp.model.AbstractPartSettingsHolder;
 import org.openpnp.model.AbstractVisionSettings;
@@ -768,7 +768,7 @@ public class ReferenceFiducialLocator extends AbstractPartSettingsHolder
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
-                new PropertySheetWizardAdapter(new ReferenceFiducialLocatorConfigurationWizard(this)),
+                new PropertySheetWizardAdapter(VisionForms.fiducialLocator(this)),
                 new PropertySheetWizardAdapter(org.openpnp.machine.reference.vision.wizards.VisionSettingsForm
                         .fiducial(getMachine().getConfiguration(), getFiducialVisionSettings(), this))};
     }

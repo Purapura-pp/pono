@@ -39,7 +39,7 @@ import org.onvif.ver10.schema.VideoEncoding;
 import org.onvif.ver10.schema.VideoRateControl;
 import org.onvif.ver10.schema.VideoResolution;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.OnvifIPCameraConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.spi.PropertySheetHolder;
 import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Attribute;
@@ -341,7 +341,7 @@ public class OnvifIPCamera extends ReferenceCamera implements Runnable {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new OnvifIPCameraConfigurationWizard(this);
+        return CameraDeviceForms.onvif(this);
     }
 
     @Override

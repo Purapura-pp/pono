@@ -44,18 +44,12 @@ import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.Icons;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
-import org.openpnp.gui.support.WizardUtils;
-import org.openpnp.gui.wizards.CameraConfigurationWizard;
-import org.openpnp.gui.wizards.CameraVisionConfigurationWizard;
 import org.openpnp.machine.reference.ReferenceNozzleTipCalibration;
 import org.openpnp.machine.reference.camera.calibration.AdvancedCalibration;
 import org.openpnp.machine.reference.camera.calibration.LensCalibrationParams;
-import org.openpnp.machine.reference.camera.wizards.ReferenceCameraWhiteBalanceConfigurationWizard;
 import org.openpnp.machine.reference.solutions.CameraSolutions;
-import org.openpnp.machine.reference.wizards.ReferenceCameraCalibrationConfigurationWizard;
-import org.openpnp.machine.reference.wizards.ReferenceCameraCalibrationWizard;
-import org.openpnp.machine.reference.wizards.ReferenceCameraPositionConfigurationWizard;
-import org.openpnp.machine.reference.wizards.ReferenceCameraTransformsConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraCalibrationForm;
+import org.openpnp.machine.reference.camera.wizards.CameraForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -1211,34 +1205,12 @@ public abstract class ReferenceCamera extends AbstractBroadcastingCamera impleme
     @Override
     public PropertySheet[] getPropertySheets() {
         PropertySheet[] sheets = new PropertySheet[] {
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(CameraConfigurationWizard.class,
-                        this.getId(), this), Translations.getString(
-                                "ReferenceCamera.CameraConfigurationWizard.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(
-                        CameraVisionConfigurationWizard.class, this.getId(), this), Translations.getString(
-                                "ReferenceCamera.CameraVisionConfigurationWizard.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(getConfigurationWizard(), Translations.getString(
-                        "ReferenceCamera.DeviceSettings.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(
-                        ReferenceCameraWhiteBalanceConfigurationWizard.class, this.getId(), this),
-                        Translations.getString(
-                                "ReferenceCamera.ReferenceCameraWhiteBalanceConfigurationWizard.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(
-                        ReferenceCameraPositionConfigurationWizard.class, this.getId(), getMachine(), this),
-                        Translations.getString(
-                                "ReferenceCamera.ReferenceCameraPositionConfigurationWizard.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(
-                        ReferenceCameraCalibrationConfigurationWizard.class, this.getId(), this),
-                        Translations.getString(
-                                "ReferenceCamera.ReferenceCameraCalibrationConfigurationWizard.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(
-                        ReferenceCameraTransformsConfigurationWizard.class, this.getId(), this),
-                        Translations.getString(
-                                "ReferenceCamera.ReferenceCameraTransformsConfigurationWizard.tab.title")), //$NON-NLS-1$
-                new PropertySheetWizardAdapter(WizardUtils.configurationWizardFactory(
-                        ReferenceCameraCalibrationWizard.class, this.getId(), this),
-                        Translations.getString(
-                                "ReferenceCamera.ReferenceCameraCalibrationWizard.tab.title")) //$NON-NLS-1$
+                new PropertySheetWizardAdapter(CameraForm.general(this)),
+                new PropertySheetWizardAdapter(getConfigurationWizard(),
+                        Translations.getString("CameraForm.Device")), //$NON-NLS-1$
+                new PropertySheetWizardAdapter(CameraForm.position(this)),
+                new PropertySheetWizardAdapter(CameraForm.settling(this)),
+                new PropertySheetWizardAdapter(CameraCalibrationForm.calibration(this)),
         };
         if (getFocusSensingMethod() != FocusSensingMethod.None) {
                 sheets = Collect.concat(sheets, new PropertySheet[] {

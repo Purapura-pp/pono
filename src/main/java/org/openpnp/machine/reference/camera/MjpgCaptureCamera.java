@@ -31,7 +31,7 @@ import java.net.URLConnection;
 import javax.imageio.ImageIO;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.MjpgCaptureCameraWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.PropertySheetHolder;
@@ -263,7 +263,7 @@ public class MjpgCaptureCamera extends ReferenceCamera {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new MjpgCaptureCameraWizard(this);
+        return CameraDeviceForms.mjpg(this);
     }
 
     @Override

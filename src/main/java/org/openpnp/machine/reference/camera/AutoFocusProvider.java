@@ -25,7 +25,7 @@ import java.awt.image.BufferedImage;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.components.CameraView;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.AutoFocusProviderConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.AutoFocusForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -263,6 +263,6 @@ public class AutoFocusProvider implements FocusProvider {
 
     @Override
     public Wizard getConfigurationWizard(Camera camera) {
-        return new AutoFocusProviderConfigurationWizard(camera, this);
+        return AutoFocusForm.build(camera, this);
     }
 }
