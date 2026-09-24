@@ -168,6 +168,7 @@ public class JobRun extends AbstractModelObject {
         events.clear();
         placedMillis.clear();
         lastPlaced = null;
+        currentKey = null;
         startedMillis = System.currentTimeMillis();
         event(EventKind.Started, null, null);
     }
@@ -183,7 +184,51 @@ public class JobRun extends AbstractModelObject {
         }
         run.state = State.Placing;
         run.nozzle = nozzle;
+        currentKey = key;
         changed();
+    }
+
+    /** The feeder the placement's part is about to be fed from, by name. */
+    public void feeding(String key, String placementId, String feeder) {
+        run(key, placementId).feeder = feeder;
+        changed();
+    }
+
+    private volatile String currentKey;
+
+    /** The key of the placement being placed now, or null: the one planned last and not yet done. */
+    public String getCurrentKey() {
+        PlacementRun current = getCurrent();
+        return current == null ? null : currentKey;
+    }
+
+    /** The placement being placed now, or null. */
+    public PlacementRun getCurrent() {
+        String key = currentKey;
+        PlacementRun run = key == null ? null : placements.get(key);
+        return run != null && run.state == State.Placing ? run : null;
+    }
+
+    /** How many placements of the run are in the state. */
+    public int count(State state) {
+        int count = 0;
+        for (PlacementRun run : placements.values()) {
+            if (run.state == state) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** The placements waiting for the feeder named, by their ids. */
+    public List<String> waitingFor(String feeder) {
+        List<String> waiting = new ArrayList<>();
+        for (PlacementRun run : placements.values()) {
+            if (run.state == State.WaitingForFeeder && feeder.equals(run.feeder)) {
+                waiting.add(run.placementId);
+            }
+        }
+        return waiting;
     }
 
     public void waitingForFeeder(String key, String placementId, String feeder) {

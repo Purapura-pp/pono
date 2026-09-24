@@ -113,7 +113,7 @@ public class JobRunLogPanel extends JPanel {
     }
 
     /** What an event says, in words. */
-    static String describe(JobRun.Event event) {
+    public static String describe(JobRun.Event event) {
         String id = event.getPlacementId() == null ? "" : event.getPlacementId(); //$NON-NLS-1$
         String detail = event.getDetail() == null ? "" : event.getDetail(); //$NON-NLS-1$
         if (event.getKind() == JobRun.EventKind.Error && id.isEmpty()) {

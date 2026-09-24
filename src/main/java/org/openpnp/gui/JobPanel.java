@@ -727,7 +727,7 @@ public class JobPanel extends JPanel {
     }
 
     /** A time left as a person says it: seconds, minutes and seconds, or hours and minutes. */
-    static String duration(double seconds) {
+    public static String duration(double seconds) {
         long total = Math.round(seconds);
         if (total < 60) {
             return String.format(Translations.getString("StatusBar.Duration.Seconds"), total); //$NON-NLS-1$

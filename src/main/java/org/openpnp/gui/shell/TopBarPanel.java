@@ -205,6 +205,8 @@ public class TopBarPanel extends JPanel {
         this.configuration = configuration;
         this.jobPanel = jobPanel;
         this.menuBar = menuBar;
+        this.machineControls = machineControls;
+        this.stopMachine = stopMachine;
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
         setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
@@ -279,6 +281,11 @@ public class TopBarPanel extends JPanel {
         searchBox = search(openCommands);
         add(searchBox);
         add(Box.createHorizontalStrut(6));
+        operatorEntry = Ui.iconButton(Ui.icon("activity"), Ui.Size.Md, Ui.Variant.Ghost, //$NON-NLS-1$
+                Translations.getString("TopBar.OperatorMode.toolTipText")); //$NON-NLS-1$
+        operatorEntry.setVisible(false);
+        add(neverNarrower(operatorEntry));
+        add(Box.createHorizontalStrut(6));
         JButton bell = Ui.iconButton(bellIcon, Ui.Size.Md, Ui.Variant.Ghost,
                 Translations.getString("TopBar.Notifications.toolTipText")); //$NON-NLS-1$
         bell.addActionListener(e -> openIssues.run());
@@ -317,7 +324,7 @@ public class TopBarPanel extends JPanel {
      */
     @Override
     public void doLayout() {
-        if (jobPill != null && getWidth() > 0) {
+        if (jobPill != null && jobPill.isVisible() && getWidth() > 0) {
             int deficit = getPreferredSize().width - getWidth();
             int progressGives = progressRow.getPreferredSize().width - PROGRESS_MIN;
             int searchGives = searchBox.getPreferredSize().width - SEARCH_MIN;
@@ -344,11 +351,137 @@ public class TopBarPanel extends JPanel {
         brand.add(name);
         String version = Main.getVersionString();
         int dash = version.indexOf('-');
-        JLabel ver = Ui.muted(dash > 0 ? version.substring(0, dash) : version);
-        ver.setFont(Ui.font(11f));
-        ver.setBorder(new EmptyBorder(0, 2, 0, 0));
-        brand.add(ver);
+        brandNote = Ui.muted(dash > 0 ? version.substring(0, dash) : version);
+        brandNote.setFont(Ui.font(11f));
+        brandNote.setBorder(new EmptyBorder(0, 2, 0, 0));
+        brand.add(brandNote);
         return brand;
+    }
+
+    private final MachineControlsPanel machineControls;
+    private final Action stopMachine;
+    private JLabel brandNote;
+    private JButton operatorEntry;
+    private JPanel operatorGroup;
+    private final JLabel operatorJob = new JLabel();
+    private final JLabel operatorBoards = Ui.t2(""); //$NON-NLS-1$
+    private final Chip operatorNozzles = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$
+    private final Chip operatorFeeders = new Chip("", Chip.Tone.Warn, Chip.Shape.Chip).withLed(true); //$NON-NLS-1$
+    private final java.util.Map<Component, Boolean> workbenchVisibility = new java.util.LinkedHashMap<>();
+
+    /**
+     * How production mode is entered and left, and the shortcuts' list: the button that enters it
+     * appears, and the bar gets the row it shows instead of the workbench's.
+     */
+    public void setOperatorActions(Runnable enter, Runnable exit, Action hotkeys) {
+        operatorEntry.addActionListener(e -> enter.run());
+        operatorEntry.setVisible(true);
+
+        // Unlike a row, as wide as the bar: the glue in it puts the chips and buttons at the right.
+        JPanel group = new JPanel();
+        group.setOpaque(false);
+        group.setLayout(new BoxLayout(group, BoxLayout.X_AXIS));
+        java.util.function.Consumer<Component> put = c -> {
+            if (group.getComponentCount() > 0) {
+                group.add(Box.createHorizontalStrut(10));
+            }
+            if (c instanceof JComponent) {
+                ((JComponent) c).setAlignmentY(CENTER_ALIGNMENT);
+            }
+            group.add(c);
+        };
+        operatorGroup = group;
+        put.accept(Box.createHorizontalStrut(2));
+        put.accept(Ui.divider(24));
+        JPanel job = row(6);
+        JLabel folder = new JLabel(Ui.iconSm("folder")); //$NON-NLS-1$
+        folder.setForeground(Ui.text2());
+        job.add(folder);
+        operatorJob.setFont(Ui.font(Ui.BASE, Font.BOLD));
+        job.add(operatorJob);
+        job.add(operatorBoards);
+        put.accept(job);
+        put.accept(Box.createHorizontalGlue());
+        put.accept(new MachineStateChip(configuration, machineControls.startStopMachineAction));
+        operatorNozzles.setIcon(Ui.iconSm("nozzle")); //$NON-NLS-1$
+        put.accept(operatorNozzles);
+        put.accept(operatorFeeders);
+        put.accept(Ui.divider(24));
+        JButton stopMachineButton = Ui.iconButton(stopMachine, Ui.Size.Md, Ui.Variant.SolidDanger);
+        stopMachineButton.setIcon(Ui.icon("power")); //$NON-NLS-1$
+        stopMachineButton.setToolTipText(String.valueOf(stopMachine.getValue(Action.NAME)));
+        put.accept(neverNarrower(stopMachineButton));
+        JButton keys = Ui.button(Translations.getString("TopBar.OperatorMode.Hotkeys"), Ui.icon("keyboard"), //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Size.Md, Ui.Variant.Default);
+        keys.setFocusable(false);
+        keys.addActionListener(e -> hotkeys.actionPerformed(e));
+        put.accept(neverNarrower(keys));
+        JButton leave = Ui.button(Translations.getString("TopBar.OperatorMode.Exit"), Ui.icon("external"), //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Size.Md, Ui.Variant.Default);
+        leave.setFocusable(false);
+        leave.addActionListener(e -> exit.run());
+        put.accept(neverNarrower(leave));
+        operatorGroup.setVisible(false);
+        add(operatorGroup, 1);
+    }
+
+    /** Production mode's row, or the workbench's; each of the workbench's parts as it was. */
+    public void setOperatorMode(boolean on) {
+        if (operatorGroup == null) {
+            return;
+        }
+        if (on) {
+            workbenchVisibility.clear();
+            for (int i = 1; i < getComponentCount(); i++) {
+                Component c = getComponent(i);
+                boolean placeholder = c instanceof JComponent && ((JComponent) c)
+                        .getClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT_BUTTONS_PLACEHOLDER) != null;
+                if (c != operatorGroup && !placeholder) {
+                    workbenchVisibility.put(c, c.isVisible());
+                    c.setVisible(false);
+                }
+            }
+            operatorJob.setText(jobNameLabel.getText());
+            int boards = jobPanel.getJob() == null ? 0 : jobPanel.getJob().getBoardLocations().size();
+            operatorBoards.setText(String.format(Translations.getString("TopBar.OperatorMode.Boards"), boards)); //$NON-NLS-1$
+            brandNote.setText(Translations.getString("TopBar.OperatorMode")); //$NON-NLS-1$
+        }
+        else {
+            for (java.util.Map.Entry<Component, Boolean> e : workbenchVisibility.entrySet()) {
+                e.getKey().setVisible(e.getValue());
+            }
+            workbenchVisibility.clear();
+            String version = Main.getVersionString();
+            int dash = version.indexOf('-');
+            brandNote.setText(dash > 0 ? version.substring(0, dash) : version);
+        }
+        operatorGroup.setVisible(on);
+        revalidate();
+        repaint();
+    }
+
+    /** The nozzles with their tips, and how many of the job's feeders are empty or low. */
+    public void showOperator(int emptyFeeders, int lowFeeders) {
+        StringBuilder nozzles = new StringBuilder();
+        for (org.openpnp.spi.Head head : configuration.getMachine().getHeads()) {
+            for (org.openpnp.spi.Nozzle nozzle : head.getNozzles()) {
+                if (nozzles.length() > 0) {
+                    nozzles.append("  \u00b7  "); //$NON-NLS-1$
+                }
+                nozzles.append(nozzle.getName()).append(' ')
+                        .append(nozzle.getNozzleTip() == null ? "\u2014" : nozzle.getNozzleTip().getName()); //$NON-NLS-1$
+            }
+        }
+        operatorNozzles.setText(nozzles.toString());
+        operatorFeeders.setVisible(emptyFeeders + lowFeeders > 0);
+        if (emptyFeeders > 0) {
+            operatorFeeders.setTone(Chip.Tone.Err);
+            operatorFeeders.setText(String.format(Translations.getString("TopBar.OperatorMode.Empty"), emptyFeeders)); //$NON-NLS-1$
+        }
+        else {
+            operatorFeeders.setTone(Chip.Tone.Warn);
+            operatorFeeders.setText(String.format(Translations.getString("TopBar.OperatorMode.Low"), lowFeeders)); //$NON-NLS-1$
+        }
     }
 
     /** The window's menu bar, dressed as {@code .menus}: flat, secondary text, hover only. */
