@@ -39,7 +39,7 @@ import org.freedesktop.gstreamer.Pipeline;
 import org.freedesktop.gstreamer.Sample;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.GstreamerCameraConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.spi.PropertySheetHolder;
 import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Attribute;
@@ -170,7 +170,7 @@ public class GstreamerCamera extends ReferenceCamera {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new GstreamerCameraConfigurationWizard(this);
+        return CameraDeviceForms.gstreamer(this);
     }
 
     @Override

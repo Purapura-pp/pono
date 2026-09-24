@@ -69,9 +69,8 @@ public final class LegacyWizardAdapter {
     private LegacyWizardAdapter() {
     }
 
-    /** Laid out for what they show - a console, charts, a calibration run - and left alone. */
-    static final Set<String> EXCEPTIONS = Set.of("GcodeDriverConsole", //$NON-NLS-1$
-            "ReferenceAdvancedMotionPlannerDiagnosticsWizard", "ReferenceCameraCalibrationWizard"); //$NON-NLS-1$ //$NON-NLS-2$
+    /** Laid out for what they show, a console, and left alone. */
+    static final Set<String> EXCEPTIONS = Set.of("GcodeDriverConsole"); //$NON-NLS-1$
 
     private static final String ADAPTED = "Pono.legacyAdapted"; //$NON-NLS-1$
     /** A spec this small is a gap between columns, not a column to relax. */

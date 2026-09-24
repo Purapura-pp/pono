@@ -165,6 +165,8 @@ public final class Form {
         org.openpnp.model.DisplayPreferences preferences;
         boolean modifiesConfiguration = true;
         java.util.function.Consumer<FormWizard> onChange;
+        java.util.function.Consumer<FormWizard> onApply;
+        java.util.function.Consumer<FormWizard> onReload;
 
         /**
          * What the form edits belongs to the job, not to the machine's configuration: applying it
@@ -180,6 +182,24 @@ public final class Form {
          * {@link FormWizard#value(String)} is what the field shows: for content that follows a
          * choice before it is applied, as a part's package does.
          */
+        /**
+         * Called after Apply has written the fields: what the object must do with its new
+         * settings, a camera opening its device again.
+         */
+        public Builder onApply(java.util.function.Consumer<FormWizard> onApply) {
+            this.onApply = onApply;
+            return this;
+        }
+
+        /**
+         * Called whenever the form shows what the object holds, at first and on Reset: for
+         * content the fields do not bind, a list edited in a block of its own.
+         */
+        public Builder onReload(java.util.function.Consumer<FormWizard> onReload) {
+            this.onReload = onReload;
+            return this;
+        }
+
         public Builder onChange(java.util.function.Consumer<FormWizard> onChange) {
             this.onChange = onChange;
             return this;
@@ -530,12 +550,14 @@ public final class Form {
         }
 
         /**
-         * The last decimal's format, where the lengths' three places are too few: an axis's
-         * resolution of 0.0001 showed as 0.000.
+         * The last decimal's, length's or location's format, where the lengths' three places are
+         * too few: an axis's resolution of 0.0001 showed as 0.000, a camera's 0.0317 mm per pixel
+         * as 0.032.
          */
         public Builder format(String format) {
-            if (requireLast().kind != Kind.Decimal) {
-                throw new IllegalStateException("a format belongs to a decimal"); //$NON-NLS-1$
+            Kind kind = requireLast().kind;
+            if (kind != Kind.Decimal && kind != Kind.Length && kind != Kind.Location) {
+                throw new IllegalStateException("a format belongs to a decimal or a length"); //$NON-NLS-1$
             }
             last.format = format;
             return this;
@@ -549,8 +571,8 @@ public final class Form {
 
         /** The last button moves the machine, and is marked so. */
         public Builder movesMachine() {
-            // The last button beside a field when there is one, the action otherwise.
-            if (requireLast().kind != Kind.Action && !last.buttons.isEmpty()) {
+            // The last button beside a field or an action when there is one, the action otherwise.
+            if (!requireLast().buttons.isEmpty()) {
                 last.buttons.get(last.buttons.size() - 1).movesMachine = true;
             }
             else {

@@ -16,7 +16,7 @@ import java.util.ConcurrentModificationException;
 import org.openpnp.Translations;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.SimulationModeMachine;
-import org.openpnp.machine.reference.camera.wizards.SimulatedUpCameraConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.machine.reference.solutions.CameraSolutions;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
@@ -411,7 +411,7 @@ public class SimulatedUpCamera extends ReferenceCamera {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new SimulatedUpCameraConfigurationWizard(this);
+        return CameraDeviceForms.simulatedUp(this);
     }
 
     @Override

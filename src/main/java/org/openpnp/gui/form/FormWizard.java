@@ -453,7 +453,12 @@ public class FormWizard extends AbstractConfigurationWizard {
                     Ui.movesMachine(button);
                 }
                 button.addActionListener(e -> field.action.run());
-                JPanel row = Forms.row(button);
+                List<JComponent> parts = new ArrayList<>();
+                parts.add(button);
+                for (Form.Button spec : field.buttons) {
+                    parts.add(fieldButton(spec));
+                }
+                JPanel row = Forms.row(parts.toArray(new JComponent[0]));
                 row.add(Box.createHorizontalGlue());
                 return row;
             }
@@ -648,14 +653,15 @@ public class FormWizard extends AbstractConfigurationWizard {
             return;
         }
         LengthConverter length = new LengthConverter(getDisplayPreferences());
+        LengthConverter planar = field.format == null ? length : new LengthConverter(field.format);
         DoubleConverter decimal = new DoubleConverter(getDisplayPreferences().getLengthDisplayFormat());
         for (JTextField input : (List<JTextField>) control.getClientProperty("Pono.form.fields")) { //$NON-NLS-1$
             switch ((String) input.getClientProperty("Pono.form.axis")) { //$NON-NLS-1$
                 case "X": //$NON-NLS-1$
-                    input.setText(length.convertForward(location.getLengthX()));
+                    input.setText(planar.convertForward(location.getLengthX()));
                     break;
                 case "Y": //$NON-NLS-1$
-                    input.setText(length.convertForward(location.getLengthY()));
+                    input.setText(planar.convertForward(location.getLengthY()));
                     break;
                 case "Z": //$NON-NLS-1$
                     input.setText(length.convertForward(location.getLengthZ()));
@@ -903,19 +909,22 @@ public class FormWizard extends AbstractConfigurationWizard {
                     addWrappedBinding(spec.bean, field.property, control, "text", PERCENT); //$NON-NLS-1$
                     break;
                 case Length:
-                    addWrappedBinding(spec.bean, field.property, control, "text", length); //$NON-NLS-1$
+                    addWrappedBinding(spec.bean, field.property, control, "text", //$NON-NLS-1$
+                            field.format == null ? length : new LengthConverter(field.format));
                     break;
                 case Location: {
                     MutableLocationProxy proxy = new MutableLocationProxy();
                     bind(UpdateStrategy.READ_WRITE, spec.bean, field.property, proxy, "location"); //$NON-NLS-1$
                     locations.put(field, proxy);
+                    LengthConverter axisLength = field.format == null ? length : new LengthConverter(field.format);
                     for (JTextField input : (List<JTextField>) control.getClientProperty("Pono.form.fields")) { //$NON-NLS-1$
                         String axis = (String) input.getClientProperty("Pono.form.axis"); //$NON-NLS-1$
                         if (axis.equals("C")) { //$NON-NLS-1$
                             addWrappedBinding(proxy, "rotation", input, "text", decimal); //$NON-NLS-1$ //$NON-NLS-2$
                         }
                         else {
-                            addWrappedBinding(proxy, "length" + axis, input, "text", length); //$NON-NLS-1$ //$NON-NLS-2$
+                            addWrappedBinding(proxy, "length" + axis, input, "text", //$NON-NLS-1$ //$NON-NLS-2$
+                                    axis.equals("Z") ? length : axisLength); //$NON-NLS-1$
                         }
                     }
                     break;
@@ -987,7 +996,24 @@ public class FormWizard extends AbstractConfigurationWizard {
         for (Field field : pipelines.keySet()) {
             showPipeline(field);
         }
+        if (spec.onReload != null) {
+            spec.onReload.accept(this);
+        }
         refresh();
+    }
+
+    @Override
+    protected void saveToModel() {
+        super.saveToModel();
+        if (spec.onApply != null) {
+            spec.onApply.accept(this);
+        }
+    }
+
+    /** A block of the form's own was edited: Apply is to write it, as it does a field. */
+    public void edit() {
+        notifyChange();
+        edited();
     }
 
     @Override

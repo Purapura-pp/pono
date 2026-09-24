@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.camera.wizards.WebcamConfigurationWizard;
+import org.openpnp.machine.reference.camera.wizards.CameraDeviceForms;
 import org.openpnp.spi.PropertySheetHolder;
 import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Attribute;
@@ -155,7 +155,7 @@ public class Webcams extends ReferenceCamera implements Runnable, WebcamImageTra
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new WebcamConfigurationWizard(this);
+        return CameraDeviceForms.webcam(this);
     }
 
     @Override
