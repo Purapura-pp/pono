@@ -16,6 +16,7 @@ Run any subcommand with -h for its options.
 """
 
 import argparse
+import html
 import re
 import sys
 from collections import Counter, OrderedDict
@@ -372,6 +373,16 @@ def java_string_literals():
             continue
         for match in literal.finditer(text):
             found.add(load_java_literal(match.group(1)))
+    # The default vision pipelines ship as XML, and their parameters' labels and descriptions go
+    # through translateText as well: a translation of one of them is not dead.
+    attribute = re.compile(r'\s[\w-]+="([^"]*)"')
+    for path in RESOURCES.parent.parent.rglob("*.xml"):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for match in attribute.finditer(text):
+            found.add(html.unescape(match.group(1)))
     return found
 
 

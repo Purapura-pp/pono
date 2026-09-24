@@ -419,7 +419,10 @@ public class TableUtils {
             if (type == Boolean.class) {
                 kinds[i] = Kind.Check;
             }
-            else if ("ID".equalsIgnoreCase(name == null ? null : name.trim())) { //$NON-NLS-1$
+            else if ("ID".equalsIgnoreCase(name == null ? null : name.trim()) //$NON-NLS-1$
+                    // A part's ID names it as a placement's does: cut short, FIDUCIAL-1MM is
+                    // FIDUCIAL-1... and could be any fiducial.
+                    || PartCellValue.class.isAssignableFrom(type) || org.openpnp.model.Part.class.isAssignableFrom(type)) {
                 kinds[i] = Kind.Id;
             }
             else if (alignments != null && i < alignments.length

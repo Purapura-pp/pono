@@ -243,7 +243,8 @@ public class IssuePanel extends JPanel {
         if (text == null) {
             return null;
         }
-        String body = "<body style='width: 160px'>"; //$NON-NLS-1$
+        // Narrow enough for the properties column at 1366 pixels, radio button and borders and all.
+        String body = "<body style='width: 150px'>"; //$NON-NLS-1$
         if (text.regionMatches(true, 0, "<html>", 0, 6)) { //$NON-NLS-1$
             return text.contains("width") ? text : "<html>" + body + text.substring(6); //$NON-NLS-1$ //$NON-NLS-2$
         }

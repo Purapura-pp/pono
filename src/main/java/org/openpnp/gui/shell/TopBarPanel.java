@@ -328,6 +328,12 @@ public class TopBarPanel extends JPanel {
             int deficit = getPreferredSize().width - getWidth();
             int progressGives = progressRow.getPreferredSize().width - PROGRESS_MIN;
             int searchGives = searchBox.getPreferredSize().width - SEARCH_MIN;
+            boolean compact = compactJobButtons;
+            fitJobButtons(deficit, progressGives + searchGives);
+            if (compact != compactJobButtons) {
+                ((BoxLayout) getLayout()).invalidateLayout(this);
+                deficit = getPreferredSize().width - getWidth();
+            }
             minimumWidth(progressRow, PROGRESS_MIN);
             minimumWidth(searchBox, deficit > progressGives ? SEARCH_MIN : searchBox.getPreferredSize().width);
             minimumWidth(jobPill, deficit > progressGives + searchGives ? JOB_NAME_MIN
@@ -614,11 +620,16 @@ public class TopBarPanel extends JPanel {
         row.add(pauseButton);
         row.add(step);
         row.add(stop);
+        jobButtons = new JButton[] { startButton, pauseButton, step, stop };
+        for (JButton button : jobButtons) {
+            button.putClientProperty(FULL_TEXT, button.getText());
+        }
+        jobControlsRow = row;
         // One action drives both Start and Pause, saying which it is by its name. The buttons
         // keep their own names and take turns being enabled instead; paused, Start is Resume.
         Runnable follow = () -> {
             boolean running = jobPanel.isJobRunning();
-            startButton.setText(Translations.getString(jobPanel.isJobPaused() ? "TopBar.Job.Resume" //$NON-NLS-1$
+            jobText(startButton, Translations.getString(jobPanel.isJobPaused() ? "TopBar.Job.Resume" //$NON-NLS-1$
                     : "TopBar.Job.Start")); //$NON-NLS-1$
             startButton.setEnabled(startPause.isEnabled() && !running);
             pauseButton.setEnabled(startPause.isEnabled() && running);
@@ -633,6 +644,45 @@ public class TopBarPanel extends JPanel {
         jobPanel.addPropertyChangeListener(JobPanel.PROPERTY_JOB_STATE, e -> follow.run());
         follow.run();
         return row;
+    }
+
+    private static final String FULL_TEXT = "Pono.fullText"; //$NON-NLS-1$
+    private JButton[] jobButtons;
+    private JComponent jobControlsRow;
+    private boolean compactJobButtons;
+    private int jobButtonsSaved;
+
+    /** A job button's words, on it or, while the bar is too narrow for them, on hover. */
+    private void jobText(JButton button, String text) {
+        button.putClientProperty(FULL_TEXT, text);
+        button.setText(compactJobButtons ? "" : text); //$NON-NLS-1$
+        button.setToolTipText(compactJobButtons ? text : null);
+    }
+
+    /**
+     * The job buttons' words go before the job's name does: the icons say Start, Pause, Step and
+     * Stop well enough, the name is what says which job it is. They come back only once the bar
+     * has room for them again, so that the bar does not flip at one width.
+     */
+    private void fitJobButtons(int deficit, int earlier) {
+        if (jobButtons == null) {
+            return;
+        }
+        if (!compactJobButtons && deficit > earlier) {
+            int before = jobControlsRow.getPreferredSize().width;
+            setCompactJobButtons(true);
+            jobButtonsSaved = before - jobControlsRow.getPreferredSize().width;
+        }
+        else if (compactJobButtons && deficit + jobButtonsSaved <= earlier) {
+            setCompactJobButtons(false);
+        }
+    }
+
+    private void setCompactJobButtons(boolean compact) {
+        compactJobButtons = compact;
+        for (JButton button : jobButtons) {
+            jobText(button, (String) button.getClientProperty(FULL_TEXT));
+        }
     }
 
     /** {@code 31 / 48 [====  ] 64%}, 128 pixels wide; "Ready" where the percentage goes while idle. */

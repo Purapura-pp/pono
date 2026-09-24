@@ -556,18 +556,20 @@ public class MainFrame extends JFrame {
             return;
         }
         boolean strip = camera == org.openpnp.gui.shell.PageLayouts.Camera.Small;
+        // Hidden, the stage is a sliver under the page: the large camera's cards would be cut there.
+        boolean large = camera == org.openpnp.gui.shell.PageLayouts.Camera.Large;
         if (cameraToolsBar != null) {
-            cameraToolsBar.setVisible(!strip);
+            cameraToolsBar.setVisible(large);
         }
         if (jogCard != null) {
-            jogCard.setVisible(!strip);
+            jogCard.setVisible(large);
         }
         if (cameraModeCard != null) {
             cameraModeCard.setVisible(strip);
             stripHandle.setVisible(strip);
         }
         if (unitsStrip != null) {
-            unitsStrip.setVisible(!strip);
+            unitsStrip.setVisible(large);
         }
         if (droPanel != null) {
             droPanel.setForcedCompact(strip);

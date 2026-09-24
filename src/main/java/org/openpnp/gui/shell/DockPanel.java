@@ -353,10 +353,12 @@ public class DockPanel extends RoundedPanel {
             java.awt.Insets insets = getInsets();
             int available = getWidth() - insets.left - insets.right;
             // What the row needs with every word shown, whatever is shown now.
+            // The filter gives way down to its minimum; the rest keep what they would like, as a
+            // button squeezed below it cuts its own words or pushes the filter off the end.
             int need = 0;
             for (Component c : getComponents()) {
                 if (c.isVisible()) {
-                    need += c.getMinimumSize().width;
+                    need += (c instanceof JTextField ? c.getMinimumSize() : c.getPreferredSize()).width;
                 }
             }
             java.util.Map<JButton, Integer> wordWidth = new java.util.HashMap<>();

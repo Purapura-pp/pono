@@ -190,6 +190,8 @@ public class CalibrationPanel extends JPanel {
 
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         table.setDefaultRenderer(Object.class, new CellRenderer());
+        // What a step rests on and what it changed run on to a second line rather than being cut.
+        org.openpnp.gui.support.WrappingCells.install(table, 3, 4);
         AutoSelectTextTable.setEmptyText(table, Translations.getString("CalibrationPanel.Empty")); //$NON-NLS-1$
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {

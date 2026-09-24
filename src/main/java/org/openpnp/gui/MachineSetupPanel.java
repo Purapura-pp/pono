@@ -224,7 +224,7 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         table.getColumnModel().getColumn(TreeModel.TYPE).setCellRenderer(DockRenderers.secondary());
         table.getColumnModel().getColumn(TreeModel.STATUS).setCellRenderer(DockRenderers.status(
                 v -> ((State) v).tone, v -> ((State) v).text));
-        table.getColumnModel().getColumn(TreeModel.NOTE).setCellRenderer(DockRenderers.secondary());
+        table.getColumnModel().getColumn(TreeModel.NOTE).setCellRenderer(new NoteRenderer(DockRenderers.secondary()));
         TableUtils.installColumnWidthSavers(table, java.util.prefs.Preferences.userNodeForPackage(MachineSetupPanel.class),
                 "MachineSetupPanel.tree"); //$NON-NLS-1$
 
@@ -830,6 +830,54 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
     }
 
     /** The name cell: indented by depth, the chevron of a node with children, its icon, its name. */
+    /**
+     * A note that lists names, a group's, with as many of them as the column has room for and
+     * "…" for the rest, which the tree shows anyway; the whole list on hover.
+     */
+    private static final class NoteRenderer implements TableCellRenderer {
+        private static final String SEPARATOR = " \u00b7 "; //$NON-NLS-1$
+        private static final String MORE = "\u2026"; //$NON-NLS-1$
+        private final TableCellRenderer base;
+
+        NoteRenderer(TableCellRenderer base) {
+            this.base = base;
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean selected,
+                boolean focused, int row, int column) {
+            Component c = base.getTableCellRendererComponent(table, value, selected, focused, row, column);
+            if (!(c instanceof JLabel)) {
+                return c;
+            }
+            JLabel label = (JLabel) c;
+            String text = label.getText();
+            label.setToolTipText(null);
+            if (text == null || !text.contains(SEPARATOR)) {
+                return c;
+            }
+            java.awt.Insets insets = label.getInsets();
+            int room = table.getColumnModel().getColumn(column).getWidth() - insets.left - insets.right;
+            java.awt.FontMetrics fm = label.getFontMetrics(label.getFont());
+            if (fm.stringWidth(text) <= room) {
+                return c;
+            }
+            List<String> names = new ArrayList<>(java.util.Arrays.asList(text.split(java.util.regex.Pattern.quote(SEPARATOR))));
+            names.remove(MORE);
+            String shown = MORE;
+            for (int n = names.size() - 1; n >= 1; n--) {
+                String candidate = String.join(SEPARATOR, names.subList(0, n)) + SEPARATOR + MORE;
+                if (fm.stringWidth(candidate) <= room) {
+                    shown = candidate;
+                    break;
+                }
+            }
+            label.setText(shown);
+            label.setToolTipText(text);
+            return c;
+        }
+    }
+
     private final class NameRenderer implements TableCellRenderer {
         private final JPanel cell = new JPanel(null) {
             @Override

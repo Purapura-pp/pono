@@ -192,7 +192,7 @@ a complete change list, only those that may directly interest or affect users.
 * The drivers', actuators' and signalers' forms are translated into Simplified Chinese, and the 91 keys of their wizards that nothing reads any more have been removed from all seven language files.
 * The feeders' forms are translated into Simplified Chinese, and the 429 keys of their wizards that nothing reads any more have been removed from all seven language files.
 * The NeoDen4's and the Photon feeders' forms are translated into Simplified Chinese, and the 74 keys of their wizards that nothing reads any more have been removed from all seven language files.
-* The About dialog - its title, button, tabs and notices - and the diagnostics dialog's files are translated: no text is left in the sources that a translation cannot reach. The 558 keys and the 48 texts nothing reads any more have been removed, and the 38 keys other languages still had that English no longer has.
+* The About dialog - its title, button, tabs and notices - and the diagnostics dialog's files are translated: no text is left in the sources that a translation cannot reach. The 558 keys nothing reads any more have been removed, and the 38 keys other languages still had that English no longer has.
 * Production mode is translated into Simplified Chinese.
 
 ## Development

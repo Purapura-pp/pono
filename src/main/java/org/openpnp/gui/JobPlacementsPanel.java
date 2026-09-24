@@ -251,6 +251,8 @@ public class JobPlacementsPanel extends JPanel {
         TableUtils.setColumnAlignment(tableModel, table);
         
         TableUtils.installColumnWidthSavers(table, prefs, "JobPanel.jobPlacementsTable.columnWidth"); //$NON-NLS-1$
+        // A long comment runs on to a second line rather than being cut short.
+        org.openpnp.gui.support.WrappingCells.install(table, 12);
         
         tableModel.setJobPlacementsPanel(this);
         table.getSelectionModel().addListSelectionListener(new ListSelectionListener() {

@@ -396,7 +396,7 @@ public class UiRuler {
      * they are asked for, so that the feeders page itself is photographed as it is.
      */
     private void addSampleFeeders(Machine machine) throws Exception {
-        if (sceneFilter.stream().noneMatch(s -> s.startsWith("feeder-"))) {
+        if (!sceneFilter.isEmpty() && sceneFilter.stream().noneMatch(s -> s.startsWith("feeder-"))) {
             return;
         }
         Object[][] samples = {
@@ -439,7 +439,7 @@ public class UiRuler {
 
     /** The NeoDen4's driver, feeders' actuator, buzzer and switched camera, for their scenes. */
     private void addNeodenSamples(Machine machine) throws Exception {
-        if (sceneFilter.stream().noneMatch(s -> s.startsWith("neoden-"))) {
+        if (!sceneFilter.isEmpty() && sceneFilter.stream().noneMatch(s -> s.startsWith("neoden-"))) {
             return;
         }
         edt(() -> {
@@ -697,7 +697,7 @@ public class UiRuler {
                 if (extra != null && feederScene(scene.id)) {
                     // A Photon feeder's name ends in the slot it is in.
                     String name = extra[2];
-                    expect(missed, selectRow(page, s -> s.equals(name) || s.startsWith(name + " (")), extra[1]);
+                    expect(missed, selectRow(page, s -> s.startsWith(name)), extra[1]);
                 }
                 else if (extra != null) {
                     // By its name: a group's note lists the names of what is under it.
@@ -820,7 +820,12 @@ public class UiRuler {
             JComponent content = (JComponent) gallery.getContentPane();
             layoutAll(content);
             BufferedImage image = paint(content, scale);
-            List<UiAudit.Finding> found = new UiAudit(rules, new IdentityHashMap<>(),
+            // The gallery names the stylesheet's tokens, which are identifiers and stay as they are.
+            Set<String> tokens = new java.util.HashSet<>(rules.dataWords);
+            tokens.addAll(java.util.List.of("bg", "surface", "border", "accent", "ok", "warn", "err", "info", "mono")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$
+            UiAudit.Rules galleryRules = new UiAudit.Rules(rules.allowedWords, rules.allowedPhrases, tokens,
+                    rules.typeScale, rules.classNames);
+            List<UiAudit.Finding> found = new UiAudit(galleryRules, new IdentityHashMap<>(),
                     content, image, scale, "\u63a7\u4ef6\u6837\u5f20", label).run();
             findings.addAll(found);
             gallery.dispose();
