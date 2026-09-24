@@ -54,8 +54,22 @@ public final class DragFeederForm {
     private DragFeederForm() {
     }
 
+    /** The template image a feeder's vision looks for, and the area of the camera's image it looks in. */
+    public interface Picture {
+        BufferedImage getTemplateImage();
+
+        void setTemplateImage(BufferedImage image);
+
+        Rectangle getAreaOfInterest();
+
+        /** Where the area's coordinates count from in the camera's image: its top left corner here. */
+        default java.awt.Point origin(Camera camera) {
+            return new java.awt.Point(0, 0);
+        }
+    }
+
     /** What the two feeders have alike, each in its own class. */
-    interface Target {
+    interface Target extends Picture {
         ReferenceFeeder feeder();
 
         Length getPartPitch();
@@ -89,12 +103,6 @@ public final class DragFeederForm {
         boolean isVisionEnabled();
 
         void setVisionEnabled(boolean enabled);
-
-        BufferedImage getTemplateImage();
-
-        void setTemplateImage(BufferedImage image);
-
-        Rectangle getAreaOfInterest();
 
         void setAreaOfInterest(Rectangle area);
 
@@ -261,7 +269,7 @@ public final class DragFeederForm {
                 .onReload(f -> template.load())
                 .onApply(f -> template.store())
                 .build();
-        template.form = form[0];
+        template.attach(form[0]);
         return form[0];
     }
 
@@ -274,26 +282,30 @@ public final class DragFeederForm {
         });
     }
 
+    private static Camera camera() throws Exception {
+        return MainFrame.get().getMachineControls().getSelectedTool().getHead().getDefaultCamera();
+    }
+
     private static CameraView view() throws Exception {
-        Camera camera = MainFrame.get().getMachineControls().getSelectedTool().getHead().getDefaultCamera();
-        return MainFrame.get().getCameraViews().setSelectedCamera(camera);
+        return MainFrame.get().getCameraViews().setSelectedCamera(camera());
     }
 
     /**
      * The template image and the rectangles drawn in the camera view that take a new one and the
-     * area of interest. A new image is the form's until Apply.
+     * area of interest, whose fields are {@code aoiX}, {@code aoiY}, {@code aoiWidth} and
+     * {@code aoiHeight}. A new image is the form's until Apply.
      */
-    static final class Template extends JPanel {
-        private final Target target;
+    public static final class Template extends JPanel {
+        private final Picture target;
         private final JLabel image = new JLabel();
         private final JButton select = new JButton();
         private final JButton cancel = new JButton(Translations.getString("DragFeederForm.Cancel")); //$NON-NLS-1$
         private BufferedImage staged;
         private boolean changed;
         private int selecting;
-        FormWizard form;
+        private FormWizard form;
 
-        Template(Target target) {
+        public Template(Picture target) {
             super(new BorderLayout(0, 6));
             this.target = target;
             setOpaque(false);
@@ -311,13 +323,18 @@ public final class DragFeederForm {
             end();
         }
 
-        void load() {
+        /** The form whose Apply a new image waits for. */
+        public void attach(FormWizard form) {
+            this.form = form;
+        }
+
+        public void load() {
             staged = target.getTemplateImage();
             changed = false;
             display(staged);
         }
 
-        void store() {
+        public void store() {
             if (changed) {
                 target.setTemplateImage(staged);
                 changed = false;
@@ -331,11 +348,13 @@ public final class DragFeederForm {
 
         private void begin(int what) {
             UiUtils.messageBoxOnException(() -> {
-                CameraView view = view();
+                Camera camera = camera();
+                CameraView view = MainFrame.get().getCameraViews().setSelectedCamera(camera);
                 view.setSelectionEnabled(true);
                 Rectangle area = target.getAreaOfInterest();
                 if (what == 2 && area != null && area.getWidth() > 0 && area.getHeight() > 0) {
-                    view.setSelection(area.getX(), area.getY(), area.getWidth(), area.getHeight());
+                    java.awt.Point origin = target.origin(camera);
+                    view.setSelection(area.getX() + origin.x, area.getY() + origin.y, area.getWidth(), area.getHeight());
                 }
                 else {
                     view.setSelection(0, 0, 100, 100);
@@ -376,12 +395,14 @@ public final class DragFeederForm {
         }
 
         /** The area of interest drawn in the camera view: a second click takes it. */
-        void selectArea(FormWizard form) {
+        public void selectArea(FormWizard form) {
             if (selecting == 2) {
                 UiUtils.messageBoxOnException(() -> {
-                    java.awt.Rectangle rect = view().getSelection();
-                    form.setValue("aoiX", Integer.toString(rect.x)); //$NON-NLS-1$
-                    form.setValue("aoiY", Integer.toString(rect.y)); //$NON-NLS-1$
+                    Camera camera = camera();
+                    java.awt.Rectangle rect = MainFrame.get().getCameraViews().setSelectedCamera(camera).getSelection();
+                    java.awt.Point origin = target.origin(camera);
+                    form.setValue("aoiX", Integer.toString(rect.x - origin.x)); //$NON-NLS-1$
+                    form.setValue("aoiY", Integer.toString(rect.y - origin.y)); //$NON-NLS-1$
                     form.setValue("aoiWidth", Integer.toString(rect.width)); //$NON-NLS-1$
                     form.setValue("aoiHeight", Integer.toString(rect.height)); //$NON-NLS-1$
                 });

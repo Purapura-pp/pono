@@ -11,7 +11,7 @@ import javax.imageio.ImageIO;
 import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.neoden4.wizards.Neoden4FeederConfigurationWizard;
+import org.openpnp.machine.neoden4.wizards.Neoden4Forms;
 import org.openpnp.machine.reference.ReferenceFeeder;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -324,7 +324,7 @@ public class Neoden4Feeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new Neoden4FeederConfigurationWizard(this);
+        return Neoden4Forms.feeder(this);
     }
 
     @Override
