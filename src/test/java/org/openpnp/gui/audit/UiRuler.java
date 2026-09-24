@@ -822,7 +822,8 @@ public class UiRuler {
             BufferedImage image = paint(content, scale);
             // The gallery names the stylesheet's tokens, which are identifiers and stay as they are.
             Set<String> tokens = new java.util.HashSet<>(rules.dataWords);
-            tokens.addAll(java.util.List.of("bg", "surface", "border", "accent", "ok", "warn", "err", "info", "mono")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$
+            tokens.addAll(java.util.List.of("bg", "surface", "border", "accent", "ok", "warn", "err", "info", "mono", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$
+                    "ffffff")); //$NON-NLS-1$
             UiAudit.Rules galleryRules = new UiAudit.Rules(rules.allowedWords, rules.allowedPhrases, tokens,
                     rules.typeScale, rules.classNames);
             List<UiAudit.Finding> found = new UiAudit(galleryRules, new IdentityHashMap<>(),

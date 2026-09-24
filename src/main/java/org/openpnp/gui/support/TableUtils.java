@@ -586,6 +586,26 @@ public class TableUtils {
                 insert(table, column);
             }
         }
+        scrollIfStillNarrow(table, need > available);
+    }
+
+    private static final String RESIZE_MODE = "Pono.table.resizeMode"; //$NON-NLS-1$
+
+    /**
+     * What is left once the secondary columns have gone still wider than the view: the table
+     * scrolls sideways instead of its last columns being cut off at the view's edge, where no
+     * scroll bar said there was more. Back to its own resizing once it fits.
+     */
+    private static void scrollIfStillNarrow(JTable table, boolean narrow) {
+        Object saved = table.getClientProperty(RESIZE_MODE);
+        if (narrow && saved == null) {
+            table.putClientProperty(RESIZE_MODE, table.getAutoResizeMode());
+            table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        }
+        else if (!narrow && saved instanceof Integer) {
+            table.putClientProperty(RESIZE_MODE, null);
+            table.setAutoResizeMode((Integer) saved);
+        }
     }
 
     private static final String AUTO = "Pono.table.autoHidden"; //$NON-NLS-1$

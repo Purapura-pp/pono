@@ -351,7 +351,10 @@ public class DockPanel extends RoundedPanel {
                 return;
             }
             java.awt.Insets insets = getInsets();
-            int available = getWidth() - insets.left - insets.right;
+            // What is seen of the row, which is less than its width where the dock's card cuts it.
+            java.awt.Rectangle seen = getVisibleRect();
+            int shown = seen.width > 0 ? Math.min(getWidth(), seen.x + seen.width) : getWidth();
+            int available = shown - insets.left - insets.right;
             // What the row needs with every word shown, whatever is shown now.
             // The filter gives way down to its minimum; the rest keep what they would like, as a
             // button squeezed below it cuts its own words or pushes the filter off the end.

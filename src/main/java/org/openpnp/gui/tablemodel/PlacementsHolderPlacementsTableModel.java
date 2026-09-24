@@ -110,8 +110,9 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
     private int[] columnAlignments = new int[] {CENTER, LEFT, LEFT, LEFT, RIGHT, RIGHT, 
             RIGHT, LEFT, CENTER, LEFT, LEFT, RIGHT, LEFT};
 
+    // The part is an ID, as the placement's is: not cut below what it says while a comment can give way.
     private TableUtils.Kind[] columnKinds = new TableUtils.Kind[] {TableUtils.Kind.Check,
-            TableUtils.Kind.Id, TableUtils.Kind.Name, TableUtils.Kind.Status, TableUtils.Kind.Number,
+            TableUtils.Kind.Id, TableUtils.Kind.Id, TableUtils.Kind.Status, TableUtils.Kind.Number,
             TableUtils.Kind.Number, TableUtils.Kind.Number, TableUtils.Kind.Status,
             TableUtils.Kind.Secondary, TableUtils.Kind.Status, TableUtils.Kind.Status,
             TableUtils.Kind.Secondary, TableUtils.Kind.Name};
