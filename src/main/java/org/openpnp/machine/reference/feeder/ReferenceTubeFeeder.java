@@ -23,7 +23,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.FeederForm;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Nozzle;
 import org.openpnp.spi.PropertySheetHolder;
@@ -33,7 +33,6 @@ import org.openpnp.spi.PropertySheetHolder;
  * gravity feed or vibratory tube feeder.
  */
 public class ReferenceTubeFeeder extends ReferenceFeeder {
-
 
     @Override
     public Location getPickLocation() throws Exception {
@@ -45,7 +44,7 @@ public class ReferenceTubeFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceFeederConfigurationWizard(this);
+        return FeederForm.tube(this);
     }
 
     @Override

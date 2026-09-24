@@ -322,7 +322,7 @@ public final class StripFeederForm {
      * The enabled stages by what they do, "取图 › 模糊 › 圆对称检测": their own names are what
      * the pipeline refers to them by, "0" and "results".
      */
-    private static List<String> stages(CvPipeline pipeline) {
+    static List<String> stages(CvPipeline pipeline) {
         List<String> names = new ArrayList<>();
         if (pipeline != null) {
             for (CvStage stage : pipeline.getStages()) {
