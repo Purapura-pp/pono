@@ -190,7 +190,7 @@ public class PhotonFeederTest {
     @Test
     public void getNameByDefaultReturnsClassSimpleName() {
         assertEquals(
-                "Unconfigured PhotonFeeder",
+                String.format(org.openpnp.Translations.getString("PhotonFeeder.Title.Unconfigured"), org.openpnp.gui.support.DisplayNames.typeName(PhotonFeeder.class)),
                 feeder.getName()
         );
     }
@@ -199,7 +199,7 @@ public class PhotonFeederTest {
     public void getNameUsesHardwareIdWhenThatIsSet() {
         feeder.setHardwareId(hardwareId);
         assertEquals(
-                String.format("%s (Slot: None)", hardwareId),
+                PhotonFeeder.nameInSlot(hardwareId, null),
                 feeder.getName()
         );
     }
@@ -210,7 +210,7 @@ public class PhotonFeederTest {
         feeder.setHardwareId(hardwareId);
         feeder.setSlotAddress(slot);
         assertEquals(
-                String.format("%s (Slot: %s)", hardwareId, slot),
+                PhotonFeeder.nameInSlot(hardwareId, slot),
                 feeder.getName()
         );
     }
@@ -220,7 +220,7 @@ public class PhotonFeederTest {
         feeder.setName("My Name");
         feeder.setHardwareId(hardwareId);
 
-        assertEquals("My Name (Slot: None)", feeder.getName());
+        assertEquals(PhotonFeeder.nameInSlot("My Name", null), feeder.getName());
     }
 
     @Test
@@ -230,7 +230,7 @@ public class PhotonFeederTest {
         feeder.setName(name);
 
         assertEquals(
-                String.format("%s (Slot: None)", name),
+                PhotonFeeder.nameInSlot(name, null),
                 feeder.getName()
         );
     }
@@ -244,7 +244,7 @@ public class PhotonFeederTest {
         feeder.setSlotAddress(slot);
         feeder.setName(nameWithSlot);
 
-        assertEquals(nameWithSlot, feeder.getName());
+        assertEquals(PhotonFeeder.nameInSlot(name, slot), feeder.getName());
     }
 
     @Test
@@ -256,7 +256,7 @@ public class PhotonFeederTest {
         feeder.setSlotAddress(slot);
         feeder.setName(nameWithNoneSlot);
 
-        String nameWithSlot = String.format("%s (Slot: %s)", name, slot);
+        String nameWithSlot = PhotonFeeder.nameInSlot(name, slot);
         assertEquals(nameWithSlot, feeder.getName());
     }
 
@@ -270,7 +270,7 @@ public class PhotonFeederTest {
         feeder.setSlotAddress(newSlot);
         feeder.setName(nameWithOldSlot);
 
-        String nameWithNewSlot = String.format("%s (Slot: %s)", name, newSlot);
+        String nameWithNewSlot = PhotonFeeder.nameInSlot(name, newSlot);
         assertEquals(nameWithNewSlot, feeder.getName());
     }
 
@@ -281,7 +281,7 @@ public class PhotonFeederTest {
         feeder.setName(name);
 
         assertEquals(
-                String.format("%s (Slot: None)", name),
+                PhotonFeeder.nameInSlot(name, null),
                 feeder.getName()
         );
     }
@@ -293,7 +293,7 @@ public class PhotonFeederTest {
         feeder.setName(name);
 
         assertEquals(
-                "Test Name (Slot: None)",
+                PhotonFeeder.nameInSlot("Test Name", null),
                 feeder.getName()
         );
     }
@@ -307,7 +307,7 @@ public class PhotonFeederTest {
         We don't trim the spaces internally when a slot is removed. This is more or less intentional to keep everything
         simpler.
          */
-        assertEquals("This  Is  A  Weird  Test (Slot: None)", feeder.getName());
+        assertEquals(PhotonFeeder.nameInSlot("This  Is  A  Weird  Test", null), feeder.getName());
     }
 
     @Test
@@ -1043,7 +1043,7 @@ public class PhotonFeederTest {
 
         assertEquals(2, (int) feeder.getSlotAddress());
         assertEquals(
-                String.format("%s (Slot: %s)", hardwareId, 2),
+                PhotonFeeder.nameInSlot(hardwareId, 2),
                 feeder.getName()
         );
 
@@ -1052,7 +1052,7 @@ public class PhotonFeederTest {
         assertEquals(1, (int) newFeeder.getSlotAddress());
         assertEquals(newHardwareUuid, newFeeder.getHardwareId());
         assertEquals(
-                String.format("%s (Slot: %s)", newHardwareUuid, 1),
+                PhotonFeeder.nameInSlot(newHardwareUuid, 1),
                 newFeeder.getName()
         );
 
@@ -1083,7 +1083,7 @@ public class PhotonFeederTest {
         assertEquals(1, (int) feeder.getSlotAddress());
         assertEquals(hardwareId, feeder.getHardwareId());
         assertEquals(
-                String.format("%s (Slot: %s)", hardwareId, 1),
+                PhotonFeeder.nameInSlot(hardwareId, 1),
                 feeder.getName()
         );
 
@@ -1092,7 +1092,7 @@ public class PhotonFeederTest {
         assertEquals(2, (int) newFeeder.getSlotAddress());
         assertEquals(newHardwareUuid, newFeeder.getHardwareId());
         assertEquals(
-                String.format("%s (Slot: %s)", newHardwareUuid, 2),
+                PhotonFeeder.nameInSlot(newHardwareUuid, 2),
                 newFeeder.getName()
         );
 

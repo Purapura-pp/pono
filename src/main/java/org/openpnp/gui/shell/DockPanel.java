@@ -340,10 +340,49 @@ public class DockPanel extends RoundedPanel {
          * alone, the words on hover, the last group first. At 1366 pixels the feeders toolbar
          * pushed its filter box off its end.
          */
+        /** What the sums in fitWords missed at this width, found by laying the row out. */
+        private int correction;
+        private int correctionWidth = -1;
+
         @Override
         public void doLayout() {
+            if (getWidth() != correctionWidth) {
+                correction = 0;
+                correctionWidth = getWidth();
+            }
             fitWords();
             super.doLayout();
+            // Past its end after all: the row learns by how much and takes off more words, the
+            // same at this width every time it is laid out again.
+            int over = overflow();
+            if (over > 0 && words.keySet().stream().anyMatch(b -> b.isVisible() && b.getText() != null && !b.getText().isEmpty())) {
+                correction += over;
+                fitWords();
+                super.doLayout();
+            }
+        }
+
+        private int overflow() {
+            int end = getWidth() - getInsets().right;
+            int right = 0;
+            for (Component c : getComponents()) {
+                if (c.isVisible()) {
+                    right = Math.max(right, c.getX() + c.getWidth());
+                }
+            }
+            return right - end;
+        }
+
+        /**
+         * Narrower than its parts: the row takes off its buttons' words to fit the width it is
+         * given, and it has to be given the width there is for that. With the sum of its parts as
+         * its minimum, the page laid it out wider than the dock and the dock cut its end off.
+         */
+        @Override
+        public Dimension getMinimumSize() {
+            Dimension size = super.getMinimumSize();
+            size.width = Math.min(size.width, com.formdev.flatlaf.util.UIScale.scale(160));
+            return size;
         }
 
         private void fitWords() {
@@ -351,12 +390,17 @@ public class DockPanel extends RoundedPanel {
                 return;
             }
             java.awt.Insets insets = getInsets();
-            int available = getWidth() - insets.left - insets.right;
+            // What is seen of the row, which is less than its width where the dock's card cuts it.
+            java.awt.Rectangle seen = getVisibleRect();
+            int shown = seen.width > 0 ? Math.min(getWidth(), seen.x + seen.width) : getWidth();
+            int available = shown - insets.left - insets.right - correction;
             // What the row needs with every word shown, whatever is shown now.
+            // The filter gives way down to its minimum; the rest keep what they would like, as a
+            // button squeezed below it cuts its own words or pushes the filter off the end.
             int need = 0;
             for (Component c : getComponents()) {
                 if (c.isVisible()) {
-                    need += c.getMinimumSize().width;
+                    need += (c instanceof JTextField ? c.getMinimumSize() : c.getPreferredSize()).width;
                 }
             }
             java.util.Map<JButton, Integer> wordWidth = new java.util.HashMap<>();

@@ -209,7 +209,8 @@ public class BoardPlacementsPanel extends JPanel {
         
         // On a narrow window the comments give way first, then the error handling: both are in
         // the properties column too, and the error handling in the right-click menu.
-        TableUtils.setColumnKinds(table, TableUtils.Kind.Check, TableUtils.Kind.Id, TableUtils.Kind.Name,
+        // The part is an ID as the placement's is, not cut below what it says.
+        TableUtils.setColumnKinds(table, TableUtils.Kind.Check, TableUtils.Kind.Id, TableUtils.Kind.Id,
                 TableUtils.Kind.Status, TableUtils.Kind.Number, TableUtils.Kind.Number, TableUtils.Kind.Number,
                 TableUtils.Kind.Status, TableUtils.Kind.Secondary, TableUtils.Kind.Status, TableUtils.Kind.Secondary,
                 TableUtils.Kind.Secondary, TableUtils.Kind.Secondary);

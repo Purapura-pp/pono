@@ -384,34 +384,48 @@ public class PhotonFeeder extends ReferenceFeeder {
     @Override
     public String getName() {
         if (hardwareId == null) {
-            return String.format("Unconfigured %s", getClass().getSimpleName());
+            return String.format(Translations.getString("PhotonFeeder.Title.Unconfigured"), //$NON-NLS-1$
+                    org.openpnp.gui.support.DisplayNames.typeName(getClass()));
         }
+        return nameInSlot(name, slotAddress);
+    }
 
-        StringBuilder result = new StringBuilder();
-        result.append(name);
-        result.append(" (Slot: ");
-
-        if (slotAddress == null) {
-            result.append("None");
-        } else {
-            result.append(slotAddress);
-        }
-
-        result.append(")");
-
-        return result.toString();
+    /** The name with the slot the feeder is in after it, as the language says it: "F-01 (Slot: 5)". */
+    public static String nameInSlot(String name, Integer slot) {
+        return String.format(Translations.getString("PhotonFeeder.NameInSlot"), name, //$NON-NLS-1$
+                slot == null ? Translations.getString("PhotonFeeder.NoSlot") : String.valueOf(slot)); //$NON-NLS-1$
     }
 
     @Override
     public void setName(String name) {
-        Matcher matcher = Pattern.compile("(\\(Slot: [\\w+]+\\))").matcher(name);
-        while (matcher.find()) {
-            name = name.replace(matcher.group(), "");
+        // The slot the name was shown with is not part of it: in English, as it was written before
+        // the names were translated, or as the language writes it now.
+        for (Pattern pattern : slotSuffixes()) {
+            Matcher matcher = pattern.matcher(name);
+            while (matcher.find()) {
+                name = name.replace(matcher.group(), "");
+            }
         }
 
         name = name.trim();
 
         super.setName(name);
+    }
+
+    private static List<Pattern> slotSuffixes() {
+        List<Pattern> patterns = new ArrayList<>();
+        patterns.add(Pattern.compile("(\\(Slot: [\\w+]+\\))")); //$NON-NLS-1$
+        String format = Translations.getString("PhotonFeeder.NameInSlot"); //$NON-NLS-1$
+        int first = format.indexOf("%s"); //$NON-NLS-1$
+        int second = format.indexOf("%s", first + 2); //$NON-NLS-1$
+        if (first >= 0 && second > first) {
+            String before = format.substring(first + 2, second).trim();
+            String after = format.substring(second + 2).trim();
+            if (!before.isEmpty()) {
+                patterns.add(Pattern.compile(Pattern.quote(before) + "\\s*[^\\s]+?\\s*" + Pattern.quote(after))); //$NON-NLS-1$
+            }
+        }
+        return patterns;
     }
 
     /**

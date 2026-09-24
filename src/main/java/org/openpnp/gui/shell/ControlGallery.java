@@ -194,10 +194,15 @@ public class ControlGallery extends JFrame {
     }
 
     private static JComponent heading(String key) {
-        // The stylesheet sets these headings in capitals.
-        JLabel label = new JLabel(t(key).toUpperCase(java.util.Locale.ROOT));
+        // The stylesheet sets these headings in capitals: a Latin heading's, as Chinese has none
+        // and the "px" in it would only become "PX".
+        String text = t(key);
+        if (text.codePoints().noneMatch(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)) {
+            text = text.toUpperCase(java.util.Locale.ROOT);
+        }
+        JLabel label = new JLabel(text);
         label.setFont(Ui.font(Tokens.FS_TAG, Font.BOLD));
-        label.setForeground(Ui.muted());
+        label.setForeground(Ui.text2());
         label.setBorder(new EmptyBorder(18, 0, 10, 0));
         return left(label);
     }
@@ -224,7 +229,9 @@ public class ControlGallery extends JFrame {
             Color c = javax.swing.UIManager.getColor((String) colour[0]);
             JLabel name = new JLabel(colour[1] + " " + (c == null ? "" : String.format("#%06x", c.getRGB() & 0xffffff))); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
             name.setFont(Ui.mono(Tokens.FS_MICRO, Font.PLAIN));
-            name.setForeground(filled ? Color.WHITE : Ui.text2());
+            // On a filled swatch, white or near black, whichever the fill leaves more readable.
+            Color on = c == null ? Color.WHITE : luminance(c) > 0.4 ? new Color(0x0b0e12) : Color.WHITE;
+            name.setForeground(filled ? on : Ui.text2());
             name.setBorder(new EmptyBorder(0, 8, 6, 8));
             name.setVerticalAlignment(SwingConstants.BOTTOM);
             swatch.add(name, BorderLayout.CENTER);
@@ -234,6 +241,15 @@ public class ControlGallery extends JFrame {
         row.setPreferredSize(new Dimension(744, 54));
         row.setMaximumSize(new Dimension(744, 54));
         return row;
+    }
+
+    /** The colour's relative luminance, 0 for black and 1 for white. */
+    private static double luminance(Color c) {
+        double[] rgb = { c.getRed() / 255.0, c.getGreen() / 255.0, c.getBlue() / 255.0 };
+        for (int i = 0; i < 3; i++) {
+            rgb[i] = rgb[i] <= 0.03928 ? rgb[i] / 12.92 : Math.pow((rgb[i] + 0.055) / 1.055, 2.4);
+        }
+        return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
     }
 
     private static JComponent typeRow(String spec, Font font, Color colour, String sample) {

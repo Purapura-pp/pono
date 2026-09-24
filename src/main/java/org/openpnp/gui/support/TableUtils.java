@@ -419,7 +419,10 @@ public class TableUtils {
             if (type == Boolean.class) {
                 kinds[i] = Kind.Check;
             }
-            else if ("ID".equalsIgnoreCase(name == null ? null : name.trim())) { //$NON-NLS-1$
+            else if ("ID".equalsIgnoreCase(name == null ? null : name.trim()) //$NON-NLS-1$
+                    // A part's ID names it as a placement's does: cut short, FIDUCIAL-1MM is
+                    // FIDUCIAL-1... and could be any fiducial.
+                    || PartCellValue.class.isAssignableFrom(type) || org.openpnp.model.Part.class.isAssignableFrom(type)) {
                 kinds[i] = Kind.Id;
             }
             else if (alignments != null && i < alignments.length
@@ -475,7 +478,9 @@ public class TableUtils {
                     max = natural + 24;
                     break;
                 case Secondary:
-                    min = Math.min(header, natural);
+                    // Whole or not at all: squeezed to its header, it cut every value short
+                    // where hiding it would have left the others whole.
+                    min = natural;
                     max = Integer.MAX_VALUE;
                     break;
                 case Name:
@@ -582,6 +587,26 @@ public class TableUtils {
                 auto(table).remove(column);
                 insert(table, column);
             }
+        }
+        scrollIfStillNarrow(table, need > available);
+    }
+
+    private static final String RESIZE_MODE = "Pono.table.resizeMode"; //$NON-NLS-1$
+
+    /**
+     * What is left once the secondary columns have gone still wider than the view: the table
+     * scrolls sideways instead of its last columns being cut off at the view's edge, where no
+     * scroll bar said there was more. Back to its own resizing once it fits.
+     */
+    private static void scrollIfStillNarrow(JTable table, boolean narrow) {
+        Object saved = table.getClientProperty(RESIZE_MODE);
+        if (narrow && saved == null) {
+            table.putClientProperty(RESIZE_MODE, table.getAutoResizeMode());
+            table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        }
+        else if (!narrow && saved instanceof Integer) {
+            table.putClientProperty(RESIZE_MODE, null);
+            table.setAutoResizeMode((Integer) saved);
         }
     }
 

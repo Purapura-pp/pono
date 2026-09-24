@@ -100,7 +100,8 @@ public class Chip extends JLabel {
             case Run: return Ui.accent();
             case Accent: return Ui.accent();
             case Pending: return Ui.text2();
-            case Skip: return Ui.muted();
+            // No fill of its own: the muted grey was too faint on the light surfaces.
+            case Skip: return Ui.text2();
             case Neutral:
             default: return Ui.text2();
         }
