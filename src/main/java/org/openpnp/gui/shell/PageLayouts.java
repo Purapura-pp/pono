@@ -58,8 +58,7 @@ public final class PageLayouts {
     public static final double INSPECTOR_SHARE = 0.30;
 
     /** The pages that work with the machine: they start with the camera large. */
-    private static final Set<String> LARGE = Set.of("Job", "Feeders", "Vision", "MachineSetup", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-            "Calibration"); //$NON-NLS-1$
+    private static final Set<String> LARGE = Set.of("Job", "Feeders", "Vision", "MachineSetup"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 
     private final Preferences prefs;
 

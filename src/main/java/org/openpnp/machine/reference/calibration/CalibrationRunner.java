@@ -722,6 +722,14 @@ public class CalibrationRunner {
             if (!outcome.kept) {
                 throw new Exception(outcome.message);
             }
+            lastCompensation = outcome;
+        }
+
+        private volatile MachineDiagnostics.CompensationOutcome lastCompensation;
+
+        /** The compensation the last frame compensation kept, or null for none. */
+        public MachineDiagnostics.CompensationOutcome getLastCompensation() {
+            return lastCompensation;
         }
 
         @Override

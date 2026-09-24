@@ -30,6 +30,7 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import javax.swing.Action;
 import javax.swing.Icon;
@@ -408,6 +409,26 @@ public class Solutions {
             return this;
         }
 
+        private Change change;
+
+        /**
+         * Says what accepting writes, for an issue whose solution is one value going into one
+         * setting and nothing else: no move, no one at the machine.
+         * 
+         * @param settingName The setting, in English as the other wording of an issue is.
+         * @param current The value as it stands, read when asked.
+         * @param proposed What accepting writes, read when asked, as it may be adjusted.
+         */
+        public Issue withChange(String settingName, Supplier<Object> current, Supplier<Object> proposed) {
+            this.change = new Change(settingName, current, proposed);
+            return this;
+        }
+
+        /** What accepting writes, or null for an issue that has not said. */
+        public Change getChange() {
+            return change;
+        }
+
         /**
          * Ultra simple custom property support. 
          *
@@ -563,6 +584,31 @@ public class Solutions {
 
         public Icon getExtendedIcon() {
             return null;
+        }
+    }
+
+    /** One value going into one setting, as an issue says it: see {@link Issue#withChange}. */
+    public static final class Change {
+        private final String settingName;
+        private final Supplier<Object> current;
+        private final Supplier<Object> proposed;
+
+        Change(String settingName, Supplier<Object> current, Supplier<Object> proposed) {
+            this.settingName = settingName;
+            this.current = current;
+            this.proposed = proposed;
+        }
+
+        public String getSettingName() {
+            return settingName;
+        }
+
+        public Object getCurrentValue() {
+            return current.get();
+        }
+
+        public Object getProposedValue() {
+            return proposed.get();
         }
     }
 

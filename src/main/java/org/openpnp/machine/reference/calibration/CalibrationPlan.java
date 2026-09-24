@@ -205,8 +205,9 @@ public class CalibrationPlan {
         public List<SettingChange> getChanges() {
             List<SettingChange> changes = new ArrayList<>();
             for (Solutions.Issue issue : issues) {
-                if (issue.getState() == Solutions.State.Open && issue instanceof SettingChange) {
-                    changes.add((SettingChange) issue);
+                SettingChange change = SettingChange.of(issue);
+                if (issue.getState() == Solutions.State.Open && change != null) {
+                    changes.add(change);
                 }
             }
             return changes;
@@ -740,7 +741,8 @@ public class CalibrationPlan {
         return run == null ? null : run.getWhen();
     }
 
-    static String nameOf(Object subject) {
+    /** What an element of the machine is called where the calibration page names it. */
+    public static String nameOf(Object subject) {
         if (subject instanceof Machine) {
             return Translations.getString("CalibrationPlan.Machine"); //$NON-NLS-1$
         }

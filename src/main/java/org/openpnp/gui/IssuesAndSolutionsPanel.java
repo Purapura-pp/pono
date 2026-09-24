@@ -92,12 +92,9 @@ public class IssuesAndSolutionsPanel extends JPanel {
 
     private final DockPanel dock = new DockPanel();
     private final DockPanel.Tab issuesTab;
-    private final DockPanel.Tab measureTab;
     private final DockPanel.Tab overviewTab;
     private final JPanel issuesPage = new JPanel(new BorderLayout());
-    private final JPanel measureHolder = new JPanel(new BorderLayout());
     private final JPanel overviewHolder = new JPanel(new BorderLayout());
-    private MeasurementsPanel measurements;
     private MachineOverviewPanel overview;
     private final JButton findButton;
     private final JComboBox<Solutions.Milestone> milestone = new JComboBox<>(Solutions.Milestone.values());
@@ -171,20 +168,16 @@ public class IssuesAndSolutionsPanel extends JPanel {
         issuesPage.setOpaque(false);
         issuesPage.add(toolbar, BorderLayout.NORTH);
         issuesPage.add(foot, BorderLayout.SOUTH);
-        measureHolder.setOpaque(false);
         overviewHolder.setOpaque(false);
 
         issuesTab = dock.addTab(Ui.iconSm("alert"), Translations.getString("IssuesAndSolutionsPanel.Tab.Issues"), //$NON-NLS-1$ //$NON-NLS-2$
                 issuesPage);
-        measureTab = dock.addTab(Ui.iconSm("activity"), //$NON-NLS-1$
-                Translations.getString("IssuesAndSolutionsPanel.Tab.Measure"), measureHolder); //$NON-NLS-1$
         overviewTab = dock.addTab(Ui.iconSm("machine"), //$NON-NLS-1$
                 Translations.getString("IssuesAndSolutionsPanel.Tab.Overview"), overviewHolder); //$NON-NLS-1$
         collect = Ui.button(Translations.getString("IssuesAndSolutionsPanel.CollectAll"), Ui.iconSm("refresh"), //$NON-NLS-1$ //$NON-NLS-2$
                 Ui.Size.Xs, Ui.Variant.Primary);
         collect.setToolTipText(Translations.getString("IssuesAndSolutionsPanel.CollectAll.toolTipText")); //$NON-NLS-1$
         collect.setFocusable(false);
-        Ui.movesMachine(collect);
         collect.addActionListener(e -> collectAll());
         dock.setTools(collect);
         dock.setMaximize(() -> frame.toggleDockMaximised());
@@ -204,9 +197,6 @@ public class IssuesAndSolutionsPanel extends JPanel {
                 solutions.addPropertyChangeListener("rescanRequested", //$NON-NLS-1$
                         e -> SwingUtilities.invokeLater(() -> findIssuesAndSolutions()));
                 buildTable();
-                measurements = new MeasurementsPanel(machine, IssuesAndSolutionsPanel.this,
-                        () -> findIssuesAndSolutions());
-                measureHolder.add(measurements, BorderLayout.CENTER);
                 overview = new MachineOverviewPanel(machine);
                 overviewHolder.add(overview, BorderLayout.CENTER);
                 describeFoot();
@@ -304,10 +294,7 @@ public class IssuesAndSolutionsPanel extends JPanel {
 
     /** The properties column follows the tab: the issue selected, the group selected, or nothing. */
     private void inspectTab() {
-        if (dock.getSelectedTab() == measureTab && measurements != null) {
-            measurements.inspect();
-        }
-        else if (dock.getSelectedTab() == overviewTab) {
+        if (dock.getSelectedTab() == overviewTab) {
             if (overview != null) {
                 overview.refresh();
             }
@@ -514,31 +501,12 @@ public class IssuesAndSolutionsPanel extends JPanel {
         }.execute();
     }
 
-    /**
-     * Finds the issues and takes the measurements the calibration decides by, then says how many
-     * steps the calibration page has to do and offers to go there.
-     */
+    /** Collecting is the calibration page's now, where what it finds is dealt with. */
     private void collectAll() {
-        if (measurements == null) {
-            return;
+        frame.showCalibrationStep(null, null);
+        if (frame.getCalibrationTab() != null) {
+            frame.getCalibrationTab().collect();
         }
-        findIssuesAndSolutions();
-        dock.select(measureTab);
-        measurements.setAfterRunOnce(() -> {
-            findIssuesAndSolutions();
-            SwingUtilities.invokeLater(() -> {
-                int needed = CalibrationPlan.of(machine, CalibrationPlan.scan(machine, solutions))
-                        .getOutstanding().size();
-                if (needed > 0 && Dialogs.ask(SwingUtilities.getWindowAncestor(this), Dialogs.Tone.Info, "zap", //$NON-NLS-1$
-                        String.format(Translations.getString("IssuesAndSolutionsPanel.Collected.Title"), needed), //$NON-NLS-1$
-                        Translations.getString("IssuesAndSolutionsPanel.Collected.What"), null, //$NON-NLS-1$
-                        new Dialogs.Choice(Translations.getString("IssuesAndSolutionsPanel.Collected.Go"), null, //$NON-NLS-1$
-                                Ui.Variant.Primary)) == 0) {
-                    frame.showCalibrationStep(null, null);
-                }
-            });
-        });
-        measurements.runCalibrationGroups();
     }
 
     protected void notifySolutionsChanged() {

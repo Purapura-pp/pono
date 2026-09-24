@@ -208,7 +208,8 @@ public class AxisSolutions implements Solutions.Subject {
                                             oldRotationMode);
                                 super.setState(state);
                             }
-                        });
+                        }.withChange("Rotation mode", () -> oldRotationMode,
+                                () -> RotationMode.LimitedArticulation));
                     }
                     if (!nozzle.isAligningRotationMode()) {
                         solutions.add(new Solutions.Issue(
@@ -224,7 +225,7 @@ public class AxisSolutions implements Solutions.Subject {
                                 nozzle.setAligningRotationMode((state == Solutions.State.Solved));
                                 super.setState(state);
                             }
-                        });
+                        }.withChange("Part-aligned rotation", () -> Boolean.FALSE, () -> Boolean.TRUE));
                     }
                     if (!isUnlimitedArticulation) {
                         // Checking that ReferenceBottomVision has pre-rotate enabled. 
@@ -244,7 +245,7 @@ public class AxisSolutions implements Solutions.Subject {
                                             referenceBottomVision.setPreRotate((state == Solutions.State.Solved));
                                             super.setState(state);
                                         }
-                                    });
+                                    }.withChange("Pre-rotate", () -> Boolean.FALSE, () -> Boolean.TRUE));
                                 }
                                 // Check all parts.
                                 List<BottomVisionSettings> visionSettings = new ArrayList<>();

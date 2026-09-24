@@ -33,4 +33,35 @@ public interface SettingChange {
 
     /** What accepting writes; adjustable before accepting where the issue offers it. */
     Object getProposedValue();
+
+    /**
+     * What accepting the issue writes, whether it is one of these or said so with
+     * {@link org.openpnp.model.Solutions.Issue#withChange}; null for an issue that does more than
+     * write a setting, or has not said.
+     */
+    static SettingChange of(org.openpnp.model.Solutions.Issue issue) {
+        if (issue instanceof SettingChange) {
+            return (SettingChange) issue;
+        }
+        org.openpnp.model.Solutions.Change change = issue == null ? null : issue.getChange();
+        if (change == null) {
+            return null;
+        }
+        return new SettingChange() {
+            @Override
+            public String getSettingName() {
+                return change.getSettingName();
+            }
+
+            @Override
+            public Object getCurrentValue() {
+                return change.getCurrentValue();
+            }
+
+            @Override
+            public Object getProposedValue() {
+                return change.getProposedValue();
+            }
+        };
+    }
 }

@@ -2124,6 +2124,10 @@ public class MainFrame extends JFrame {
         if (machineSettingsPanel != null && !machineSettingsPanel.settleUnappliedEdits()) {
             return false;
         }
+        // What calibration measured and nobody confirmed is discarded, unless applied now.
+        if (calibrationPanel != null && !calibrationPanel.settleBeforeQuit(this)) {
+            return false;
+        }
         if (!jobPanel.checkForModifications()) {
             return false;
         }
