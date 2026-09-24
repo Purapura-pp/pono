@@ -94,7 +94,7 @@ public class OperatorView extends JPanel {
     private final JPanel banner = new JPanel();
     private final JLabel bannerTitle = new JLabel();
     private final JLabel bannerDetail = Ui.t2(""); //$NON-NLS-1$
-    private final Chip bannerAlignment = new Chip("", Chip.Tone.Accent, Chip.Shape.Chip); //$NON-NLS-1$
+    private final Chip bannerAlignment = new Chip("", Chip.Tone.Neutral, Chip.Shape.Chip); //$NON-NLS-1$
 
     /** A second's tick for the clock and the time run, and a quarter's for a burst of run changes. */
     private final Timer tick = new Timer(1000, e -> refresh());
@@ -120,20 +120,24 @@ public class OperatorView extends JPanel {
         step = big("TopBar.Job.Step", "step", Ui.Variant.Default, jobPanel.stepJobAction); //$NON-NLS-1$ //$NON-NLS-2$
         stop = big("TopBar.Job.Stop", "stop", Ui.Variant.SolidDanger, jobPanel.stopJobAction); //$NON-NLS-1$ //$NON-NLS-2$
 
-        JPanel side = new JPanel();
-        side.setOpaque(false);
-        side.setLayout(new BoxLayout(side, BoxLayout.Y_AXIS));
-        side.add(progressCard());
-        side.add(Box.createVerticalStrut(12));
+        Ui.whyDisabled(startPause, () -> reason(jobPanel.startPauseResumeJobAction));
+        Ui.whyDisabled(step, () -> reason(jobPanel.stepJobAction));
+        Ui.whyDisabled(stop, () -> reason(jobPanel.stopJobAction));
+
+        JPanel stack = new JPanel();
+        stack.setOpaque(false);
+        stack.setLayout(new BoxLayout(stack, BoxLayout.Y_AXIS));
+        stack.add(progressCard());
+        stack.add(Box.createVerticalStrut(12));
         JPanel buttons = new JPanel(new GridLayout(1, 3, 10, 0));
         buttons.setOpaque(false);
         buttons.add(startPause);
         buttons.add(step);
         buttons.add(stop);
-        side.add(fill(buttons));
-        side.add(Box.createVerticalStrut(12));
-        side.add(card("alert", "OperatorView.Attention", attentionCount, attention)); //$NON-NLS-1$ //$NON-NLS-2$
-        side.add(Box.createVerticalStrut(12));
+        stack.add(fill(buttons));
+        stack.add(Box.createVerticalStrut(12));
+        stack.add(card("alert", "OperatorView.Attention", attentionCount, attention)); //$NON-NLS-1$ //$NON-NLS-2$
+        stack.add(Box.createVerticalStrut(12));
         JLabel log = Ui.muted(Translations.getString("OperatorView.Events.Log")); //$NON-NLS-1$
         log.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         log.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -142,18 +146,27 @@ public class OperatorView extends JPanel {
                 showLog();
             }
         });
-        JComponent eventsCard = card("clock", "OperatorView.Events", log, events); //$NON-NLS-1$ //$NON-NLS-2$
-        side.add(eventsCard);
-        side.add(Box.createVerticalGlue());
-        JPanel sideHolder = new JPanel(new BorderLayout()) {
+        // The events take what height is left, and show as many whole rows as fit in it.
+        JPanel eventsBody = new JPanel(new BorderLayout());
+        eventsBody.setOpaque(false);
+        eventsBody.add(events, BorderLayout.NORTH);
+        eventsBody.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                fitEvents(eventsBody.getHeight());
+            }
+        });
+        this.eventsBody = eventsBody;
+        JPanel side = new JPanel(new BorderLayout()) {
             @Override
             public Dimension getPreferredSize() {
                 return new Dimension(UIScale.scale(SIDE), super.getPreferredSize().height);
             }
         };
-        sideHolder.setOpaque(false);
-        sideHolder.add(side, BorderLayout.NORTH);
-        add(sideHolder, BorderLayout.EAST);
+        side.setOpaque(false);
+        side.add(stack, BorderLayout.NORTH);
+        side.add(card("clock", "OperatorView.Events", log, eventsBody), BorderLayout.CENTER); //$NON-NLS-1$ //$NON-NLS-2$
+        add(side, BorderLayout.EAST);
 
         buildBanner();
         jobPanel.addPropertyChangeListener(JobPanel.PROPERTY_JOB_STATE, e -> refresh());
@@ -409,8 +422,31 @@ public class OperatorView extends JPanel {
             at.setFont(Ui.mono(11f, Font.PLAIN));
             events.add(line(chip, text, at));
         }
-        events.revalidate();
+        fitEvents(eventsBody.getHeight());
         events.repaint();
+    }
+
+    private JPanel eventsBody;
+
+    /** The rows that fit whole in the height the card has; the rest wait for the log. */
+    private void fitEvents(int height) {
+        int used = 0;
+        for (Component row : events.getComponents()) {
+            int h = row.getPreferredSize().height;
+            boolean fits = used + h <= height;
+            if (row.isVisible() != fits) {
+                row.setVisible(fits);
+            }
+            if (fits) {
+                used += h;
+            }
+        }
+        events.revalidate();
+    }
+
+    private static String reason(Action action) {
+        Object reason = action.getValue(Ui.WHY_DISABLED);
+        return reason == null ? null : reason.toString();
     }
 
     static Chip.Tone tone(JobRun.EventKind kind) {

@@ -1842,6 +1842,8 @@ public class MainFrame extends JFrame {
                         org.openpnp.gui.shell.Tokens.GAP_CARD + 2, org.openpnp.gui.shell.Tokens.GAP_CARD + 2, 0));
                 operatorHolder.add(operatorView, BorderLayout.CENTER);
             }
+            // Out of the window while the workbench shows, it missed any change of theme since.
+            SwingUtilities.updateComponentTreeUI(operatorHolder);
             contentPane.remove(splitPaneInspector);
             contentPane.add(operatorHolder, BorderLayout.CENTER);
             navigationRail.setVisible(false);
