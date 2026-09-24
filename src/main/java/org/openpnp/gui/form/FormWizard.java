@@ -894,7 +894,19 @@ public class FormWizard extends AbstractConfigurationWizard {
         combo.setPreferredSize(new java.awt.Dimension(Math.min(size.width, 160), size.height));
         combo.setMinimumSize(new java.awt.Dimension(60, size.height));
         controls.put(field, combo);
-        return combo;
+        if (field.buttons.isEmpty()) {
+            return combo;
+        }
+        // The buttons beside the choice, a feeder's actuator and the button that tries it.
+        List<JComponent> buttons = new ArrayList<>();
+        for (Form.Button spec : field.buttons) {
+            buttons.add(fieldButton(spec));
+        }
+        JPanel row = new JPanel(new java.awt.BorderLayout(6, 0));
+        row.setOpaque(false);
+        row.add(combo, java.awt.BorderLayout.CENTER);
+        row.add(Forms.row(buttons.toArray(new JComponent[0])), java.awt.BorderLayout.EAST);
+        return row;
     }
 
     // ---- binding ------------------------------------------------------------------------------

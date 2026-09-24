@@ -31,7 +31,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceDragFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.DragFeederForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -67,7 +67,6 @@ import org.simpleframework.xml.core.Persist;
  * the right position.
  */
 public class ReferenceDragFeeder extends ReferenceFeeder {
-
 
     private final PropertyChangeSupport propertyChangeSupport = new PropertyChangeSupport(this);
 
@@ -129,7 +128,6 @@ public class ReferenceDragFeeder extends ReferenceFeeder {
         if (actuatorName == null) {
             throw new Exception("No actuator name set.");
         }
-
 
         Head head = nozzle.getHead();
 
@@ -228,7 +226,6 @@ public class ReferenceDragFeeder extends ReferenceFeeder {
         else {
 			Logger.debug("Multi parts drag feeder: skipping drag " + feededCount);
         }
-
 
         head.moveToSafeZ();
 
@@ -442,7 +439,7 @@ public class ReferenceDragFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceDragFeederConfigurationWizard(this);
+        return DragFeederForm.drag(this);
     }
 
     @Override

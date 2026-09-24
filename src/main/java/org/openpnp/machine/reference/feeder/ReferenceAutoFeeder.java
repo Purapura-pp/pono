@@ -23,7 +23,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceAutoFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.FeederForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Actuator;
@@ -192,7 +192,7 @@ public class ReferenceAutoFeeder extends ReferenceFeeder {
 
 	@Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceAutoFeederConfigurationWizard(this);
+        return FeederForm.auto(this);
     }
 
     @Override

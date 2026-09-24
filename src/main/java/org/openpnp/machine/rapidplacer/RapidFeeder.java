@@ -69,7 +69,7 @@ public class RapidFeeder extends ReferenceFeeder {
     
 	@Override
     public Wizard getConfigurationWizard() {
-        return new RapidFeederConfigurationWizard(this);
+        return RapidFeederForm.build(this);
     }
 
     @Override

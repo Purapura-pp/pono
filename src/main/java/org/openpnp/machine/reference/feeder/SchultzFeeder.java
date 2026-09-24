@@ -23,7 +23,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.SchultzFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.SchultzForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Location;
 import org.openpnp.model.Part;
@@ -255,7 +255,7 @@ public class SchultzFeeder extends ReferenceFeeder {
 
 	@Override
     public Wizard getConfigurationWizard() {
-        return new SchultzFeederConfigurationWizard(this);
+        return SchultzForm.build(this);
     }
 
     @Override

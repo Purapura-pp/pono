@@ -4,7 +4,7 @@ import java.util.List;
 
 import org.openpnp.ConfigurationListener;
 import org.openpnp.gui.support.Wizard;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceSlotAutoFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.SlotAutoForm;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Identifiable;
@@ -169,7 +169,7 @@ public class ReferenceSlotAutoFeeder extends ReferenceAutoFeeder {
     
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceSlotAutoFeederConfigurationWizard(this);
+        return SlotAutoForm.build(this);
     }
 
     @Root

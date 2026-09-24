@@ -12,7 +12,7 @@ import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
 import org.openpnp.machine.reference.ReferenceNozzle;
 import org.openpnp.machine.reference.ReferenceNozzleTip;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceHeapFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.HeapFeederForm;
 import org.openpnp.model.AbstractModelObject;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Identifiable;
@@ -124,7 +124,6 @@ public class ReferenceHeapFeeder extends ReferenceFeeder {
     @Element(required = false)
     private boolean pokeForParts = false;
 
-
     private Location pickLocation;
 
     /**
@@ -167,7 +166,7 @@ public class ReferenceHeapFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceHeapFeederConfigurationWizard(this);
+        return HeapFeederForm.build(this);
     }
 
     /**
@@ -692,7 +691,6 @@ public class ReferenceHeapFeeder extends ReferenceFeeder {
         @Attribute
         private String dummyPartIdForUnknown;
 
-
         private ReferenceHeapFeeder lastHeap = null;
 
         public DropBox() {
@@ -874,7 +872,6 @@ public class ReferenceHeapFeeder extends ReferenceFeeder {
             return partLocation;
         }
 
-
         @Override
         public String toString() {
             return name;
@@ -899,7 +896,6 @@ public class ReferenceHeapFeeder extends ReferenceFeeder {
         public void setCenterBottomLocation(Location centerBottomLocation) {
             this.centerBottomLocation = centerBottomLocation;
         }
-
 
         public Part getDummyPartForUnknown() {
             return dummyPartForUnknown;
@@ -1004,7 +1000,6 @@ public class ReferenceHeapFeeder extends ReferenceFeeder {
             .getCameraView(camera)
             .showFilteredImage(OpenCvUtils.toBufferedImage(pipeline.getWorkingImage()),
                     250);
-
 
             return location;
         }

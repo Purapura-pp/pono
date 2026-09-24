@@ -117,7 +117,6 @@ public class BambooFeederAutoVision extends AbstractPandaplacerVisionFeeder {
         this.moveBeforeFeed = moveBeforeFeed;
     }
 
-
     public BambooFeederAutoVision() {
     }
 
@@ -255,7 +254,7 @@ public class BambooFeederAutoVision extends AbstractPandaplacerVisionFeeder {
 // standard wizard overrides
     @Override
     public Wizard getConfigurationWizard() {
-        return new BambooFeederAutoVisionConfigurationWizard(this);
+        return BambooFeederForm.build(this);
     }
 
     @Override

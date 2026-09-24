@@ -29,7 +29,7 @@ import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.AdvancedLoosePartFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.FeederForm;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Camera;
@@ -184,7 +184,7 @@ public class AdvancedLoosePartFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new AdvancedLoosePartFeederConfigurationWizard(this);
+        return FeederForm.advancedLoosePart(this);
     }
 
     @Override

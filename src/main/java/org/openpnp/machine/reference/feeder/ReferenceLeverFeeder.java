@@ -31,7 +31,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceLeverFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.DragFeederForm;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
@@ -61,7 +61,6 @@ import org.simpleframework.xml.core.Persist;
  * 
  */
 public class ReferenceLeverFeeder extends ReferenceFeeder {
-
 
     private final PropertyChangeSupport propertyChangeSupport = new PropertyChangeSupport(this);
 
@@ -125,7 +124,6 @@ public class ReferenceLeverFeeder extends ReferenceFeeder {
             throw new Exception("No actuator name set.");
         }
 
-
         Head head = nozzle.getHead();
 
         Actuator actuator = head.getActuatorByName(actuatorName);
@@ -183,7 +181,6 @@ public class ReferenceLeverFeeder extends ReferenceFeeder {
         else {
 			Logger.debug("Multi parts Lever feeder: skipping feed " + feededCount);
         }
-
 
         head.moveToSafeZ();
 
@@ -383,7 +380,7 @@ public class ReferenceLeverFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceLeverFeederConfigurationWizard(this);
+        return DragFeederForm.lever(this);
     }
 
     @Override

@@ -23,7 +23,7 @@ import javax.swing.Action;
 
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferenceTrayFeederConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.FeederForm;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Nozzle;
@@ -32,13 +32,11 @@ import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Element;
 
-
 /**
  * Implementation of Feeder that indexes based on an offset. This allows a tray of parts to be
  * picked from without moving any tape. Can handle trays of arbitrary X and Y count.
  */
 public class ReferenceTrayFeeder extends ReferenceFeeder {
-
 
     @Attribute
     private int trayCountX = 1;
@@ -48,7 +46,6 @@ public class ReferenceTrayFeeder extends ReferenceFeeder {
     private Location offsets = new Location(LengthUnit.Millimeters);
     @Attribute
     private int feedCount = 0;  // UI is base 1, 0 is ok because a pick operation always preceded by a feed, which increments feedCount to 1
-
 
     @Override
     public Location getPickLocation() {
@@ -188,7 +185,7 @@ public class ReferenceTrayFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferenceTrayFeederConfigurationWizard(this);
+        return FeederForm.tray(this);
     }
 
     @Override

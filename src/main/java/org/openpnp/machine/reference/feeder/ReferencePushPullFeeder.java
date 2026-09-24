@@ -33,8 +33,8 @@ import org.apache.commons.io.IOUtils;
 import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.machine.reference.feeder.wizards.ReferencePushPullFeederConfigurationWizard;
-import org.openpnp.machine.reference.feeder.wizards.ReferencePushPullMotionConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.PushPullForm;
+import org.openpnp.machine.reference.feeder.wizards.PushPullMotionForm;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -221,7 +221,6 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
     private Length sumOfErrors = new Length(0, LengthUnit.Millimeters);
     @Element(required = false)
     private Length sumOfErrorSquares = new Length(0, LengthUnit.Millimeters);
-
 
     // These are not on the GUI but can be tweaked in the machine.xml /////////////////
 
@@ -1216,7 +1215,6 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
         return FeederVisionHelper.getPartLocation(partInCycle, visionOffset, getVisionHelperParams(null, null), getRotationInFeeder());
     } 
 
-
     public CvPipeline getPipeline() {
         return pipeline;
     }
@@ -1941,7 +1939,6 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
         return newFeeder;
     }
 
-
     protected void setOcrDetectedPart(Part ocrPart, boolean clone) throws Exception {
         if (isUsedAsTemplate()) {
             if (!compatiblePartPackages(ocrPart, getPart())) {
@@ -2039,7 +2036,6 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
         // Now bulk-OCR. 
         performOcrOnFeederList(ocrFeederList, ocrAction, ocrStop, report);
     }
-
 
     public void performOcr(OcrWrongPartAction ocrAction, boolean ocrStop, StringBuilder report) throws Exception {
         if (getOcrRegion() == null) {
@@ -2149,7 +2145,7 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new ReferencePushPullFeederConfigurationWizard(this);
+        return PushPullForm.build(this);
     }
 
     @Override
@@ -2160,8 +2156,9 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
-                new PropertySheetWizardAdapter(getConfigurationWizard(), "Configuration"),
-                new PropertySheetWizardAdapter(new ReferencePushPullMotionConfigurationWizard(this), "Push-Pull Motion"),
+                new PropertySheetWizardAdapter(getConfigurationWizard(),
+                        org.openpnp.Translations.getString("PushPullForm.Configuration")), //$NON-NLS-1$
+                new PropertySheetWizardAdapter(PushPullMotionForm.build(this)),
         };
     }
 
