@@ -125,7 +125,8 @@ public class Main {
         if (version == null) {
             version = "INTERNAL BUILD";
         }
-        return version;
+        // A build that could not read its revision leaves Maven's placeholder in the manifest.
+        return version.replaceAll("\\.?\\$\\{[^}]*\\}", ""); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     public static String getSourceUri() {
