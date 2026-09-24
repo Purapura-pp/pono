@@ -53,8 +53,8 @@ import com.formdev.flatlaf.FlatClientProperties;
 
 /**
  * The first thing a new installation shows: what this is, and the three steps that get a machine
- * ready - switch it on and home it, measure on the issues page, calibrate - each with the button
- * that takes the step. The mockups' 20.
+ * ready - choose the model and check the machine's settings, switch it on and home it, collect
+ * and calibrate - each with the button that takes the step. The mockups' 20.
  * <p>
  * It used to be the upstream OpenPnP 2.0 release notes, read from a file in whatever the working
  * directory happened to be, under a title the translation lookup turned into "!欢迎使用 Pono ...!"
@@ -104,28 +104,33 @@ public class Welcome2_0Dialog extends JDialog {
         body.setBorder(new EmptyBorder(8, 24, 12, 24));
         RoundedPanel steps = new RoundedPanel(Tokens.R_MD, Ui::surface, Ui::border);
         steps.setLayout(new BoxLayout(steps, BoxLayout.Y_AXIS));
-        JButton enable = Ui.button(Translations.getString("WelcomeDialog.Step1.Action"), null, //$NON-NLS-1$
+        JButton machine = Ui.button(Translations.getString("WelcomeDialog.StepMachine.Action"), null, //$NON-NLS-1$
                 Ui.Size.Sm, Ui.Variant.Primary);
+        machine.addActionListener(e -> {
+            dispose();
+            if (main != null) {
+                main.showMachineSettings(org.openpnp.gui.machinesettings.MachineSettingsPanel.PRESETS);
+            }
+        });
+        JButton enable = Ui.button(Translations.getString("WelcomeDialog.Step1.Action"), null, //$NON-NLS-1$
+                Ui.Size.Sm, Ui.Variant.Default);
         Ui.movesMachine(enable);
         enable.addActionListener(e -> {
             dispose();
             enableAndHome();
         });
-        JButton issues = Ui.button(Translations.getString("WelcomeDialog.Step2.Action"), null, //$NON-NLS-1$
-                Ui.Size.Sm, Ui.Variant.Default);
-        issues.addActionListener(e -> {
-            dispose();
-            if (main != null) {
-                main.showTab(main.getIssuesAndSolutionsTab());
-            }
-        });
         JButton calibrate = Ui.button(Translations.getString("WelcomeDialog.Step3.Action"), null, //$NON-NLS-1$
                 Ui.Size.Sm, Ui.Variant.Default);
-        // Greyed with the reason, until the calibration page is there to go to.
-        calibrate.setEnabled(false);
-        calibrate.setToolTipText(Translations.getString("WelcomeDialog.Step3.NotYet")); //$NON-NLS-1$
-        steps.add(step(1, "WelcomeDialog.Step1", true, enable)); //$NON-NLS-1$
-        steps.add(step(2, "WelcomeDialog.Step2", false, issues)); //$NON-NLS-1$
+        calibrate.addActionListener(e -> {
+            dispose();
+            if (main != null) {
+                main.showCalibrationStep(null, null);
+            }
+        });
+        // A configuration made elsewhere names that computer's port and cameras: the machine is
+        // set up for this one before it is switched on.
+        steps.add(step(1, "WelcomeDialog.StepMachine", true, machine)); //$NON-NLS-1$
+        steps.add(step(2, "WelcomeDialog.Step1", false, enable)); //$NON-NLS-1$
         steps.add(step(3, "WelcomeDialog.Step3", false, calibrate)); //$NON-NLS-1$
         steps.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(steps);
@@ -167,10 +172,11 @@ public class Welcome2_0Dialog extends JDialog {
         foot.add(Box.createHorizontalStrut(8));
         JButton start = Ui.button(Translations.getString("WelcomeDialog.Start"), null, Ui.Size.Sm, Ui.Variant.Primary); //$NON-NLS-1$
         start.setFocusable(true);
-        Ui.movesMachine(start);
         start.addActionListener(e -> {
             dispose();
-            enableAndHome();
+            if (main != null) {
+                main.showMachineSettings(org.openpnp.gui.machinesettings.MachineSettingsPanel.PRESETS);
+            }
         });
         foot.add(start);
         root.add(foot, BorderLayout.SOUTH);
@@ -253,7 +259,7 @@ public class Welcome2_0Dialog extends JDialog {
         title.setFont(Ui.weighted(Tokens.FS_BODY, Tokens.FW_SECTION));
         text.add(title);
         text.add(Box.createVerticalStrut(2));
-        JLabel detail = new JLabel("<html><div style='width:430px'>" //$NON-NLS-1$
+        JLabel detail = new JLabel("<html><div style='width:360px'>" //$NON-NLS-1$
                 + Translations.getString(key + ".Text") + "</div></html>"); //$NON-NLS-1$ //$NON-NLS-2$
         detail.setFont(Ui.font(Tokens.FS_SMALL));
         detail.setForeground(Ui.text2());

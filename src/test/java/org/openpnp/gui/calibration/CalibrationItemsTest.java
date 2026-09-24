@@ -94,8 +94,8 @@ public class CalibrationItemsTest {
         for (CalibrationItem item : items) {
             for (Solutions.Issue issue : item.getIssues()) {
                 assertFalse(issue.getUntranslatedIssue().contains("Min. Part Diameter"), item.toString());
-                assertFalse(issue.getUntranslatedIssue().equals(Translations.getString("CameraSolutions.Connect.Issue")),
-                        item.toString());
+                assertFalse(issue.getUntranslatedIssue().equals(
+                        org.openpnp.machine.reference.solutions.CameraSolutions.NOT_CONNECTED), item.toString());
             }
             if (item.getCheck() != null && item.getCheck().kind.equals(SetupChecks.MIN_DIAMETER)) {
                 diameter = item;

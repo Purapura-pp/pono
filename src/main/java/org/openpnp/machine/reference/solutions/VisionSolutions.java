@@ -408,7 +408,7 @@ public class VisionSolutions implements Solutions.Subject {
                                                 retainedImage = null;
                                             }
                                         });
-                                        MainFrame.get().getIssuesAndSolutionsTab().solutionChanged();
+                                        MainFrame.get().getCalibrationTab().solutionChanged();
                                     }).start();
                                 }
                             };

@@ -66,6 +66,15 @@ public class CameraSolutions implements Solutions.Subject  {
     final static long EXPOSURE_ADAPT_MILLISECONDS = 700;
     final static int EXPOSURE_ADJUST_MAX_STEPS = 64;
 
+    /**
+     * The camera without its device, in English as an issue's identity has to be: written in the
+     * display language, a dismissal was forgotten when the language changed.
+     */
+    public static final String NOT_CONNECTED = "Camera not connected to Pono";
+    private static final String NOT_CONNECTED_SOLUTION = "On the camera's Device Settings tab select the correct "
+            + "Device and Format. Then click on the Capture FPS Test button. An image from the camera should "
+            + "appear in the camera's view pane.";
+
     public CameraSolutions(ReferenceCamera camera) {
         this.camera = camera;
     }
@@ -76,9 +85,9 @@ public class CameraSolutions implements Solutions.Subject  {
             if (camera instanceof OpenPnpCaptureCamera
                 && ((OpenPnpCaptureCamera) camera).getDevice() == null) {
                 solutions.add(new Solutions.PlainIssue(
-                        camera, 
-                        Translations.getString("CameraSolutions.Connect.Issue"),  //$NON-NLS-1$
-                        Translations.getString("CameraSolutions.Connect.Solution"),  //$NON-NLS-1$
+                        camera,
+                        NOT_CONNECTED,
+                        NOT_CONNECTED_SOLUTION,
                         Severity.Fundamental,
                         "https://github.com/openpnp/openpnp/wiki/OpenPnpCaptureCamera")); //$NON-NLS-1$
             }

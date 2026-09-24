@@ -54,7 +54,7 @@ import org.simpleframework.xml.ElementList;
  * milestone the user is working towards.
  * <p>
  * This used to be a Swing table model, which is why it sits in the model package but was shaped by
- * the view. The table lives in SolutionsTableModel now; what remains here reports through property
+ * the view. The calibration page lays the issues out now; what remains here reports through property
  * changes and leaves presentation, including which icon stands in for a subject that has none, to
  * whoever is showing it.
  */

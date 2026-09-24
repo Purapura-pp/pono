@@ -438,11 +438,20 @@ public class CalibrationPanel extends JPanel {
             public void configurationComplete(Configuration configuration) throws Exception {
                 if (configuration.getMachine() instanceof ReferenceMachine) {
                     machine = (ReferenceMachine) configuration.getMachine();
+                    // Solutions asks for a search rather than calling a page, so that changing
+                    // the milestone does not have to know there is a GUI.
+                    machine.getSolutions().addPropertyChangeListener("rescanRequested", //$NON-NLS-1$
+                            e -> SwingUtilities.invokeLater(() -> collect()));
                     SwingUtilities.invokeLater(() -> {
                         measurements = new MeasurementsPanel(machine, CalibrationPanel.this, () -> refresh());
                         measureHolder.add(measurements, BorderLayout.CENTER);
                         refresh();
                     });
+                    // The first whole search after a delay, clear of the configuration loading
+                    // and the cameras starting.
+                    javax.swing.Timer first = new javax.swing.Timer(5000, e -> collect());
+                    first.setRepeats(false);
+                    first.start();
                 }
             }
         });
@@ -457,6 +466,10 @@ public class CalibrationPanel extends JPanel {
      * the machine settings checks. Nothing moves.
      */
     public void collect() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(this::collect);
+            return;
+        }
         if (machine == null || collecting || isRunning()) {
             return;
         }
@@ -484,11 +497,21 @@ public class CalibrationPanel extends JPanel {
                 }
                 backup = null;
                 refresh();
-                if (frame.getIssuesAndSolutionsTab() != null) {
-                    frame.getIssuesAndSolutionsTab().updateIssueIndicator();
-                }
             }
         }.execute();
+    }
+
+    /**
+     * An issue changed the machine by itself, a calibration it started having finished: the
+     * element tree shows the machine again and the rows are laid out anew.
+     */
+    public void solutionChanged() {
+        SwingUtilities.invokeLater(() -> {
+            if (frame.getMachineSetupTab() != null) {
+                frame.getMachineSetupTab().selectCurrentTreePath();
+            }
+            refresh();
+        });
     }
 
     /**
@@ -496,6 +519,10 @@ public class CalibrationPanel extends JPanel {
      * search, which is quick and moves nothing. On the event thread.
      */
     public void refresh() {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(this::refresh);
+            return;
+        }
         if (machine == null || isRunning()) {
             return;
         }
@@ -739,14 +766,25 @@ public class CalibrationPanel extends JPanel {
         revalidate();
     }
 
-    /** The rail's count: what there is to do here, the suggestions, measurements and what waits. */
+    /**
+     * The rail's count: what there is to do here, the suggestions, measurements and what waits.
+     * The bell counts the hints as well, in red while something waits to be confirmed or the
+     * machine settings lack what the machine needs.
+     */
     private void badge() {
-        if (frame.getNavigation() == null) {
-            return;
-        }
         int count = itemsOf(CalibrationItem.Kind.Suggestion).size() + itemsOf(CalibrationItem.Kind.Measure).size()
                 + itemsOf(CalibrationItem.Kind.Pending).size();
-        frame.getNavigation().setBadge(this, count, org.openpnp.gui.shell.NavigationRail.Badge.Warn);
+        if (frame.getNavigation() != null) {
+            frame.getNavigation().setBadge(this, count, org.openpnp.gui.shell.NavigationRail.Badge.Warn);
+        }
+        if (frame.getTopBar() != null) {
+            List<CalibrationItem> hints = itemsOf(CalibrationItem.Kind.Hint);
+            boolean severe = !itemsOf(CalibrationItem.Kind.Pending).isEmpty();
+            for (CalibrationItem hint : hints) {
+                severe |= hint.getCheck() != null;
+            }
+            frame.getTopBar().setNotifications(count, hints.size(), severe);
+        }
     }
 
     // ---- what the rows do ----------------------------------------------------------------------
@@ -1235,9 +1273,8 @@ public class CalibrationPanel extends JPanel {
         before.clear();
         after.clear();
         refresh();
-        if (frame.getIssuesAndSolutionsTab() != null) {
-            frame.getIssuesAndSolutionsTab().findIssuesAndSolutions();
-        }
+        // What the steps changed is found again, the issues outside calibration with it.
+        collect();
     }
 
     private void openReport() {
