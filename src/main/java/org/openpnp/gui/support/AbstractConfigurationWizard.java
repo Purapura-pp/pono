@@ -312,6 +312,19 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
     }
 
     /**
+     * Shown on a page among other forms rather than in a column of its own: no scroll bar of its
+     * own and as tall as its fields, the wheel going to the page that scrolls them all.
+     */
+    public void setEmbedded() {
+        scrollPane.setVerticalScrollBarPolicy(javax.swing.ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
+        scrollPane.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setWheelScrollingEnabled(false);
+        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(false);
+        setOpaque(false);
+    }
+
+    /**
      * Hide this wizard's own Reset and Apply. The properties column shows one pair for everything
      * it holds, so a pair per sheet would be two rows of the same two buttons.
      */

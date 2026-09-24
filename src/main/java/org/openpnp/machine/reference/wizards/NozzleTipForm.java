@@ -117,7 +117,7 @@ public final class NozzleTipForm {
         private boolean cloneZCalibration = true;
         private boolean cloneVisionCalibration = true;
 
-        Bean(ReferenceNozzleTip tip) {
+        public Bean(ReferenceNozzleTip tip) {
             this.tip = tip;
             this.calibration = tip.getCalibration();
             // Readings, graphs and levels a pick establishes change while the form is shown.

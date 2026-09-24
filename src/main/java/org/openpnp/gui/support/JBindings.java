@@ -141,6 +141,16 @@ public class JBindings {
             return wrapper;
         }
 
+        /** What the object holds, as against what is on screen waiting for Apply. */
+        public SV getSourceValue() {
+            return sourceProperty.getValue(source);
+        }
+
+        /** Whether the value on screen differs from the object's: an edit Apply would write. */
+        public boolean isChanged() {
+            return !java.util.Objects.equals(wrapper.getValue(), sourceProperty.getValue(source));
+        }
+
         @Override
         public String toString() {
             return "WrappedBinding [source=" + source + ", sourceProperty=" + sourceProperty

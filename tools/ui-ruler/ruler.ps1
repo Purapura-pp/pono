@@ -8,6 +8,8 @@
 #   -Mockups   render the mockups again (they are also rendered when missing)
 #   -Onscreen  put the window on the screen, to watch it; by default it is kept off every screen and
 #              the ruler runs behind whatever else is in front
+#   -From      photograph another configuration directory than the fixture, a real machine's, with
+#              -MachineOff when its controller is not there to be enabled
 param(
     [string[]]$Rounds = @(),
     [string[]]$Scenes = @(),
@@ -15,7 +17,9 @@ param(
     [switch]$Build,
     [switch]$Fixture,
     [switch]$Mockups,
-    [switch]$Onscreen
+    [switch]$Onscreen,
+    [string]$From = "",
+    [switch]$MachineOff
 )
 $ErrorActionPreference = 'Stop'
 . E:\pono-env\env.ps1 | Out-Null
@@ -49,6 +53,8 @@ $rulerArgs = @('-cp', $cp, 'org.openpnp.gui.audit.UiRuler', '--out', $Out)
 if ($Rounds) { $rulerArgs += @('--rounds', ($Rounds -join ',')) }
 if ($Scenes) { $rulerArgs += @('--scenes', ($Scenes -join ',')) }
 if ($Onscreen) { $rulerArgs += @('--onscreen', 'true') }
+if ($From) { $rulerArgs += @('--fixture', $From) }
+if ($MachineOff) { $rulerArgs += @('--machine', 'off') }
 # No console window of its own either: nothing of the run comes to the front.
 $p = Start-Process -FilePath $java -ArgumentList ($jvm + $rulerArgs) -WorkingDirectory $repo -PassThru -Wait `
     -NoNewWindow -RedirectStandardOutput "$env:TEMP\pono-ui-ruler.out" -RedirectStandardError "$env:TEMP\pono-ui-ruler.err"

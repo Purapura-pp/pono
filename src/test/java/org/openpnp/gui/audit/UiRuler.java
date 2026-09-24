@@ -151,7 +151,7 @@ public class UiRuler {
         String[][] ids = { { "JobPanel", "job" }, { "FeedersPanel", "feeders" },
                 { "PartsPanel", "parts" }, { "PackagesPanel", "packages" },
                 { "BoardsPanel", "boards" }, { "PanelsPanel", "panels" },
-                { "VisionSettingsPanel", "vision" }, { "MachineSetupPanel", "machine" },
+                { "VisionSettingsPanel", "vision" }, { "MachineSettingsPanel", "machine" },
                 { "IssuesAndSolutionsPanel", "issues" }, { "CalibrationPanel", "calibration" },
                 { "LogPanel", "log" },
                 { "SettingsPanel", "settings" } };
@@ -183,6 +183,11 @@ public class UiRuler {
      * dialogs are laid out and painted without being shown at all.
      */
     private final boolean onscreen;
+    /**
+     * Whether the machine is enabled, homed and given the sample feeders before the photographs:
+     * off for a fixture of a real machine's configuration, whose controller is not there.
+     */
+    private final boolean prepare;
     /** Left of every screen a desk is likely to have, and within what Windows keeps coordinates in. */
     private static final int OFFSCREEN_X = -20000;
     private Map<Component, String> landmarks;
@@ -196,6 +201,7 @@ public class UiRuler {
         roundFilter = split(options.get("rounds"));
         sceneFilter = split(options.get("scenes"));
         onscreen = Boolean.parseBoolean(options.getOrDefault("onscreen", "false"));
+        prepare = !"off".equals(options.getOrDefault("machine", "on"));
         new File(out, "shots").mkdirs();
         new File(out, "pairs").mkdirs();
         log = new PrintWriter(Files.newBufferedWriter(new File(out, "ruler.log").toPath(),
@@ -244,7 +250,9 @@ public class UiRuler {
         closeStrayDialogs("\u542f\u52a8");
         inventory();
         // The names of what the machine is given for the scenes are data like the fixture's.
-        prepareMachine();
+        if (prepare) {
+            prepareMachine();
+        }
         rules = rules();
         openJob();
         landmarks = edtGet(this::landmarks);
@@ -532,8 +540,14 @@ public class UiRuler {
                 }
             }
             if (id.equals("machine")) {
-                // The machine page shows one element's sheets at a time: the core ones of P9 W1
-                // each get a photograph of their own.
+                // The machine settings page's topics, mockups 24 to 28, each on its own.
+                for (String[] topic : TOPIC_SCENES) {
+                    String topicLabel = label + " \u00b7 " + topic[1];
+                    scenes.add(new Scene(topic[0], topicLabel, page));
+                    sceneLabels.put(topic[0], topicLabel);
+                }
+                // Its tree shows one element's sheets at a time: the core ones of P9 W1 each get
+                // a photograph of their own.
                 for (String[] extra : MACHINE_SCENES) {
                     String extraLabel = label + " \u00b7 " + extra[1];
                     scenes.add(new Scene(extra[0], extraLabel, page));
@@ -542,6 +556,25 @@ public class UiRuler {
             }
         }
         return scenes;
+    }
+
+    /** The machine settings page's topics: scene id, what, the topic's key. */
+    private static final String[][] TOPIC_SCENES = {
+            { "machine-overview", "\u6982\u51b5", "Overview" },
+            { "machine-presets", "\u673a\u578b\u4e0e\u9884\u8bbe", "Presets" },
+            { "machine-motion", "\u8fd0\u52a8\u4e0e\u8f74", "Motion" },
+            { "machine-nozzles", "\u5438\u5634\u4e0e\u5438\u5634\u5934", "Nozzles" },
+            { "machine-cameras", "\u76f8\u673a", "Cameras" },
+            { "machine-connection", "\u8fde\u63a5", "Connection" },
+    };
+
+    private static String[] topicScene(String id) {
+        for (String[] topic : TOPIC_SCENES) {
+            if (topic[0].equals(id)) {
+                return topic;
+            }
+        }
+        return null;
     }
 
     /** The machine page's elements photographed besides the camera: id, what, row, inspector tab. */
@@ -689,11 +722,20 @@ public class UiRuler {
                 expect(missed, selectFirstRow(page), "\u7b2c\u4e00\u4e2a\u89c6\u89c9\u914d\u7f6e");
                 break;
             case "machine":
+                frame.getMachineSettings().showAdvanced();
                 expect(missed, selectTreeNode(page, "Top") || selectRow(page, s -> s.endsWith(" Top")),
                         "\u76f8\u673a Top");
                 break;
             default: {
+                String[] topic = topicScene(scene.id);
+                if (topic != null) {
+                    frame.getMachineSettings().showTopic(topic[2]);
+                    break;
+                }
                 String[] extra = machineScene(scene.id);
+                if (extra != null && !feederScene(scene.id)) {
+                    frame.getMachineSettings().showAdvanced();
+                }
                 if (extra != null && feederScene(scene.id)) {
                     // A Photon feeder's name ends in the slot it is in.
                     String name = extra[2];

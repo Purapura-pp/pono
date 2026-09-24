@@ -60,7 +60,7 @@ public final class NozzleForm {
     public static class Bean extends MountableAxes.Bean {
         private final ReferenceNozzle nozzle;
 
-        Bean(ReferenceNozzle nozzle) {
+        public Bean(ReferenceNozzle nozzle) {
             super(nozzle);
             this.nozzle = nozzle;
         }

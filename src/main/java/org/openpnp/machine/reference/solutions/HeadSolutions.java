@@ -23,6 +23,7 @@ package org.openpnp.machine.reference.solutions;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 
 import org.openpnp.Translations;
 import org.openpnp.gui.support.Icons;
@@ -41,6 +42,7 @@ import org.openpnp.machine.reference.driver.GcodeDriver.CommandType;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
+import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Solutions;
 import org.openpnp.model.Solutions.Milestone;
 import org.openpnp.model.Solutions.Severity;
@@ -385,6 +387,190 @@ public class HeadSolutions implements Solutions.Subject {
         }
     }
 
+    /**
+     * What turning the head's nozzles into a solution would do to the machine, worked out the way
+     * {@link #createNozzleSolution} does it and without doing it: the elements it would make,
+     * rename, set up afresh and delete. The machine settings page shows it before the user agrees.
+     */
+    public static final class NozzlePlan {
+        public enum Kind {
+            Nozzle, Axis, Actuator
+        }
+
+        /** One element, by the name it has and the name it would have; either is null for new or gone. */
+        public static final class Item {
+            public final Kind kind;
+            public final String from;
+            public final String to;
+
+            Item(Kind kind, String from, String to) {
+                this.kind = kind;
+                this.from = from;
+                this.to = to;
+            }
+        }
+
+        public final List<Item> created = new ArrayList<>();
+        public final List<Item> renamed = new ArrayList<>();
+        /** A mapped axis made to follow its input the other way: z2 = -z1, whatever it was. */
+        public final List<Item> remapped = new ArrayList<>();
+        public final List<Item> removed = new ArrayList<>();
+
+        public boolean isEmpty() {
+            return created.isEmpty() && renamed.isEmpty() && remapped.isEmpty() && removed.isEmpty();
+        }
+    }
+
+    /** The plan for the solution repeated so many times; nothing is changed. */
+    public synchronized NozzlePlan planNozzleSolution(NozzleSolution nozzleSolution, int nozzleSolutionsMultiplier) {
+        NozzlePlan plan = new NozzlePlan();
+        // What createNozzleSolution recycles from, collected the same way and in the same order.
+        LinkedHashSet<Object> nozzles = new LinkedHashSet<>();
+        LinkedHashSet<Object> axesZ = new LinkedHashSet<>();
+        LinkedHashSet<Object> axesC = new LinkedHashSet<>();
+        LinkedHashSet<Object> axesNegated = new LinkedHashSet<>();
+        LinkedHashSet<Object> axesCam1 = new LinkedHashSet<>();
+        LinkedHashSet<Object> axesCam2 = new LinkedHashSet<>();
+        LinkedHashSet<Object> valveActuators = new LinkedHashSet<>();
+        LinkedHashSet<Object> senseActuators = new LinkedHashSet<>();
+        for (Nozzle nozzle : head.getNozzles()) {
+            if (nozzle instanceof AbstractNozzle) {
+                Axis axisZ = nozzle.getAxisZ();
+                Axis axisC = nozzle.getAxisRotation();
+                nozzles.add(nozzle);
+                axesZ.add(getRawAxis(head.getMachine(), axisZ));
+                axesC.add(getRawAxis(head.getMachine(), axisC));
+                if (axisZ instanceof ReferenceMappedAxis) {
+                    axesNegated.add(axisZ);
+                }
+                if (axisZ instanceof ReferenceCamCounterClockwiseAxis) {
+                    axesCam1.add(axisZ);
+                }
+                if (axisZ instanceof ReferenceCamClockwiseAxis) {
+                    axesCam2.add(axisZ);
+                }
+            }
+            if (nozzle instanceof ReferenceNozzle) {
+                ReferenceNozzle refNozzle = (ReferenceNozzle) nozzle;
+                senseActuators.add(refNozzle.getVacuumSenseActuator());
+                if (refNozzle.getVacuumSenseActuator() != refNozzle.getVacuumActuator()) {
+                    valveActuators.add(refNozzle.getVacuumActuator());
+                }
+            }
+        }
+        String z = Axis.Type.Z.getDefaultLetter();
+        String c = Axis.Type.Rotation.getDefaultLetter();
+        for (int i = 0; i < nozzleSolutionsMultiplier; i++) {
+            String suffix = nozzleSolutionsMultiplier > 1 ? String.valueOf(i+1) : "";
+            String suffix1 = String.valueOf(i*2+1);
+            String suffix2 = String.valueOf(i*2+2);
+            switch (nozzleSolution) {
+                case Standalone:
+                    take(plan, nozzles, NozzlePlan.Kind.Nozzle, "N" + suffix);
+                    take(plan, axesZ, NozzlePlan.Kind.Axis, z + suffix);
+                    take(plan, axesC, NozzlePlan.Kind.Axis, c + suffix);
+                    takeVacuum(plan, valveActuators, senseActuators, suffix);
+                    break;
+                case DualNegated: {
+                    take(plan, nozzles, NozzlePlan.Kind.Nozzle, "N" + suffix1);
+                    take(plan, nozzles, NozzlePlan.Kind.Nozzle, "N" + suffix2);
+                    take(plan, axesZ, NozzlePlan.Kind.Axis, z + suffix1);
+                    take(plan, axesC, NozzlePlan.Kind.Axis, c + suffix1);
+                    Object negated = axesNegated.isEmpty() ? null : axesNegated.iterator().next();
+                    take(plan, axesNegated, NozzlePlan.Kind.Axis, z + suffix2);
+                    if (negated != null && !isPlainNegation((ReferenceMappedAxis) negated)) {
+                        plan.remapped.add(new NozzlePlan.Item(NozzlePlan.Kind.Axis, z + suffix1, z + suffix2));
+                    }
+                    take(plan, axesC, NozzlePlan.Kind.Axis, c + suffix2);
+                    takeVacuum(plan, valveActuators, senseActuators, suffix1);
+                    takeVacuum(plan, valveActuators, senseActuators, suffix2);
+                    break;
+                }
+                case DualCam: {
+                    take(plan, nozzles, NozzlePlan.Kind.Nozzle, "N" + suffix1);
+                    take(plan, nozzles, NozzlePlan.Kind.Nozzle, "N" + suffix2);
+                    take(plan, axesZ, NozzlePlan.Kind.Axis, z + "N" + suffix);
+                    take(plan, axesC, NozzlePlan.Kind.Axis, c + suffix1);
+                    take(plan, axesCam1, NozzlePlan.Kind.Axis, z + suffix1);
+                    take(plan, axesCam2, NozzlePlan.Kind.Axis, z + suffix2);
+                    take(plan, axesC, NozzlePlan.Kind.Axis, c + suffix2);
+                    takeVacuum(plan, valveActuators, senseActuators, suffix1);
+                    takeVacuum(plan, valveActuators, senseActuators, suffix2);
+                    break;
+                }
+            }
+        }
+        for (LinkedHashSet<Object> unused : java.util.Arrays.asList(axesNegated, axesCam1, axesCam2, axesZ, axesC)) {
+            for (Object axis : unused) {
+                if (axis != null) {
+                    plan.removed.add(new NozzlePlan.Item(NozzlePlan.Kind.Axis, ((Axis) axis).getName(), null));
+                }
+            }
+        }
+        for (Object nozzle : nozzles) {
+            plan.removed.add(new NozzlePlan.Item(NozzlePlan.Kind.Nozzle, ((Nozzle) nozzle).getName(), null));
+        }
+        for (LinkedHashSet<Object> unused : java.util.Arrays.asList(valveActuators, senseActuators)) {
+            for (Object actuator : unused) {
+                if (actuator != null) {
+                    plan.removed.add(new NozzlePlan.Item(NozzlePlan.Kind.Actuator, ((Actuator) actuator).getName(), null));
+                }
+            }
+        }
+        return plan;
+    }
+
+    /**
+     * Whether a mapped axis already follows its input as the dual negated solution sets it up,
+     * 0 to 0 and 1 to -1. Another mapping, a LumenPnP's 0 to 63 and 63 to 0, is set up afresh.
+     */
+    private static boolean isPlainNegation(ReferenceMappedAxis axis) {
+        if (axis.getMapInput0() == null || axis.getMapInput1() == null || axis.getMapOutput0() == null
+                || axis.getMapOutput1() == null) {
+            return false;
+        }
+        double in0 = mm(axis.getMapInput0());
+        double in1 = mm(axis.getMapInput1());
+        double out0 = mm(axis.getMapOutput0());
+        double out1 = mm(axis.getMapOutput1());
+        if (Math.abs(in1 - in0) < 1e-12) {
+            return false;
+        }
+        // z2 = -z1 in any units: a slope of -1 through the origin.
+        double slope = (out1 - out0) / (in1 - in0);
+        return Math.abs(slope + 1) < 1e-9 && Math.abs(out0 - slope * in0) < 1e-9;
+    }
+
+    private static double mm(Length length) {
+        return length.convertToUnits(LengthUnit.Millimeters).getValue();
+    }
+
+    /** As the reuse methods do: the first one there is, renamed, or a new one when there is none. */
+    private static void take(NozzlePlan plan, LinkedHashSet<Object> from, NozzlePlan.Kind kind, String name) {
+        Object first = from.isEmpty() ? null : from.iterator().next();
+        if (first == null) {
+            plan.created.add(new NozzlePlan.Item(kind, null, name));
+            return;
+        }
+        from.remove(first);
+        String old = first instanceof Nozzle ? ((Nozzle) first).getName()
+                : first instanceof Axis ? ((Axis) first).getName() : ((Actuator) first).getName();
+        if (!name.equals(old)) {
+            plan.renamed.add(new NozzlePlan.Item(kind, old, name));
+        }
+    }
+
+    private static void takeVacuum(NozzlePlan plan, LinkedHashSet<Object> valves, LinkedHashSet<Object> senses,
+            String suffix) {
+        take(plan, valves, NozzlePlan.Kind.Actuator, "VAC" + suffix);
+        take(plan, senses, NozzlePlan.Kind.Actuator, "VACS" + suffix);
+    }
+
+    /** Turns the head's nozzles into the solution, as {@link #planNozzleSolution} said it would. */
+    public void applyNozzleSolution(NozzleSolution nozzleSolution, int nozzleSolutionsMultiplier) throws Exception {
+        createNozzleSolution(head.getDefaultCamera(), nozzleSolution, nozzleSolutionsMultiplier);
+    }
+
     private synchronized void createNozzleSolution(Camera camera, 
             NozzleSolution nozzleSolution, int nozzleSolutionsMultiplier) throws Exception {
         Configuration.get().save();
@@ -612,7 +798,7 @@ public class HeadSolutions implements Solutions.Subject {
         else {
             actuators.remove(actuator);
         }
-        actuator.setName("A"+i);
+        actuator.setName(i);
         return actuator;
     }
 }

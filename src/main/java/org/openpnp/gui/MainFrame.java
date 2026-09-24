@@ -267,9 +267,28 @@ public class MainFrame extends JFrame {
         return cameraPanel;
     }
 
+    /**
+     * The element tree. It is the machine settings page's advanced topic, and showing it with
+     * {@link #showTab(Component)} shows that page and topic.
+     */
     public MachineSetupPanel getMachineSetupTab() {
         return machineSetupPanel;
     }
+
+    public org.openpnp.gui.machinesettings.MachineSettingsPanel getMachineSettings() {
+        return machineSettingsPanel;
+    }
+
+    /** Goes to the machine settings page at a topic: where a hint about the machine's definition leads. */
+    public void showMachineSettings(String topic) {
+        if (machineSettingsPanel == null) {
+            return;
+        }
+        showTab(machineSettingsPanel);
+        machineSettingsPanel.showTopic(topic);
+    }
+
+    private org.openpnp.gui.machinesettings.MachineSettingsPanel machineSettingsPanel;
 
     public IssuesAndSolutionsPanel getIssuesAndSolutionsTab() {
         return issuesAndSolutionsPanel;
@@ -502,7 +521,7 @@ public class MainFrame extends JFrame {
 
     /** Lays the window out as the page on show wants it: its camera, its properties column. */
     private void applyPageLayout(Component page) {
-        String key = pageKeys.get(page);
+        String key = pageKey(page);
         if (key == null || pageLayouts == null) {
             return;
         }
@@ -583,7 +602,7 @@ public class MainFrame extends JFrame {
 
     /** The View menu's and the strip's choice of camera size for the page on show. */
     private void chooseCameraMode(org.openpnp.gui.shell.PageLayouts.Camera camera) {
-        String key = pageKeys.get(navigationRail.getSelectedComponent());
+        String key = pageKey(navigationRail.getSelectedComponent());
         if (key != null && !windowStyleMultiple) {
             if (cameraFullScreen) {
                 toggleCameraFullScreen();
@@ -630,7 +649,7 @@ public class MainFrame extends JFrame {
 
     /** The properties column as the page on show wants it, at a width the window allows. */
     private void applyInspectorPolicy() {
-        String key = pageKeys.get(navigationRail.getSelectedComponent());
+        String key = pageKey(navigationRail.getSelectedComponent());
         if (key == null || inspectorPanel == null) {
             return;
         }
@@ -727,6 +746,8 @@ public class MainFrame extends JFrame {
         packagesPanel = new PackagesPanel(configuration, this);
         feedersPanel = new FeedersPanel(configuration, this);
         machineSetupPanel = new MachineSetupPanel(configuration);
+        machineSettingsPanel = new org.openpnp.gui.machinesettings.MachineSettingsPanel(configuration, this,
+                machineSetupPanel);
         issuesAndSolutionsPanel = new IssuesAndSolutionsPanel(configuration, this);
         visionSettingsPanel = new VisionSettingsPanel(configuration, this);
 
@@ -1222,7 +1243,7 @@ public class MainFrame extends JFrame {
             }
         });
         onDividerReleased(splitPaneMachineAndTabs, () -> {
-            String key = pageKeys.get(navigationRail.getSelectedComponent());
+            String key = pageKey(navigationRail.getSelectedComponent());
             if (key == null || cameraFullScreen || dockMaximised || windowStyleMultiple) {
                 return;
             }
@@ -1240,7 +1261,8 @@ public class MainFrame extends JFrame {
         addNavigation("Panels", org.openpnp.gui.shell.Ui.icon("layers", 20), panelsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         addNavigation("Vision", org.openpnp.gui.shell.Ui.icon("eye", 20), visionSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         navigationRail.addGap();
-        addNavigation("MachineSetup", org.openpnp.gui.shell.Ui.icon("machine", 20), machineSetupPanel); //$NON-NLS-1$ //$NON-NLS-2$
+        // The machine's own settings by topic, the element tree the last of them.
+        addNavigation("MachineSettings", org.openpnp.gui.shell.Ui.icon("sliders", 20), machineSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
         // The issues page finds and measures; the calibration page after it carries out. The
         // diagnostics page they replace was both, and neither.
         addNavigation("IssuesAndSolutions", org.openpnp.gui.shell.Ui.icon("alert", 20), issuesAndSolutionsPanel); //$NON-NLS-1$ //$NON-NLS-2$
@@ -1271,6 +1293,18 @@ public class MainFrame extends JFrame {
                 if (reverting || inspectorPanel == null) {
                     return;
                 }
+                // The machine settings page's own forms are asked about as the column's are.
+                if (inspectorPanel.getActivePage() == machineSettingsPanel && page != machineSettingsPanel
+                        && !machineSettingsPanel.settleUnappliedEdits()) {
+                    reverting = true;
+                    try {
+                        navigationRail.setSelectedComponent(machineSettingsPanel);
+                    }
+                    finally {
+                        reverting = false;
+                    }
+                    return;
+                }
                 // The properties column follows the page. If the user will not let go of
                 // unapplied edits in the sheets it would replace, the page switch is undone.
                 if (inspectorPanel.setActivePage(page) == Result.Cancelled) {
@@ -1285,7 +1319,7 @@ public class MainFrame extends JFrame {
                 }
                 applyPageLayout(page);
                 if (jogCard != null) {
-                    jogCard.setPage(pageKeys.get(page), page == feedersPanel);
+                    jogCard.setPage(pageKey(page), page == feedersPanel);
                 }
             }});
         
@@ -1345,7 +1379,7 @@ public class MainFrame extends JFrame {
         inspectorPanel.addPropertyChangeListener("collapsed", e -> { //$NON-NLS-1$
             if (!applyingInspector && pageLayouts != null) {
                 // Folded or unfolded by hand: that is what this page wants from now on.
-                String key = pageKeys.get(navigationRail.getSelectedComponent());
+                String key = pageKey(navigationRail.getSelectedComponent());
                 if (key != null) {
                     pageLayouts.setInspector(key, inspectorPanel.isCollapsed()
                             ? org.openpnp.gui.shell.PageLayouts.Inspector.Hide
@@ -1671,7 +1705,7 @@ public class MainFrame extends JFrame {
         instructionsCounted = counted;
         // A wizard points at the image: a page with the camera as a strip, or none, gets it
         // large until the wizard is done.
-        String page = pageKeys.get(navigationRail.getSelectedComponent());
+        String page = pageKey(navigationRail.getSelectedComponent());
         if (page != null && !windowStyleMultiple && pageLayouts != null
                 && pageLayouts.camera(page) != org.openpnp.gui.shell.PageLayouts.Camera.Large) {
             wizardEnlargedCamera = true;
@@ -1733,7 +1767,7 @@ public class MainFrame extends JFrame {
             frameCamera.toFront();
             return;
         }
-        String page = pageKeys.get(navigationRail.getSelectedComponent());
+        String page = pageKey(navigationRail.getSelectedComponent());
         if (page != null && pageLayouts.camera(page) != org.openpnp.gui.shell.PageLayouts.Camera.Large) {
             wizardEnlargedCamera = true;
         }
@@ -2155,7 +2189,34 @@ public class MainFrame extends JFrame {
      * and so could only ever be matched by a caller that knew the display language.
      */
     public void showTab(Component page) {
+        if (page == machineSetupPanel && machineSettingsPanel != null) {
+            navigationRail.setSelectedComponent(machineSettingsPanel);
+            machineSettingsPanel.showAdvanced();
+            return;
+        }
         navigationRail.setSelectedComponent(page);
+    }
+
+    /**
+     * A page changed what it is laid out as, as the machine settings page does between its topics
+     * and its tree: the camera and the properties column follow if it is on show.
+     */
+    public void pageLayoutChanged(Component page) {
+        if (navigationRail == null || navigationRail.getSelectedComponent() != page) {
+            return;
+        }
+        applyPageLayout(page);
+        if (jogCard != null) {
+            jogCard.setPage(pageKey(page), page == feedersPanel);
+        }
+    }
+
+    /** The key a page's layout is kept under: its navigation key, or the one it says it is now. */
+    private String pageKey(Component page) {
+        if (page != null && page == machineSettingsPanel) {
+            return machineSettingsPanel.layoutKey();
+        }
+        return pageKeys.get(page);
     }
 
     private ComponentListener mainFrameListener = new ComponentAdapter() {

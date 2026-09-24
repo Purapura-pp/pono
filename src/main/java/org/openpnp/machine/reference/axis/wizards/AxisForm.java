@@ -97,7 +97,7 @@ public final class AxisForm {
     public static class ControllerBean extends Bean {
         private final ReferenceControllerAxis controller;
 
-        ControllerBean(ReferenceControllerAxis axis) {
+        public ControllerBean(ReferenceControllerAxis axis) {
             super(axis);
             this.controller = axis;
             // The backlash tests' graphs arrive while the tab is shown.
@@ -358,9 +358,9 @@ public final class AxisForm {
 
     /**
      * A limit: its switch, then its coordinate while it is on, with the buttons that read the
-     * axis's position into it and that move the axis there.
+     * axis's position into it and that move the axis there. For a form of a {@link ControllerBean}.
      */
-    private static void limit(Form.Builder form, ReferenceControllerAxis axis, String property, String label,
+    public static void limit(Form.Builder form, ReferenceControllerAxis axis, String property, String label,
             java.util.function.Predicate<FormWizard> shown) {
         String enabled = property + "Enabled"; //$NON-NLS-1$
         form.toggle(enabled, label, "AxisForm.Limit.Enabled") //$NON-NLS-1$
@@ -372,7 +372,8 @@ public final class AxisForm {
                 .movesMachine();
     }
 
-    private static boolean softLimitsShown(FormWizard form) {
+    /** A linear axis has soft limits, and a rotation axis while it is limited to a range. */
+    public static boolean softLimitsShown(FormWizard form) {
         return form.value("type") != Axis.Type.Rotation || Boolean.TRUE.equals(form.value("limitRotation")); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
@@ -403,7 +404,7 @@ public final class AxisForm {
     }
 
     /** The feed rate per minute, as a controller's configuration usually states it. */
-    static String perMinute(Object feedrateText) {
+    public static String perMinute(Object feedrateText) {
         Length perSecond = new LengthConverter().convertReverse(String.valueOf(feedrateText));
         return String.format(Locale.US, Translations.getString("AxisForm.PerMinute"), //$NON-NLS-1$
                 trim(perSecond.getValue() * 60), perSecond.getUnits().getShortName());

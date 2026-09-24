@@ -46,7 +46,7 @@ public final class HeadForm {
     public static class Bean extends AbstractModelObject {
         private final ReferenceHead head;
 
-        Bean(ReferenceHead head) {
+        public Bean(ReferenceHead head) {
             this.head = head;
         }
 

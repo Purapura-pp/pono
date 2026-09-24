@@ -113,6 +113,12 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
     private Action deleteAction;
     /** The nodes shown open, by where they are, "机器/贴装头/H1": kept as the tree is rebuilt. */
     private final Set<String> expanded = new HashSet<>();
+    /** The toolbar and the tree, which the machine settings page shows as its advanced topic. */
+    private final JPanel page;
+    /** The navigation page the properties column shows this tree's selection for. */
+    private Component inspectorPage = this;
+    /** Whether the tree is on show on that page: another topic of it keeps the column to itself. */
+    private java.util.function.BooleanSupplier inspectorShown = () -> true;
 
     public MachineSetupPanel(Configuration configuration) {
         this.configuration = configuration;
@@ -216,7 +222,7 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         });
         toolbar.add(deleteButton);
 
-        JPanel page = new JPanel(new BorderLayout());
+        page = new JPanel(new BorderLayout());
         page.setOpaque(false);
         page.add(toolbar, BorderLayout.NORTH);
         page.add(DockPanel.table(table), BorderLayout.CENTER);
@@ -476,6 +482,20 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         newButton.getParent().revalidate();
     }
 
+    /** The toolbar and the tree without the dock around them, to be shown inside another page. */
+    public JComponent getStructure() {
+        return page;
+    }
+
+    /**
+     * Shows the tree's selection in the properties column as the given page's, while the tree is
+     * what that page shows.
+     */
+    public void setInspectorPage(Component page, java.util.function.BooleanSupplier shown) {
+        inspectorPage = page;
+        inspectorShown = shown;
+    }
+
     /** The path whose properties are on show, for putting back when the user keeps unapplied edits. */
     private PropertySheetHolderTreeNode shown;
     private boolean revertingSelection;
@@ -487,9 +507,12 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         Row row = selectedRow();
         PropertySheetHolderTreeNode node = row == null ? null : row.node;
         fillToolbar(node);
+        if (!inspectorShown.getAsBoolean()) {
+            return;
+        }
         PropertySheetHolder holder = node == null ? null : node.getPropertySheetHolder();
         PropertySheetPresenter.Result result = MainFrame.get().getInspector()
-                .show(MachineSetupPanel.this, holder,
+                .show(inspectorPage, holder,
                 MachineSetupPanel.this,
                 holder == null ? null : name(node),
                 holder == null ? null : subtitle(node),

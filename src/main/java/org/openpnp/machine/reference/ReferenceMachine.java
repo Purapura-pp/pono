@@ -154,6 +154,14 @@ public class ReferenceMachine extends AbstractMachine {
     @Attribute(required = false)
     private boolean safeZPark = true;
 
+    /** The preset the machine's definition was last taken from, by its name; null for none. */
+    @Attribute(required = false)
+    private String presetName;
+
+    /** Whether that preset came with Pono rather than being one of the user's. */
+    @Attribute(required = false)
+    private boolean presetBuiltIn;
+
     @Element(required = false)
     private Length unsafeZRoamingDistance = new Length(10, LengthUnit.Millimeters);
 
@@ -338,6 +346,26 @@ public class ReferenceMachine extends AbstractMachine {
         Object oldValue = this.safeZPark;
         this.safeZPark = safeZPark;
         firePropertyChange("safeZPark", oldValue, safeZPark);
+    }
+
+    public String getPresetName() {
+        return presetName;
+    }
+
+    public void setPresetName(String presetName) {
+        Object oldValue = this.presetName;
+        this.presetName = presetName;
+        firePropertyChange("presetName", oldValue, presetName);
+    }
+
+    public boolean isPresetBuiltIn() {
+        return presetBuiltIn;
+    }
+
+    public void setPresetBuiltIn(boolean presetBuiltIn) {
+        Object oldValue = this.presetBuiltIn;
+        this.presetBuiltIn = presetBuiltIn;
+        firePropertyChange("presetBuiltIn", oldValue, presetBuiltIn);
     }
 
     @Override
