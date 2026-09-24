@@ -34,7 +34,7 @@ import org.openpnp.gui.support.PropertySheetWizardAdapter;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.machine.reference.ReferenceFeeder;
 import org.openpnp.machine.reference.feeder.wizards.ReferencePushPullFeederConfigurationWizard;
-import org.openpnp.machine.reference.feeder.wizards.ReferencePushPullMotionConfigurationWizard;
+import org.openpnp.machine.reference.feeder.wizards.PushPullMotionForm;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -2160,8 +2160,9 @@ public class ReferencePushPullFeeder extends ReferenceFeeder {
     @Override
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
-                new PropertySheetWizardAdapter(getConfigurationWizard(), "Configuration"),
-                new PropertySheetWizardAdapter(new ReferencePushPullMotionConfigurationWizard(this), "Push-Pull Motion"),
+                new PropertySheetWizardAdapter(getConfigurationWizard(),
+                        org.openpnp.Translations.getString("PushPullForm.Configuration")), //$NON-NLS-1$
+                new PropertySheetWizardAdapter(PushPullMotionForm.build(this)),
         };
     }
 
