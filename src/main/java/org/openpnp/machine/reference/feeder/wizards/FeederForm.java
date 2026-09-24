@@ -164,12 +164,10 @@ public final class FeederForm {
                 .section("ReferenceAutoFeederConfigurationWizard.ActuatorsPanel.Border.title", "zap") //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("actuatorName", "FeederForm.Auto.Feed", actuators, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .decimal("actuatorValue", "FeederForm.Auto.FeedValue").width(120) //$NON-NLS-1$ //$NON-NLS-2$
-                .button("ReferenceAutoFeederConfigurationWizard.ActuatorsPanel.TestFeedButton.text", "play", //$NON-NLS-1$ //$NON-NLS-2$
-                        f -> test(f, feeder, true))
+                .button("SchultzForm.Test", "play", f -> test(f, feeder, true)).movesMachine() //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("postPickActuatorName", "FeederForm.Auto.PostPick", actuators, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .decimal("postPickActuatorValue", "FeederForm.Auto.PostPickValue").width(120) //$NON-NLS-1$ //$NON-NLS-2$
-                .button("ReferenceAutoFeederConfigurationWizard.ActuatorsPanel.TestPostPickButton.text", "play", //$NON-NLS-1$ //$NON-NLS-2$
-                        f -> test(f, feeder, false))
+                .button("SchultzForm.Test", "play", f -> test(f, feeder, false)).movesMachine() //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("FeederForm.Auto.Value.Hint") //$NON-NLS-1$
                 .toggle("moveBeforeFeed", "FeederForm.Auto.MoveBeforeFeed", "FeederForm.Auto.MoveBeforeFeed.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .toggle("recycleSupport", "FeederForm.Auto.Recycle", "FeederForm.Auto.Recycle.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$

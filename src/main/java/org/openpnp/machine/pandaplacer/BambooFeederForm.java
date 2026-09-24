@@ -150,10 +150,10 @@ public final class BambooFeederForm {
                 .section("ReferenceAutoFeederConfigurationWizard.ActuatorsPanel.Border.title", "zap") //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("feedActuator", "FeederForm.Auto.Feed", actuators, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .decimal("feedActuatorValue", "FeederForm.Auto.FeedValue").width(120) //$NON-NLS-1$ //$NON-NLS-2$
-                .button("SchultzForm.Test", "play", f -> test(f, feeder, true)) //$NON-NLS-1$ //$NON-NLS-2$
+                .button("SchultzForm.Test", "play", f -> test(f, feeder, true)).movesMachine() //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("postPickActuator", "FeederForm.Auto.PostPick", actuators, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .decimal("postPickActuatorValue", "FeederForm.Auto.PostPickValue").width(120) //$NON-NLS-1$ //$NON-NLS-2$
-                .button("SchultzForm.Test", "play", f -> test(f, feeder, false)) //$NON-NLS-1$ //$NON-NLS-2$
+                .button("SchultzForm.Test", "play", f -> test(f, feeder, false)).movesMachine() //$NON-NLS-1$ //$NON-NLS-2$
                 .hint("FeederForm.Auto.Value.Hint") //$NON-NLS-1$
                 .toggle("moveBeforeFeed", "FeederForm.Auto.MoveBeforeFeed", "FeederForm.Auto.MoveBeforeFeed.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .build();

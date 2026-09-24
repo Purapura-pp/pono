@@ -186,7 +186,7 @@ a complete change list, only those that may directly interest or affect users.
 * The core machine's forms are translated into Simplified Chinese with the glossary's words: a nozzle is 吸嘴 and a nozzle tip 吸嘴头 there, where the old settings called them 吸嘴连杆 and 吸嘴, and a feeder is 飞达 as on the feeders page. The labels the old wizards had are kept where they read as labels, so that the other languages keep theirs; a label that asked a question - "Park after homed?" - or carried its unit in brackets has a new one, the unit going into its field.
 * The cameras' and the vision defaults' forms are translated into Simplified Chinese. The 237 keys of the camera wizards that no longer exist have been removed from all seven language files, among them the advanced calibration's texts that fixed their own width in HTML; the labels the new forms reuse are kept.
 * The drivers', actuators' and signalers' forms are translated into Simplified Chinese, and the 91 keys of their wizards that nothing reads any more have been removed from all seven language files.
-* The feeders' forms are translated into Simplified Chinese, and the 427 keys of their wizards that nothing reads any more have been removed from all seven language files.
+* The feeders' forms are translated into Simplified Chinese, and the 429 keys of their wizards that nothing reads any more have been removed from all seven language files.
 
 ## Development
 
