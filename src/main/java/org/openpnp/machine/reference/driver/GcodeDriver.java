@@ -52,7 +52,7 @@ import org.openpnp.machine.reference.axis.ReferenceLinearTransformAxis;
 import org.openpnp.machine.reference.axis.ReferenceMappedAxis;
 import org.openpnp.machine.reference.driver.wizards.GcodeDriverConsole;
 import org.openpnp.machine.reference.driver.wizards.GcodeDriverGcodes;
-import org.openpnp.machine.reference.driver.wizards.GcodeDriverSettings;
+import org.openpnp.machine.reference.driver.wizards.DriverForms;
 import org.openpnp.machine.reference.solutions.GcodeDriverSolutions;
 import org.openpnp.model.AxesLocation;
 import org.openpnp.model.Configuration;
@@ -789,7 +789,6 @@ public class GcodeDriver extends AbstractReferenceDriver implements Named {
             }
         }
     }
-
 
     @Override
     public AxesLocation getReportedLocation(long timeout) throws Exception {
@@ -1669,7 +1668,7 @@ public class GcodeDriver extends AbstractReferenceDriver implements Named {
     public PropertySheet[] getPropertySheets() {
         return new PropertySheet[] {
                 new PropertySheetWizardAdapter(super.getConfigurationWizard()),
-                new PropertySheetWizardAdapter(new GcodeDriverSettings(this), Translations.getString(
+                new PropertySheetWizardAdapter(DriverForms.gcodeSettings(this), Translations.getString(
                         "GCodeDriver.GCodeDriverSettings.title")), //$NON-NLS-1$
                 new PropertySheetWizardAdapter(new GcodeDriverGcodes(this), Translations.getString(
                         "GCodeDriver.GCode.title")), //$NON-NLS-1$

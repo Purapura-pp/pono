@@ -12,7 +12,7 @@ import org.openpnp.machine.reference.driver.SerialPortCommunications.DataBits;
 import org.openpnp.machine.reference.driver.SerialPortCommunications.FlowControl;
 import org.openpnp.machine.reference.driver.SerialPortCommunications.Parity;
 import org.openpnp.machine.reference.driver.SerialPortCommunications.StopBits;
-import org.openpnp.machine.reference.driver.wizards.AbstractReferenceDriverConfigurationWizard;
+import org.openpnp.machine.reference.driver.wizards.DriverForms;
 import org.openpnp.spi.base.AbstractDriver;
 import org.pmw.tinylog.Logger;
 import org.simpleframework.xml.Attribute;
@@ -335,7 +335,7 @@ public abstract class AbstractReferenceDriver extends AbstractDriver {
 
     @Override
     public Wizard getConfigurationWizard() {
-        return new AbstractReferenceDriverConfigurationWizard(this);
+        return DriverForms.communications(this);
     }
 
     
