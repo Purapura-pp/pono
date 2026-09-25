@@ -59,6 +59,9 @@ FPS
 # Makers of machines, as their presets name them
 Opulo
 
+# The escape a G-code command writes a character with, \uXXXX
+uXXXX
+
 # Firmware as a controller reports itself to M115
 Marlin
 bugfix
