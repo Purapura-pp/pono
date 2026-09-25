@@ -18,6 +18,7 @@
 package org.openpnp.gui.shell;
 
 import java.awt.Desktop;
+import java.awt.Dimension;
 import java.awt.image.BufferedImage;
 import java.beans.PropertyChangeListener;
 import java.io.File;
@@ -29,8 +30,12 @@ import javax.imageio.ImageIO;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JSlider;
 import javax.swing.JToggleButton;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import org.openpnp.Translations;
@@ -42,15 +47,23 @@ import org.openpnp.gui.components.reticle.OutlineReticle;
 import org.openpnp.gui.components.reticle.Reticle;
 import org.openpnp.gui.components.reticle.RulerReticle;
 import org.openpnp.gui.components.reticle.SceneReticle;
+import org.openpnp.gui.machinesettings.Backups;
+import org.openpnp.gui.support.MessageBoxes;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Footprint;
+import org.openpnp.spi.Actuator;
+import org.openpnp.spi.Camera;
+import org.openpnp.spi.Machine;
+import org.openpnp.spi.base.AbstractActuator;
 import org.openpnp.util.UiUtils;
 import org.pmw.tinylog.Logger;
 
+import com.formdev.flatlaf.FlatClientProperties;
+
 /**
  * The tools in the top right corner of the image, as two of the stylesheet's glass cards: the
- * crosshair, grid, ruler and package outline switches, which can be on together, and the light,
- * the zoom, a screenshot and full screen.
+ * crosshair, grid, ruler and package outline switches, which can be on together, and the light
+ * with its brightness, the zoom, a screenshot and full screen.
  * <p>
  * The reticles were only reachable through the right-click menu, which also holds their colours
  * and units, and only one could be drawn at a time; the menu stays for those. The light switch
@@ -78,6 +91,12 @@ public class CameraToolsBar extends JPanel {
     private final PropertyChangeListener zoomListener = e -> showZoom();
     /** The light's actuator says what it is doing when it has done it; asked twice a second. */
     private final Timer lightFollower = new Timer(500, e -> showLight());
+    private final JSlider brightness = new JSlider(1, 100, 100);
+    private final JLabel brightnessValue = Ui.mono("100%", 11f); //$NON-NLS-1$
+    /** While the slider is dragged its brightness goes to the light at most this often. */
+    private final Timer brightnessSender = new Timer(150, e -> sendBrightness(false));
+    /** Set while the slider is moved to what the light has, which is not an edit. */
+    private boolean showingBrightness;
 
     /**
      * @param outline The footprint of what is selected, and its name, for the outline switch.
@@ -121,6 +140,33 @@ public class CameraToolsBar extends JPanel {
             showLight();
         });
         view.add(light);
+        brightness.putClientProperty(FlatClientProperties.STYLE,
+                "trackWidth: 3; thumbSize: 12,12; trackValueColor: $Pono.accent; trackColor: $Pono.surface3; " //$NON-NLS-1$
+                        + "thumbColor: #ffffff; thumbBorderColor: $Pono.accent; focusedColor: null; " //$NON-NLS-1$
+                        + "hoverThumbColor: #ffffff; pressedThumbColor: #ffffff"); //$NON-NLS-1$
+        brightness.setOpaque(false);
+        brightness.setFocusable(false);
+        brightness.setPreferredSize(new Dimension(76, 26));
+        Ui.whyDisabled(brightness, this::brightnessFixed);
+        brightnessValue.setForeground(Ui.text2());
+        brightnessValue.setHorizontalAlignment(SwingConstants.RIGHT);
+        brightnessValue.setPreferredSize(new Dimension(30, 26));
+        brightnessSender.setRepeats(false);
+        brightness.addChangeListener(e -> {
+            brightnessValue.setText(brightness.getValue() + "%"); //$NON-NLS-1$
+            if (showingBrightness) {
+                return;
+            }
+            if (!brightness.getValueIsAdjusting()) {
+                brightnessSender.stop();
+                sendBrightness(true);
+            }
+            else if (!brightnessSender.isRunning()) {
+                brightnessSender.start();
+            }
+        });
+        view.add(brightness);
+        view.add(brightnessValue);
         Ui.pill(zoom);
         zoom.setToolTipText(Translations.getString("CameraTools.Zoom")); //$NON-NLS-1$
         zoom.addActionListener(e -> {
@@ -199,6 +245,113 @@ public class CameraToolsBar extends JPanel {
         light.setSelected(has && followed.isLightOn());
         light.setToolTipText(Translations.getString(has ? "CameraTools.Light" //$NON-NLS-1$
                 : "CameraTools.Light.None")); //$NON-NLS-1$
+        showBrightness(lightActuator());
+    }
+
+    /** The light actuator of the camera on show, or null. */
+    private Actuator lightActuator() {
+        Camera camera = followed == null ? null : followed.getCamera();
+        return camera == null ? null : camera.getLightActuator();
+    }
+
+    /**
+     * The slider follows the light's ON value, except while it is dragged or a value is on its
+     * way. A switched light shows the brightness its command has, where the command says.
+     */
+    private void showBrightness(Actuator actuator) {
+        boolean has = actuator != null;
+        if (brightness.isVisible() != has) {
+            brightness.setVisible(has);
+            brightnessValue.setVisible(has);
+            revalidate();
+        }
+        if (!has || brightness.getValueIsAdjusting() || brightnessSender.isRunning()) {
+            return;
+        }
+        boolean adjustable = LightBrightness.adjustable(actuator);
+        LightBrightness.Conversion conversion = adjustable ? null : LightBrightness.conversion(actuator);
+        boolean enabled = adjustable || conversion != null;
+        double fraction = adjustable ? LightBrightness.fraction(actuator)
+                : conversion != null ? conversion.on / AbstractActuator.DEFAULT_FULL_SCALE : 1;
+        showingBrightness = true;
+        try {
+            brightness.setValue((int) Math.max(1, Math.round(fraction * 100)));
+        }
+        finally {
+            showingBrightness = false;
+        }
+        brightness.setEnabled(enabled);
+        brightnessValue.setEnabled(enabled);
+        brightnessValue.setText(enabled ? brightness.getValue() + "%" : "\u2014"); //$NON-NLS-1$ //$NON-NLS-2$
+        String toolTip = enabled
+                ? String.format(Translations.getString("CameraTools.Brightness"), brightness.getValue()) //$NON-NLS-1$
+                : brightnessFixed();
+        brightness.setToolTipText(toolTip);
+        brightnessValue.setToolTipText(toolTip);
+    }
+
+    /** Why the slider is greyed: a switched light whose command does not say its brightness. */
+    private String brightnessFixed() {
+        Actuator actuator = lightActuator();
+        return actuator == null ? null
+                : String.format(Translations.getString("CameraTools.Brightness.Fixed"), actuator.getName()); //$NON-NLS-1$
+    }
+
+    /**
+     * The slider's brightness to the light: its ON value, saved with the configuration, and the
+     * light switched on at it when the machine can take a command. A switched light is made
+     * numeric first, once the drag has ended and the user has agreed.
+     */
+    private void sendBrightness(boolean released) {
+        Actuator actuator = lightActuator();
+        if (actuator == null) {
+            return;
+        }
+        // Read before asking: while the question is open the slider follows the light again.
+        double fraction = brightness.getValue() / 100.0;
+        if (!LightBrightness.adjustable(actuator)) {
+            LightBrightness.Conversion conversion = released ? LightBrightness.conversion(actuator) : null;
+            if (conversion == null || !convert(actuator, conversion)) {
+                if (released) {
+                    showLight();
+                }
+                return;
+            }
+        }
+        double value = LightBrightness.value(actuator, fraction);
+        ((AbstractActuator) actuator).setDefaultOnDouble(value);
+        configuration.setDirty(true);
+        Machine machine = configuration.getMachine();
+        if (machine != null && machine.isEnabled() && !machine.isBusy()) {
+            UiUtils.submitUiMachineTask(() -> actuator.actuate(value));
+        }
+        if (released) {
+            showLight();
+        }
+    }
+
+    /** Asks, backs machine.xml up and makes the switched light numeric; whether it was done. */
+    private boolean convert(Actuator actuator, LightBrightness.Conversion conversion) {
+        String title = String.format(Translations.getString("CameraTools.Brightness.Convert.Title"), //$NON-NLS-1$
+                actuator.getName());
+        int chosen = Dialogs.ask(SwingUtilities.getWindowAncestor(this), Dialogs.Tone.Warn, "zap", title, //$NON-NLS-1$
+                String.format(Translations.getString("CameraTools.Brightness.Convert.What"), //$NON-NLS-1$
+                        actuator.getName(), LightBrightness.format(conversion.on), conversion.command),
+                Translations.getString("CameraTools.Brightness.Convert.More"), //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("CameraTools.Brightness.Convert.Action"))); //$NON-NLS-1$
+        if (chosen != 0) {
+            return false;
+        }
+        try {
+            Backups.backup(configuration, "light"); //$NON-NLS-1$
+        }
+        catch (Exception e) {
+            MessageBoxes.errorBox(this, title, e);
+            return false;
+        }
+        LightBrightness.convert(actuator, conversion);
+        configuration.setDirty(true);
+        return true;
     }
 
     private void showZoom() {

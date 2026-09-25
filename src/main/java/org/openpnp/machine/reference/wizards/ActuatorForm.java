@@ -62,6 +62,9 @@ public final class ActuatorForm {
                 .visibleWhen(VALUE, ActuatorValueType.Double::equals)
                 .decimal("defaultOffDouble", "ActuatorForm.Off").width(120) //$NON-NLS-1$ //$NON-NLS-2$
                 .visibleWhen(VALUE, ActuatorValueType.Double::equals)
+                .decimal("fullScaleDouble", "ActuatorForm.FullScale").width(120) //$NON-NLS-1$ //$NON-NLS-2$
+                .visibleWhen(VALUE, ActuatorValueType.Double::equals)
+                .hint("ActuatorForm.FullScale.Hint") //$NON-NLS-1$
                 .text("defaultOnString", "ActuatorForm.On") //$NON-NLS-1$ //$NON-NLS-2$
                 .visibleWhen(VALUE, ActuatorValueType.String::equals)
                 .text("defaultOffString", "ActuatorForm.Off") //$NON-NLS-1$ //$NON-NLS-2$
