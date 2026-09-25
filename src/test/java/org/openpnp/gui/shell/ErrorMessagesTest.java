@@ -19,7 +19,7 @@ public class ErrorMessagesTest {
     @Test
     public void aKnownMessageIsSaidInChineseWithWhatToDo() {
         ErrorMessages.Explained e = ErrorMessages.explain("Error", "Feeder F-08 has no part.", ZH);
-        assertEquals("飞达 F-08 还没有指定元件。", e.what);
+        assertEquals("飞达 F-08 未指定元件。", e.what);
         assertNotNull(e.more);
         assertTrue(e.more.contains("飞达页"));
     }
@@ -28,7 +28,7 @@ public class ErrorMessagesTest {
     public void thePartsOfTheMessageGoIntoTheSentence() {
         ErrorMessages.Explained e = ErrorMessages.explain("Error",
                 "Can't move Y to 350.12, higher than soft limit 350.00.", ZH);
-        assertEquals("Y 轴要去 350.12，高于软限位 350。", e.what);
+        assertEquals("Y 轴目标位置 350.12 高于软限位 350。", e.what);
     }
 
     /** As the motion planner writes it: every coordinate with %f and its unit right after. */
@@ -36,7 +36,7 @@ public class ErrorMessagesTest {
     public void theNumbersArePutAsAPersonWritesThem() {
         ErrorMessages.Explained e = ErrorMessages.explain("Error",
                 "Can't move y to 350.120000mm, higher than soft limit 350.000000mm.", ZH);
-        assertEquals("y 轴要去 350.12 mm，高于软限位 350 mm。", e.what);
+        assertEquals("y 轴目标位置 350.12 mm 高于软限位 350 mm。", e.what);
         assertEquals("0.05 mm", ErrorMessages.tidy("0.050000mm"));
         assertEquals("-12.5 mm", ErrorMessages.tidy("-12.500mm"));
         assertEquals("100", ErrorMessages.tidy("100"));
