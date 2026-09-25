@@ -71,8 +71,12 @@ public class FormWizard extends AbstractConfigurationWizard {
     /** The label and the row of each field, shown and hidden together. */
     private final Map<Field, JComponent[]> rows = new LinkedHashMap<>();
     private final Map<Field, JLabel> errors = new LinkedHashMap<>();
-    /** Beyond this many characters the words beside a switch wrap. */
-    private static final int LONG_TOGGLE_WORDS = 18;
+    /**
+     * Words beside a switch wider than this many Chinese characters wrap. Counted in their width
+     * rather than their characters: 17 Chinese characters on one line overran the properties
+     * column at 1366 pixels, where 18 letters of English take half the room.
+     */
+    private static final int LONG_TOGGLE_EMS = 16;
 
     private final Map<Field, MutableLocationProxy> locations = new LinkedHashMap<>();
     private final Map<Field, javax.swing.JTextArea> liveHints = new LinkedHashMap<>();
@@ -411,7 +415,9 @@ public class FormWizard extends AbstractConfigurationWizard {
                 toggle.onChange(this::edited);
                 controls.put(field, toggle);
                 String words = field.note == null ? "" : field.note; //$NON-NLS-1$
-                if (words.length() <= LONG_TOGGLE_WORDS) {
+                JLabel probe = Ui.t2(words);
+                java.awt.FontMetrics metrics = probe.getFontMetrics(probe.getFont());
+                if (metrics.stringWidth(words) <= LONG_TOGGLE_EMS * metrics.charWidth('\u4e2d')) {
                     return Forms.toggleRow(toggle, words);
                 }
                 // Longer words wrap beside the switch rather than being cut at the column's edge.
