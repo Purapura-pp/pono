@@ -23,6 +23,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.util.prefs.Preferences;
 
@@ -41,6 +42,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JSlider;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 
 import org.openpnp.ConfigurationListener;
 import org.openpnp.Translations;
@@ -53,6 +55,7 @@ import org.openpnp.spi.Actuator;
 import org.openpnp.spi.Head;
 import org.openpnp.spi.HeadMountable;
 import org.openpnp.spi.Machine;
+import org.openpnp.spi.MachineListener;
 import org.openpnp.spi.Nozzle;
 
 import com.formdev.flatlaf.FlatClientProperties;
@@ -86,6 +89,7 @@ public class JogCard extends OverlayCard {
     private final JPanel collapsed = new JPanel(new BorderLayout());
     private final JPopupMenu more = new JPopupMenu();
     private boolean isExpanded;
+    private JButton home;
 
     public JogCard(Configuration configuration, MachineControlsPanel controls) {
         this.configuration = configuration;
@@ -99,8 +103,64 @@ public class JogCard extends OverlayCard {
         buildExpanded();
         buildCollapsed();
         buildMore();
+        watchMachine();
 
         setExpanded(prefs.getBoolean(PREF_EXPANDED, true));
+    }
+
+    /**
+     * The face on show decides the card's size: the card layout asks for the largest of its faces,
+     * which is the open one even while the card is folded.
+     */
+    @Override
+    public Dimension getPreferredSize() {
+        if (expanded == null) {
+            return super.getPreferredSize();
+        }
+        Dimension face = (isExpanded ? expanded : collapsed).getPreferredSize();
+        Insets insets = getInsets();
+        return new Dimension(face.width + insets.left + insets.right,
+                face.height + insets.top + insets.bottom);
+    }
+
+    @Override
+    public Dimension getMinimumSize() {
+        return getPreferredSize();
+    }
+
+    /** Home stands out while the machine is on and not homed, which is when it is wanted. */
+    private void watchMachine() {
+        MachineListener listener = new MachineListener.Adapter() {
+            @Override
+            public void machineEnabled(Machine machine) {
+                SwingUtilities.invokeLater(JogCard.this::emphasiseHome);
+            }
+
+            @Override
+            public void machineDisabled(Machine machine, String reason) {
+                SwingUtilities.invokeLater(JogCard.this::emphasiseHome);
+            }
+
+            @Override
+            public void machineHomed(Machine machine, boolean isHomed) {
+                SwingUtilities.invokeLater(JogCard.this::emphasiseHome);
+            }
+        };
+        configuration.addListener(new ConfigurationListener.Adapter() {
+            @Override
+            public void configurationComplete(Configuration configuration) throws Exception {
+                configuration.getMachine().addListener(listener);
+                SwingUtilities.invokeLater(JogCard.this::emphasiseHome);
+            }
+        });
+    }
+
+    private void emphasiseHome() {
+        Machine machine = configuration.getMachine();
+        boolean wanted = machine != null && machine.isEnabled() && !machine.isHomed();
+        Ui.restyle(home, Ui.Size.Md, wanted ? Ui.Variant.Primary : Ui.Variant.Default);
+        // Restyling makes a button a focus stop again, and this one moves the machine.
+        home.setFocusable(false);
     }
 
     /** Fold the card to its button and back. Bound to Ctrl-Shift-J by the window. */
@@ -211,11 +271,14 @@ public class JogCard extends OverlayCard {
                         + "buttonBackground: null; buttonArrowColor: $Pono.textMuted; focusWidth: 0"); //$NON-NLS-1$
         tool.setFont(Ui.font(Ui.BASE));
         tool.setRenderer(new ToolRenderer());
-        tool.setPreferredSize(new Dimension(tool.getPreferredSize().width, 30));
-        tool.setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
+        tool.setPreferredSize(new Dimension(tool.getPreferredSize().width, 32));
+        tool.setMaximumSize(new Dimension(Integer.MAX_VALUE, 32));
         head.add(tool);
-        JButton home = Ui.iconButton(Ui.icon("home"), Ui.Size.Sm, Ui.Variant.Default, //$NON-NLS-1$
-                Translations.getString("JogCard.Home")); //$NON-NLS-1$
+        // Home with its word on it and as tall as the tool: after the pads it is the key used most.
+        home = Ui.button(Translations.getString("JogCard.Home.Label"), Ui.icon("home"), //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Size.Md, Ui.Variant.Default);
+        home.setToolTipText(Translations.getString("JogCard.Home")); //$NON-NLS-1$
+        home.setFocusable(false);
         home.addActionListener(e -> controls.homeAction.actionPerformed(e));
         controls.homeAction.addPropertyChangeListener(e -> home.setEnabled(controls.homeAction.isEnabled()));
         home.setEnabled(controls.homeAction.isEnabled());
@@ -527,6 +590,12 @@ public class JogCard extends OverlayCard {
         return text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$
     }
 
+    /** The head is named beside a tool only where there is more than one to tell apart. */
+    private int heads() {
+        Machine machine = configuration.getMachine();
+        return machine == null ? 0 : machine.getHeads().size();
+    }
+
     /** {@code N1 · NT1  head H1}: the tool's name, its tip, and where it is. */
     private final class ToolRenderer extends javax.swing.DefaultListCellRenderer {
         @Override
@@ -541,7 +610,7 @@ public class JogCard extends OverlayCard {
                     text.append(" \u00b7 ").append(escape(((Nozzle) item).getNozzleTip().getName())); //$NON-NLS-1$
                 }
                 text.append("</b>"); //$NON-NLS-1$
-                if (item.getHead() != null) {
+                if (item.getHead() != null && heads() > 1) {
                     java.awt.Color muted = Ui.muted();
                     text.append("&nbsp;&nbsp;<span style='font-weight:normal;color:") //$NON-NLS-1$
                             .append(String.format("#%06x", muted.getRGB() & 0xffffff)).append("'>") //$NON-NLS-1$ //$NON-NLS-2$

@@ -51,8 +51,13 @@ import org.openpnp.model.Location;
 @SuppressWarnings("serial")
 public class DroPanel extends JPanel {
     private static final String[] AXES = { "X", "Y", "Z", "C" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-    /** Wide enough for a signed three digit coordinate, so the row does not jitter as it counts. */
-    private static final int VALUE_COLUMNS = 8;
+
+    /**
+     * The longest value each axis has shown, in characters, which is the room it keeps. The row
+     * grows when a longer number first appears and does not shrink back, so it does not jitter as
+     * the machine moves.
+     */
+    private final int[] reserved = new int[AXES.length];
 
     private final JLabel[] axisLabels = new JLabel[AXES.length];
     private final JLabel[] valueLabels = new JLabel[AXES.length];
@@ -118,7 +123,7 @@ public class DroPanel extends JPanel {
                 location.getRotation() };
         String unit = location.getUnits() == null ? "" : location.getUnits().getShortName(); //$NON-NLS-1$
         for (int i = 0; i < AXES.length; i++) {
-            valueLabels[i].setText(String.format(Locale.US, format, coordinates[i]));
+            valueLabels[i].setText(reserve(i, String.format(Locale.US, format, coordinates[i])));
             if (i < AXES.length - 1) {
                 unitLabels[i].setText(unit);
             }
@@ -149,10 +154,25 @@ public class DroPanel extends JPanel {
     }
 
     private void clear() {
-        for (JLabel value : valueLabels) {
-            value.setText(""); //$NON-NLS-1$
+        for (int i = 0; i < valueLabels.length; i++) {
+            valueLabels[i].setText(reserve(i, "")); //$NON-NLS-1$
         }
         applyColors();
+    }
+
+    /** The value right-aligned in the room its axis keeps, which grows to fit it. */
+    private String reserve(int axis, String value) {
+        int zero = String.format(Locale.US, configuration.getLengthDisplayFormat(), 0.0).length();
+        int room = Math.max(reserved[axis], Math.max(zero, value.length()));
+        if (room != reserved[axis]) {
+            reserved[axis] = room;
+            revalidate();
+        }
+        StringBuilder padded = new StringBuilder(room);
+        for (int n = value.length(); n < room; n++) {
+            padded.append(' ');
+        }
+        return padded.append(value).toString();
     }
 
     private Font valueFont(boolean compact) {
@@ -190,15 +210,16 @@ public class DroPanel extends JPanel {
         int digit = getFontMetrics(valueFont).charWidth('0');
         int unit = getFontMetrics(Ui.weighted(Tokens.FS_MICRO, 500)).stringWidth("mm") + 3; //$NON-NLS-1$
         Insets insets = getInsets();
-        // The compact readout keeps room for 120.450, the full one for -120.450 as well.
-        int columns = valueFont.getSize2D() < Tokens.FS_DRO ? VALUE_COLUMNS - 1 : VALUE_COLUMNS;
-        return insets.left + insets.right + AXES.length * (digit * columns + unit) + 3 * 18;
+        int characters = 0;
+        for (int room : reserved) {
+            characters += room;
+        }
+        return insets.left + insets.right + digit * characters + AXES.length * unit + 3 * 18;
     }
 
     /**
-     * Reserves a stable width so the row does not resize while the machine moves. Always the
-     * full width, compact or not: that is what the card asks for, and it goes back to the full
-     * size as soon as it gets it.
+     * The width of the room the values keep, at full size whether compact or not: that is what
+     * the card asks for, and it goes back to the full size as soon as it gets it.
      */
     @Override
     public Dimension getPreferredSize() {

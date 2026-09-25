@@ -652,6 +652,11 @@ public final class Ui {
         return button;
     }
 
+    /** Another variant for a button made here, as when its state asks for attention. */
+    public static void restyle(javax.swing.AbstractButton button, Size size, Variant variant) {
+        style(button, size, variant, Boolean.TRUE.equals(button.getClientProperty(SQUARE)));
+    }
+
     /** A square button holding only an icon. */
     public static JButton iconButton(Icon icon, Size size, Variant variant, String toolTip) {
         JButton button = new Button(null, icon);

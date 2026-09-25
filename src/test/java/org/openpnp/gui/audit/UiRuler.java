@@ -1395,7 +1395,7 @@ public class UiRuler {
         mark(marks, StatusBarPanel.class, "\u72b6\u6001\u680f");
         mark(marks, CameraStage.class, "\u76f8\u673a");
         mark(marks, DockPanel.class, "\u6570\u636e\u533a");
-        mark(marks, JogCard.class, "\u70b9\u52a8\u5361\u7247");
+        mark(marks, JogCard.class, "\u624b\u52a8\u63a7\u5236\u5361\u7247");
         mark(marks, DroPanel.class, "DRO");
         return marks;
     }
