@@ -47,6 +47,13 @@ public abstract class AbstractActuator extends AbstractHeadMountable implements 
     @Attribute(required = false)
     protected String defaultOffString = "";
 
+    /** What a numeric actuator is sent at 100 %, as by a light's brightness slider. */
+    @Attribute(required = false)
+    protected Double fullScaleDouble;
+
+    /** An 8 bit duty cycle, as Marlin's M42, M106 and M150 take it. */
+    public static final double DEFAULT_FULL_SCALE = 255.0;
+
     @Attribute(required = false)
     protected boolean interlockActuator;
 
@@ -292,6 +299,14 @@ public abstract class AbstractActuator extends AbstractHeadMountable implements 
 
     public void setDefaultOffDouble(Double defaultOffDouble) {
         this.defaultOffDouble = defaultOffDouble;
+    }
+
+    public Double getFullScaleDouble() {
+        return fullScaleDouble == null ? DEFAULT_FULL_SCALE : fullScaleDouble;
+    }
+
+    public void setFullScaleDouble(Double fullScaleDouble) {
+        this.fullScaleDouble = fullScaleDouble;
     }
 
     public String getDefaultOffString() {
