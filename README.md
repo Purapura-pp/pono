@@ -3,12 +3,12 @@
 Open Source SMT Pick and Place Software
 
 > **Pono 是 [OpenPnP](https://github.com/openpnp/openpnp) 2.6 的修改版**，依 GNU GPL v3 发布。
-> 分叉自上游提交 `5bd404cfc7`（2026-02-27），当前版本 `2.6-pono.1`（2026-09）。
+> 分叉自上游提交 `5bd404cfc7`（2026-02-27），当前版本 `2.6-pono.2`（2026-09）。
 > 相对上游的全部改动见 [CHANGES.md](CHANGES.md) 与 git 历史。
 > Java 包名 `org.openpnp` 与配置目录 `~/.openpnp2` 保持不变，`machine.xml` 与 OpenPnP 互相兼容。
 >
 > **Pono is a modified version of [OpenPnP](https://github.com/openpnp/openpnp) 2.6**, released under the GNU GPL v3.
-> Forked from upstream commit `5bd404cfc7` (2026-02-27); current version `2.6-pono.1` (September 2026).
+> Forked from upstream commit `5bd404cfc7` (2026-02-27); current version `2.6-pono.2` (September 2026).
 > Everything that differs from upstream is listed in [CHANGES.md](CHANGES.md) and in the git history.
 > The Java package name `org.openpnp` and the configuration directory `~/.openpnp2` are unchanged,
 > so `machine.xml` files are interchangeable with OpenPnP.
