@@ -1802,7 +1802,13 @@ public class MainFrame extends JFrame {
 
     public void about() {
         AboutDialog dialog = new AboutDialog(this);
-        dialog.setSize(750, 550);
+        if (dialog.hasDocuments()) {
+            dialog.setSize(750, 550);
+        }
+        else {
+            dialog.pack();
+            dialog.setSize(Math.max(dialog.getWidth(), 380), dialog.getHeight());
+        }
         dialog.setLocationRelativeTo(null);
         dialog.setModal(true);
         dialog.setVisible(true);

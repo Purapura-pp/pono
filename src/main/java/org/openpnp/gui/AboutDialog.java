@@ -28,6 +28,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -49,26 +50,35 @@ public class AboutDialog extends JDialog {
     private final JPanel contentPanel = new JPanel();
     private MarkupTextPane releaseNotes;
     private MarkupTextPane credits;
+    private JTabbedPane tabs;
 
     public AboutDialog(Frame frame) {
         super(frame, true);
         createUi();
+        showDocument(releaseNotes, "CHANGES.md"); //$NON-NLS-1$
+        showDocument(credits, "SPONSORS.md"); //$NON-NLS-1$
+        if (tabs.getTabCount() == 0) {
+            contentPanel.remove(tabs);
+        }
+    }
 
+    /** Whether there is a document to show, which wants the room of a large dialog. */
+    public boolean hasDocuments() {
+        return tabs.getTabCount() > 0;
+    }
+
+    /**
+     * A document from the working directory in its tab, or no tab: a release carries neither
+     * file, and an empty tab reads as a fault.
+     */
+    private void showDocument(MarkupTextPane pane, String name) {
         try {
-            String s = FileUtils.readFileToString(new File("CHANGES.md"));
-            releaseNotes.setText(s);
-            releaseNotes.setUri(new URI(Main.getSourceUri()+"CHANGES.md"));
+            pane.setText(FileUtils.readFileToString(new File(name), StandardCharsets.UTF_8));
+            pane.setUri(new URI(Main.getSourceUri() + name));
         }
         catch (Exception e) {
-            Logger.warn(e, "Failed to load CHANGES.md, release notes will be empty.");
-        }
-        try {
-            String s = FileUtils.readFileToString(new File("SPONSORS.md"));
-            credits.setText(s);
-            credits.setUri(new URI(Main.getSourceUri()+"SPONSORS.md"));
-        }
-        catch (Exception e) {
-            Logger.warn(e, "Failed to load SPONSORS.md, credits will be empty.");
+            Logger.debug("{} is not in the working directory, so its tab is left out.", name); //$NON-NLS-1$
+            tabs.remove(pane);
         }
     }
 
@@ -116,13 +126,13 @@ public class AboutDialog extends JDialog {
         lblVersion.setAlignmentX(Component.CENTER_ALIGNMENT);
         contentPanel.add(lblVersion);
 
-        JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-        contentPanel.add(tabbedPane);
+        tabs = new JTabbedPane(JTabbedPane.TOP);
+        contentPanel.add(tabs);
 
         releaseNotes = new MarkupTextPane();
-        tabbedPane.addTab(Translations.getString("AboutDialog.ReleaseNotes"), null, releaseNotes, null); //$NON-NLS-1$
+        tabs.addTab(Translations.getString("AboutDialog.ReleaseNotes"), null, releaseNotes, null); //$NON-NLS-1$
 
         credits = new MarkupTextPane();
-        tabbedPane.addTab(Translations.getString("AboutDialog.Credits"), null, credits, null); //$NON-NLS-1$
+        tabs.addTab(Translations.getString("AboutDialog.Credits"), null, credits, null); //$NON-NLS-1$
     }
 }

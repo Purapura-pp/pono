@@ -181,6 +181,7 @@ a complete change list, only those that may directly interest or affect users.
 * The words beside a switch in a form wrap by how wide they are rather than by how many characters they have. Eighteen characters was the limit for one line, which is half the room in English and more than the room in Chinese: a note of 17 Chinese characters ran the Photon feeder's form past the properties column at 1366 pixels.
 * Folded, the manual control card is its button. It kept the size of the open card, with the button in the middle of an empty glass panel, because a card layout asks for the largest of its faces.
 * The coordinate readout keeps room only for the numbers it has shown, growing when a longer one first appears and not shrinking back while the machine moves. It kept room for a signed three digit coordinate on every axis from the start, which left wide empty margins either side of short values such as 0.000.
+* The About dialog shows its Release notes and Credits tabs only when it has them to show. A release carries neither file, and the dialog opened on two empty tabs at the size of a full change list; without them it is as small as its name, notices and version. The change list is read as UTF-8, where it was read in the system's encoding and its Chinese came out garbled on a Chinese Windows.
 
 ## Translations
 
