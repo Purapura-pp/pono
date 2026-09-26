@@ -11,6 +11,7 @@ import java.util.List;
 
 import javax.swing.SwingUtilities;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -42,6 +43,15 @@ public class CalibrationPlanTest {
         Configuration.get().load();
         machine = (ReferenceMachine) Configuration.get().getMachine();
         head = (ReferenceHead) machine.getDefaultHead();
+    }
+
+    /**
+     * Scanning opens the cameras, and each open camera keeps rendering frames on a thread of its
+     * own: left running, a machine per test filled the test run's heap.
+     */
+    @AfterEach
+    public void tearDown() throws Exception {
+        machine.close();
     }
 
     private CalibrationPlan plan() throws Exception {
