@@ -6,9 +6,10 @@ name: Build
 
 on:
   push:
-    # Not on tags: the commit a tag points at has already been through this, and a release has
-    # its own workflow.
-    tags-ignore:
+    # Branches only: the commit a tag points at has already been through this, and a release has
+    # its own workflow. Naming the branches is what leaves the tags out; a tag filter alone would
+    # leave out every branch as well.
+    branches:
       - '**'
   pull_request:
   # Also runnable by hand, which is how this is tested without pushing.
