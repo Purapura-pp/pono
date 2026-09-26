@@ -83,9 +83,10 @@ jobs:
         shell: bash
         run: |
           # The runtime the program needs rather than a whole JDK: jpackage's default set brings the
-          # compiler, javadoc, jshell, jlink, jpackage and the debugger's agent along. jdk.attach and
-          # jdk.jdi stay because javassist refers to them. The service modules - locale data,
-          # charsets, the crypto providers, zipfs - have to be named, since nothing imports them.
+          # compiler, javadoc, jshell, jlink and jpackage along. jdk.attach and jdk.jdi, which brings
+          # the debugger's agent with it, stay because javassist refers to them. The service modules -
+          # locale data, charsets, the crypto providers, zipfs - have to be named, since nothing
+          # imports them.
           modules=java.base,java.compiler,java.datatransfer,java.desktop,java.instrument
           modules=${modules},java.logging,java.management,java.management.rmi,java.naming
           modules=${modules},java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss
