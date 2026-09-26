@@ -419,24 +419,23 @@ public class MainFrame extends JFrame {
 
     private boolean cameraFullScreen;
     private int dividerBeforeFullScreen;
-    private boolean inspectorBeforeFullScreen;
 
     /**
      * Give the image the whole middle of the window and back again: the tables below it and the
-     * properties column fold away, and the divider positions come back with them.
+     * properties column fold away, and the divider positions come back with them. The column is
+     * folded as a policy, not by hand: a fold by hand is kept as the page's own choice, and the
+     * page on show when the full screen began would have stayed folded for good.
      */
     private void toggleCameraFullScreen() {
-        if (!cameraFullScreen) {
+        cameraFullScreen = !cameraFullScreen;
+        if (cameraFullScreen) {
             dividerBeforeFullScreen = splitPaneMachineAndTabs.getDividerLocation();
-            inspectorBeforeFullScreen = inspectorPanel.isCollapsed();
             splitPaneMachineAndTabs.setDividerLocation(1.0);
-            inspectorPanel.setCollapsed(true);
         }
         else {
             splitPaneMachineAndTabs.setDividerLocation(dividerBeforeFullScreen);
-            inspectorPanel.setCollapsed(inspectorBeforeFullScreen);
         }
-        cameraFullScreen = !cameraFullScreen;
+        applyInspectorPolicy();
     }
 
     /** Put the properties column at its stored width, or fold it to its sliver. */
@@ -652,7 +651,7 @@ public class MainFrame extends JFrame {
         if (key == null || inspectorPanel == null) {
             return;
         }
-        boolean shown = pageLayouts.inspectorShown(key, inspectorPanel.hasContent());
+        boolean shown = !cameraFullScreen && pageLayouts.inspectorShown(key, inspectorPanel.hasContent());
         applyingInspector = true;
         try {
             inspectorPanel.setCollapsed(!shown);
@@ -1389,15 +1388,26 @@ public class MainFrame extends JFrame {
         inspectorPanel.setActivePage(navigationRail.getSelectedComponent());
         splitPaneInspector.setRightComponent(inspectorPanel);
         // Only a width the user dragged to is worth remembering; the collapsed sliver and the
-        // positions set while the window is still finding its size are not.
+        // positions set while the window is still finding its size are not. The sliver dragged
+        // open is unfolded, and dragged a little it goes back.
         onDividerReleased(splitPaneInspector, () -> {
-            if (!inspectorPanel.isCollapsed() && splitPaneInspector.getWidth() > 0) {
-                int width = splitPaneInspector.getWidth() - splitPaneInspector.getInsets().right
-                        - splitPaneInspector.getDividerLocation() - splitPaneInspector.getDividerSize();
-                if (width > InspectorPanel.COLLAPSED_WIDTH) {
+            if (splitPaneInspector.getWidth() <= 0) {
+                return;
+            }
+            int width = splitPaneInspector.getWidth() - splitPaneInspector.getInsets().right
+                    - splitPaneInspector.getDividerLocation() - splitPaneInspector.getDividerSize();
+            if (inspectorPanel.isCollapsed()) {
+                if (width > InspectorPanel.UNFOLD_DRAG_WIDTH) {
                     prefs.putInt(PREF_INSPECTOR_WIDTH, width);
+                    inspectorPanel.setCollapsed(false);
+                }
+                else {
                     applyInspectorWidth();
                 }
+            }
+            else if (width > InspectorPanel.COLLAPSED_WIDTH) {
+                prefs.putInt(PREF_INSPECTOR_WIDTH, width);
+                applyInspectorWidth();
             }
         });
         // The column's width follows the window within its limits.

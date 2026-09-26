@@ -18,9 +18,12 @@
 package org.openpnp.gui.shell;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Container;
 import java.util.List;
@@ -31,6 +34,10 @@ import javax.swing.JTabbedPane;
 
 import org.junit.jupiter.api.Test;
 import org.openpnp.gui.shell.PropertySheetPresenter.Result;
+import org.openpnp.gui.support.AbstractConfigurationWizard;
+import org.openpnp.model.DisplayPreferences;
+import org.openpnp.model.Length;
+import org.openpnp.model.LengthUnit;
 
 /**
  * The properties column follows the page on screen.
@@ -142,4 +149,75 @@ public class InspectorPanelTest {
 
         assertNull(shownTabs(inspector));
     }
+
+    @Test
+    public void aFoldedColumnShowsNoApplyAndReset() {
+        InspectorPanel inspector = new InspectorPanel();
+        inspector.setActivePage(parts);
+        inspector.setCollapsed(true);
+
+        inspector.show(parts, "F-08", null, "F-08", "Strip feeder", null,
+                () -> List.of(PropertySheetPresenter.sheet("Settings", wizard())));
+
+        assertFalse(footer(inspector).isVisible(),
+                "folded, the column shows nothing but the button that unfolds it");
+
+        inspector.setCollapsed(false);
+
+        assertTrue(footer(inspector).isVisible());
+    }
+
+    private static Component footer(InspectorPanel inspector) {
+        return ((BorderLayout) inspector.getLayout()).getLayoutComponent(BorderLayout.SOUTH);
+    }
+
+    private static AbstractConfigurationWizard wizard() {
+        return new AbstractConfigurationWizard() {
+            @Override
+            public void createBindings() {
+            }
+
+            @Override
+            protected DisplayPreferences getDisplayPreferences() {
+                return MM;
+            }
+        };
+    }
+
+    private static final DisplayPreferences MM = new DisplayPreferences() {
+        @Override
+        public LengthUnit getSystemUnits() {
+            return LengthUnit.Millimeters;
+        }
+
+        @Override
+        public String getLengthDisplayFormat() {
+            return "%.3f";
+        }
+
+        @Override
+        public String getLengthDisplayAlignedFormat() {
+            return "%8.3f";
+        }
+
+        @Override
+        public String getLengthDisplayFormatWithUnits() {
+            return "%.3f mm";
+        }
+
+        @Override
+        public String getLengthDisplayAlignedFormatWithUnits() {
+            return "%8.3f mm";
+        }
+
+        @Override
+        public String formatLength(Length length) {
+            return String.format(java.util.Locale.ROOT, "%.3f", length.convertToUnits(LengthUnit.Millimeters).getValue());
+        }
+
+        @Override
+        public int getVerticalScrollUnitIncrement() {
+            return 16;
+        }
+    };
 }
