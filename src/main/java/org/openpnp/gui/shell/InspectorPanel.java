@@ -74,6 +74,12 @@ public class InspectorPanel extends RoundedPanel {
     /** What is left when it is folded away: enough for the button that brings it back. */
     public static final int COLLAPSED_WIDTH = 34;
 
+    /**
+     * A folded column dragged wider than this is unfolded; dragged less, it goes back to its sliver.
+     * Folded at any other width it shows nothing but the unfold button in its corner.
+     */
+    public static final int UNFOLD_DRAG_WIDTH = 100;
+
     private final JTabbedPane sheets = new JTabbedPane(JTabbedPane.TOP);
 
     private final PropertySheetPresenter presenter = new PropertySheetPresenter(sheets);
@@ -248,7 +254,7 @@ public class InspectorPanel extends RoundedPanel {
             wizard.getApplyAction().addPropertyChangeListener(dirtyListener);
             any = true;
         }
-        footer.setVisible(any);
+        footer.setVisible(any && !collapsed);
         followDirty();
     }
 
