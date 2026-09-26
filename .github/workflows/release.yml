@@ -73,13 +73,34 @@ jobs:
           mkdir -p stage
           cp target/openpnp-gui-*.jar stage/
           cp -r target/lib stage/lib
-          # Read by the About dialog, from beside the jar.
+          # Read for the version the window and the About dialog show, from beside the jar.
           echo "${{ steps.version.outputs.version }}" > stage/VERSION.txt
-          cp LICENSE.txt README.md CHANGES.md stage/
+          # The GPL travels with the program and nothing else does: the README and the change list
+          # are the repository's, and the release page says what changed.
+          cp LICENSE.txt stage/
 
       - name: Package
         shell: bash
         run: |
+          # The runtime the program needs rather than a whole JDK: jpackage's default set brings the
+          # compiler, javadoc, jshell, jlink, jpackage and the debugger's agent along. jdk.attach and
+          # jdk.jdi stay because javassist refers to them. The service modules - locale data,
+          # charsets, the crypto providers, zipfs - have to be named, since nothing imports them.
+          modules=java.base,java.compiler,java.datatransfer,java.desktop,java.instrument
+          modules=${modules},java.logging,java.management,java.management.rmi,java.naming
+          modules=${modules},java.net.http,java.prefs,java.rmi,java.scripting,java.security.jgss
+          modules=${modules},java.security.sasl,java.smartcardio,java.sql,java.sql.rowset
+          modules=${modules},java.transaction.xa,java.xml,java.xml.crypto,jdk.accessibility
+          modules=${modules},jdk.attach,jdk.charsets,jdk.crypto.cryptoki,jdk.crypto.ec
+          modules=${modules},jdk.dynalink,jdk.httpserver,jdk.jdi,jdk.jfr,jdk.localedata
+          modules=${modules},jdk.management,jdk.management.jfr,jdk.naming.dns,jdk.naming.rmi
+          modules=${modules},jdk.net,jdk.nio.mapmode,jdk.random,jdk.sctp,jdk.security.auth
+          modules=${modules},jdk.security.jgss,jdk.unsupported,jdk.unsupported.desktop,jdk.xml.dom
+          modules=${modules},jdk.zipfs
+          # The Windows certificate store, which only the Windows JDK has.
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            modules=${modules},jdk.crypto.mscapi
+          fi
           jpackage \
             --type app-image \
             --name Pono \
@@ -88,6 +109,7 @@ jobs:
             --input stage \
             --main-jar "$(cd stage && ls openpnp-gui-*.jar)" \
             --main-class org.openpnp.Main \
+            --add-modules "${modules}" \
             --dest out \
             --java-options --add-opens=java.base/java.lang=ALL-UNNAMED \
             --java-options --add-opens=java.desktop/java.awt=ALL-UNNAMED \

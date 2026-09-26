@@ -238,6 +238,16 @@
         </dependency>
 	</dependencies>
 	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<excludes>
+					<!-- The copy of a bundle that LocalisationTest and tools/i18n leave beside it
+						to compare against. -->
+					<exclude>**/*.properties-normalised</exclude>
+				</excludes>
+			</resource>
+		</resources>
 		<plugins>
 			<!-- Used to specify that the Maven Eclipse task should download sources
 				and JavaDocs and attach them to the Eclipse project. -->
@@ -327,6 +337,9 @@
 						</goals>
 						<configuration>
 							<outputDirectory>${project.build.directory}/lib</outputDirectory>
+							<!-- What the program runs with, as the manifest lists it: the test
+								libraries stay out of lib and out of a release. -->
+							<includeScope>runtime</includeScope>
 							<overWriteReleases>true</overWriteReleases>
 							<overWriteSnapshots>true</overWriteSnapshots>
 							<overWriteIfNewer>true</overWriteIfNewer>
