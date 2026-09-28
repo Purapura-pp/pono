@@ -872,10 +872,7 @@ public class Configuration extends AbstractModelObject implements DisplayPrefere
     protected File createBackedUpFile(String fileName, LocalDateTime now) throws Exception {
         File file = new File(configurationDirectory, fileName);
         if (file.exists()) {
-            File backupsDirectory = new File(configurationDirectory, "backups");
-            if (System.getProperty("backups") != null) {
-                backupsDirectory = new File(System.getProperty("backups"));
-            }
+            File backupsDirectory = Backups.directory(configurationDirectory);
 
             File singleBackupDirectory = new File(backupsDirectory, DateTimeFormatter.ofPattern("yyyy-MM-dd_HH.mm.ss").format(now));
             singleBackupDirectory.mkdirs();

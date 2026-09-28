@@ -57,6 +57,7 @@ import org.openpnp.gui.shell.Tokens;
 import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.shell.WidthTracking;
 import org.openpnp.machine.reference.ReferenceMachine;
+import org.openpnp.model.Backups;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Solutions;
 import org.openpnp.spi.Machine;
@@ -487,6 +488,9 @@ public class MachineSettingsPanel extends JPanel {
      * saved. The topics are built again, as the change may have added to the machine or taken away.
      */
     void acceptIssue(Solutions.Issue issue) {
+        if (!getFrame().settlePendingBeforeSave(this)) {
+            return;
+        }
         UiUtils.messageBoxOnException(() -> {
             Backups.backup(configuration, "settings"); //$NON-NLS-1$
             issue.setStateCall(Solutions.State.Solved);

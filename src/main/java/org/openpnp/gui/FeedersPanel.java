@@ -62,6 +62,7 @@ import org.openpnp.Translations;
 import org.openpnp.events.FeederSelectedEvent;
 import org.openpnp.gui.components.AutoSelectTextTable;
 import org.openpnp.gui.components.ClassSelectionDialog;
+import org.openpnp.gui.operator.FeederAttention;
 import org.openpnp.gui.support.ActionGroup;
 import org.openpnp.gui.support.FeederDescriptions;
 import org.openpnp.gui.support.Helpers;
@@ -79,7 +80,6 @@ import org.openpnp.gui.tablemodel.FeedersTableModel;
 import org.openpnp.machine.reference.vision.AbstractPartAlignment;
 import org.openpnp.machine.reference.vision.ReferenceBottomVision;
 import org.openpnp.machine.reference.ReferenceFeeder;
-import org.openpnp.model.BoardLocation;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Configuration.TablesLinked;
 import org.openpnp.model.Job;
@@ -123,6 +123,12 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     private DockPanel.Tab feedersTab;
     private DockPanel.Tab attentionTab;
     private PillBar scope;
+    /** The "needs attention" tab's line: the job's feeders, and the others behind a fold. */
+    private final JLabel attentionNeeded = Ui.t2(""); //$NON-NLS-1$
+    private final JButton attentionOthers = Ui.button("", null, Ui.Size.Xs, Ui.Variant.Ghost); //$NON-NLS-1$
+    private boolean othersOpen;
+    /** The ids of the parts the job places, read again as the table or the job changes. */
+    private java.util.Set<String> jobParts = java.util.Set.of();
     
     public FeedersPanel(Configuration configuration, MainFrame mainFrame) {
         this.configuration = configuration;
@@ -241,6 +247,23 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         allHolder.add(page, BorderLayout.CENTER);
         JPanel attentionHolder = new JPanel(new BorderLayout());
         attentionHolder.setOpaque(false);
+        // The job's feeders are what the badge counts; the rest - switched off, without a part,
+        // or not used by this job - are listed after them only when asked for.
+        JPanel attentionBar = new JPanel();
+        attentionBar.setOpaque(false);
+        attentionBar.setLayout(new javax.swing.BoxLayout(attentionBar, javax.swing.BoxLayout.X_AXIS));
+        attentionBar.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
+        attentionNeeded.setFont(Ui.weighted(12f, org.openpnp.gui.shell.Tokens.FW_SECTION));
+        attentionBar.add(attentionNeeded);
+        attentionBar.add(javax.swing.Box.createHorizontalStrut(10));
+        attentionOthers.setFocusable(false);
+        attentionOthers.addActionListener(e -> {
+            othersOpen = !othersOpen;
+            search();
+        });
+        attentionBar.add(attentionOthers);
+        attentionBar.add(javax.swing.Box.createHorizontalGlue());
+        attentionHolder.add(attentionBar, BorderLayout.NORTH);
         feedersTab = dock.addTab(Ui.iconSm("feeder"), //$NON-NLS-1$
                 Translations.getString("FeedersPanel.Tab.Feeders"), allHolder); //$NON-NLS-1$
         attentionTab = dock.addTab(Ui.iconSm("alert"), //$NON-NLS-1$
@@ -255,6 +278,11 @@ public class FeedersPanel extends JPanel implements WizardContainer {
             dock.repaint();
         });
         tableModel.addTableModelListener(e -> countTabs());
+        // Which feeders the job needs changes with the job.
+        if (mainFrame.getJobTab() != null) {
+            mainFrame.getJobTab().addPropertyChangeListener(JobPanel.PROPERTY_JOB_DISPLAY_NAME, e -> search());
+            mainFrame.getJobTab().addPropertyChangeListener(JobPanel.PROPERTY_JOB_STATE, e -> search());
+        }
         setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
         add(dock, BorderLayout.CENTER);
         table.setRowSorter(tableSorter);
@@ -559,18 +587,21 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         filters.add(text);
         Scope chosen = scope == null ? Scope.All : (Scope) scope.getSelectedItem();
         boolean attention = dock != null && dock.getSelectedTab() == attentionTab;
+        jobParts = FeederAttention.partsOf(mainFrame.getJobTab() == null ? null : mainFrame.getJobTab().getJob());
+        java.util.Set<String> parts = jobParts;
+        boolean others = othersOpen;
         filters.add(new RowFilter<FeedersTableModel, Object>() {
             @Override
             public boolean include(Entry<? extends FeedersTableModel, ?> entry) {
                 Feeder feeder = entry.getModel().getRowObjectAt((Integer) entry.getIdentifier());
-                if (attention && !needsAttention(feeder)) {
+                if (attention && !FeederAttention.wantsLook(feeder, parts) && !(others && isOther(feeder, parts))) {
                     return false;
                 }
                 switch (chosen) {
                     case Enabled:
                         return feeder.isEnabled();
                     case InJob:
-                        return feeder.getPart() != null && isUsedByJob(feeder.getPart());
+                        return FeederAttention.isNeeded(feeder, parts);
                     default:
                         return true;
                 }
@@ -581,30 +612,13 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     }
 
     /**
-     * A feeder that is switched off, has no part, is running low or out, or failed its last pick
-     * is one the operator should look at.
+     * Not ready, and not among the job's feeders that want a look: switched off, without a part,
+     * or in trouble but not used by this job. Listed in the tab only when asked for, and not
+     * counted.
      */
-    private boolean needsAttention(Feeder feeder) {
-        return FeedersTableModel.statusOf(feeder) != FeedersTableModel.Status.Ready;
-    }
-
-    private boolean isUsedByJob(Part part) {
-        Job job = mainFrame.getJobTab().getJob();
-        if (job == null) {
-            return false;
-        }
-        for (BoardLocation boardLocation : job.getBoardLocations()) {
-            if (!boardLocation.isEnabled()) {
-                continue;
-            }
-            for (Placement placement : boardLocation.getBoard().getPlacements()) {
-                if (placement.getType() == Placement.Type.Placement && placement.isEnabled()
-                        && placement.getPart() == part) {
-                    return true;
-                }
-            }
-        }
-        return false;
+    private static boolean isOther(Feeder feeder, java.util.Set<String> parts) {
+        return !FeederAttention.wantsLook(feeder, parts)
+                && FeedersTableModel.statusOf(feeder) != FeedersTableModel.Status.Ready;
     }
 
     private void countTabs() {
@@ -613,12 +627,22 @@ public class FeedersPanel extends JPanel implements WizardContainer {
         }
         feedersTab.setCount(tableModel.getRowCount());
         int attention = 0;
+        int others = 0;
         for (int row = 0; row < tableModel.getRowCount(); row++) {
-            if (needsAttention(tableModel.getRowObjectAt(row))) {
+            Feeder feeder = tableModel.getRowObjectAt(row);
+            if (FeederAttention.wantsLook(feeder, jobParts)) {
                 attention++;
+            }
+            else if (isOther(feeder, jobParts)) {
+                others++;
             }
         }
         attentionTab.setCount(attention);
+        attentionNeeded.setText(String.format(Translations.getString("FeedersPanel.Attention.Needed"), attention)); //$NON-NLS-1$
+        attentionOthers.setText(String.format(Translations.getString(othersOpen
+                ? "FeedersPanel.Attention.OthersOpen" : "FeedersPanel.Attention.Others"), others)); //$NON-NLS-1$ //$NON-NLS-2$
+        attentionOthers.setIcon(Ui.iconSm(othersOpen ? "chevdown" : "chevright")); //$NON-NLS-1$ //$NON-NLS-2$
+        attentionOthers.setVisible(others > 0 || othersOpen);
         // The same count on the rail, in yellow: something to look at, not something broken.
         if (mainFrame.getNavigation() != null) {
             mainFrame.getNavigation().setBadge(this, attention,

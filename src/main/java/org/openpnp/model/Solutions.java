@@ -765,6 +765,41 @@ public class Solutions {
     }
 
     /**
+     * The search made at a milestone rather than the one stored. Pono makes the machine's search
+     * at Production, which leaves out only the Advanced suggestions that replace the driver or the
+     * motion planner: the stored milestone had gated the setup errors, an axis without a driver or
+     * a letter, behind a milestone nothing in Pono moves on from.
+     */
+    public synchronized void findIssues(Milestone at) {
+        Milestone stored = targetMilestone;
+        targetMilestone = at;
+        try {
+            findIssues();
+        }
+        finally {
+            targetMilestone = stored;
+        }
+    }
+
+    /**
+     * Raises the stored milestone to Calibration for a machine that has a driver that is not a
+     * placeholder, as a configuration made before the milestone was set, or left at Welcome, has
+     * it lower than the machine is. Kept for a configuration shared with OpenPnP, which gates its
+     * issues by it.
+     *
+     * @return Whether it was raised, and so is to be written back.
+     */
+    public boolean promoteToCalibration() {
+        Machine machine = getMachine();
+        if (machine == null || machine.getDrivers().isEmpty() || machine.getDrivers().get(0).isPlaceholder()
+                || getTargetMilestone().ordinal() >= Milestone.Calibration.ordinal()) {
+            return false;
+        }
+        setTargetMilestone(Milestone.Calibration);
+        return true;
+    }
+
+    /**
      * A search for the calibration page: only the given producers, and no milestone issue. See
      * {@link #forCalibration(Solutions)}.
      */

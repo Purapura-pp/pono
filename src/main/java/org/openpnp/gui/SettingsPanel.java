@@ -394,7 +394,98 @@ public class SettingsPanel extends JPanel {
         open.addActionListener(e -> org.openpnp.util.UiUtils.openFolder(this, configuration.getConfigurationDirectory()));
         grid.row(Translations.getString("SettingsPanel.Saving.Directory"), //$NON-NLS-1$
                 Forms.row(Forms.readOnly(directory), open));
+        grid.row(Translations.getString("SettingsPanel.Backups"), backupsList); //$NON-NLS-1$
+        backupsList.setOpaque(false);
+        backupsList.setLayout(new javax.swing.BoxLayout(backupsList, javax.swing.BoxLayout.Y_AXIS));
+        // Read again each time the page comes up: backups are made while it is away.
+        backupsList.addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0 && backupsList.isShowing()) {
+                showBackups();
+            }
+        });
+        showBackups();
         return grid;
+    }
+
+    /** The backups there are, newest first, each with a way back to it. */
+    private final JPanel backupsList = new JPanel();
+    private boolean allBackups;
+    private static final int BACKUPS_SHOWN = 8;
+
+    private void showBackups() {
+        backupsList.removeAll();
+        java.util.List<org.openpnp.model.Backups.Backup> backups = configuration.getConfigurationDirectory() == null
+                ? java.util.List.of() : org.openpnp.model.Backups.list(configuration.getConfigurationDirectory());
+        if (backups.isEmpty()) {
+            backupsList.add(Ui.muted(Translations.getString("SettingsPanel.Backups.None"))); //$NON-NLS-1$
+        }
+        java.text.SimpleDateFormat time = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss"); //$NON-NLS-1$
+        int shown = 0;
+        for (org.openpnp.model.Backups.Backup backup : backups) {
+            if (!allBackups && shown == BACKUPS_SHOWN) {
+                JButton more = Ui.button(String.format(Translations.getString("SettingsPanel.Backups.More"), //$NON-NLS-1$
+                        backups.size()), Ui.iconSm("chevdown"), Ui.Size.Xs, Ui.Variant.Ghost); //$NON-NLS-1$
+                more.addActionListener(e -> {
+                    allBackups = true;
+                    showBackups();
+                });
+                more.setAlignmentX(LEFT_ALIGNMENT);
+                backupsList.add(more);
+                break;
+            }
+            shown++;
+            JLabel when = new JLabel(time.format(backup.when));
+            when.setFont(Ui.mono(12f, java.awt.Font.PLAIN));
+            String key = "SettingsPanel.Backups.Source." + backup.source; //$NON-NLS-1$
+            JLabel source = Ui.t2(Translations.has(key) ? Translations.getString(key) : backup.source);
+            JButton restore = Ui.button(Translations.getString("SettingsPanel.Backups.Restore"), null, //$NON-NLS-1$
+                    Ui.Size.Xs, Ui.Variant.Ghost);
+            restore.setEnabled(!backup.restorable().isEmpty());
+            restore.addActionListener(e -> restore(backup, time.format(backup.when)));
+            JPanel line = Forms.row(when, source, restore);
+            line.setAlignmentX(LEFT_ALIGNMENT);
+            backupsList.add(line);
+        }
+        backupsList.revalidate();
+        backupsList.repaint();
+    }
+
+    /**
+     * Puts a backup's machine.xml and vision-settings.xml back and starts again on them, after a
+     * backup of the two as they are: the other files are the program's to write on the way out,
+     * and would be written over.
+     */
+    private void restore(org.openpnp.model.Backups.Backup backup, String when) {
+        java.util.List<java.io.File> files = backup.restorable();
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (java.io.File file : files) {
+            names.add(file.getName());
+        }
+        boolean go = org.openpnp.gui.shell.Dialogs.confirmDanger(this,
+                String.format(Translations.getString("SettingsPanel.Backups.Restore.Title"), when), //$NON-NLS-1$
+                Translations.getString("SettingsPanel.Backups.Restore.What"), String.join("\n", names), null, //$NON-NLS-1$ //$NON-NLS-2$
+                Translations.getString("SettingsPanel.Backups.Restore.Do")); //$NON-NLS-1$
+        if (!go || !frame.settleBeforeQuit()) {
+            return;
+        }
+        try {
+            org.openpnp.model.Backups.backupMachineFiles(configuration, "restore"); //$NON-NLS-1$
+        }
+        catch (Exception e) {
+            org.openpnp.util.UiUtils.showError(e);
+            return;
+        }
+        java.util.List<java.io.File> left = org.openpnp.model.Backups.restore(configuration.getConfigurationDirectory(), files);
+        if (!left.isEmpty()) {
+            java.util.List<String> paths = new java.util.ArrayList<>();
+            for (java.io.File file : left) {
+                paths.add(file.getPath());
+            }
+            org.openpnp.util.UiUtils.showError(new Exception(String.format(
+                    Translations.getString("SettingsPanel.Backups.Restore.Failed"), String.join("\n", paths)))); //$NON-NLS-1$ //$NON-NLS-2$
+            return;
+        }
+        frame.restart();
     }
 
     // ---- keys, about --------------------------------------------------------------------------

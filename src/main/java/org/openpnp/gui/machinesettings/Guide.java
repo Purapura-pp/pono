@@ -49,6 +49,23 @@ final class Guide {
     private Guide() {
     }
 
+    /**
+     * The buttons that open the calibration page at the steps that measure a topic's values, the
+     * first naming the page: they used to open the page at its first row, whatever the topic.
+     */
+    static JComponent[] toCalibration(MachineSettingsPanel page, org.openpnp.model.CalibrationStep... steps) {
+        JComponent[] buttons = new JComponent[steps.length];
+        for (int i = 0; i < steps.length; i++) {
+            org.openpnp.model.CalibrationStep step = steps[i];
+            javax.swing.JButton button = Ui.button(i == 0
+                    ? String.format(Translations.getString("MachineSettings.Guide.ToCalibration"), step.getName()) //$NON-NLS-1$
+                    : step.getName(), Ui.iconSm("target"), Ui.Size.Sm, i == 0 ? Ui.Variant.Default : Ui.Variant.Ghost); //$NON-NLS-1$
+            button.addActionListener(e -> page.getFrame().showCalibrationStep(step, null));
+            buttons[i] = button;
+        }
+        return buttons;
+    }
+
     /** The column for a topic's guide, with the buttons under it that lead somewhere. */
     static JComponent of(String text, JComponent... links) {
         JPanel body = new JPanel();

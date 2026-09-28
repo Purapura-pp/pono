@@ -21,7 +21,6 @@ package org.openpnp.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -75,7 +74,6 @@ import org.openpnp.gui.calibration.IssueInputs;
 import org.openpnp.gui.calibration.Pending;
 import org.openpnp.gui.calibration.SettingsDiff;
 import org.openpnp.gui.components.AutoSelectTextTable;
-import org.openpnp.gui.machinesettings.Backups;
 import org.openpnp.gui.machinesettings.SetupChecks;
 import org.openpnp.gui.machinesettings.SetupIssues;
 import org.openpnp.gui.shell.Chip;
@@ -90,6 +88,7 @@ import org.openpnp.machine.reference.calibration.CalibrationPlan;
 import org.openpnp.machine.reference.calibration.CalibrationRunner;
 import org.openpnp.machine.reference.calibration.SettingChange;
 import org.openpnp.machine.reference.solutions.MachineDiagnostics;
+import org.openpnp.model.Backups;
 import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Length;
@@ -199,10 +198,21 @@ public class CalibrationPanel extends JPanel {
      */
     private static final class Recording extends CalibrationRunner.OnMachine {
         private final Map<String, List<Solutions.Issue>> accepted = new ConcurrentHashMap<>();
+        private final java.util.function.BooleanSupplier holding;
 
         Recording(ReferenceMachine machine, Configuration configuration,
-                java.util.function.Supplier<org.openpnp.model.Job> job) {
+                java.util.function.Supplier<org.openpnp.model.Job> job, java.util.function.BooleanSupplier holding) {
             super(machine, configuration, job);
+            this.holding = holding;
+        }
+
+        /**
+         * With results waiting to be applied, the copy is of machine.xml as it is on disk: saving
+         * first would write them, and the copy is to be of the configuration before them anyway.
+         */
+        @Override
+        public File backup(String stamp) throws Exception {
+            return holding.getAsBoolean() ? copyMachineFile(stamp) : super.backup(stamp);
         }
 
         @Override
@@ -251,6 +261,9 @@ public class CalibrationPanel extends JPanel {
     private final Set<String> allParts = new HashSet<>();
     private boolean doneOpen;
 
+    /** Fired with how many measured results wait to be applied or discarded. */
+    public static final String PROPERTY_PENDING = "pending"; //$NON-NLS-1$
+
     private CalibrationRunner runner;
     private CalibrationRunner.Session lastSession;
     private final Map<String, Live> live = new HashMap<>();
@@ -263,6 +276,7 @@ public class CalibrationPanel extends JPanel {
     private final DockPanel dock = new DockPanel();
     private final DockPanel.Tab stepsTab;
     private final DockPanel.Tab measureTab;
+    private final DockPanel.Tab reportsTab;
     private final Forms.Segmented scope;
     private final JButton collect;
     private final JButton applySelected;
@@ -270,12 +284,11 @@ public class CalibrationPanel extends JPanel {
     private final JButton dismissSelected;
     private final JButton skip;
     private final JButton stop;
-    private final JButton openReport;
     private final Banner collectedBanner = new Banner();
     private final Banner pendingBanner = new Banner();
     private final JTextArea log = new JTextArea();
     private final JScrollPane logScroll;
-    private final JTextArea report = new JTextArea();
+    private final org.openpnp.gui.calibration.ReportsPane reports;
     private final JPanel measureHolder = new JPanel(new BorderLayout());
     private MeasurementsPanel measurements;
 
@@ -318,11 +331,7 @@ public class CalibrationPanel extends JPanel {
                 runner.requestStop();
             }
         });
-        openReport = Ui.button(Translations.getString("CalibrationPanel.OpenReport"), Ui.iconSm("external"), //$NON-NLS-1$ //$NON-NLS-2$
-                Ui.Size.Sm, Ui.Variant.Ghost);
-        openReport.setToolTipText(Translations.getString("CalibrationPanel.OpenReport.toolTipText")); //$NON-NLS-1$
-        openReport.addActionListener(e -> openReport());
-        for (JButton b : new JButton[] { collect, applySelected, oneClick, dismissSelected, skip, stop, openReport }) {
+        for (JButton b : new JButton[] { collect, applySelected, oneClick, dismissSelected, skip, stop }) {
             b.setFocusable(false);
         }
         Ui.whyDisabled(collect, () -> Translations.getString(isRunning() ? "CalibrationPanel.Why.Running" //$NON-NLS-1$
@@ -346,7 +355,6 @@ public class CalibrationPanel extends JPanel {
         toolbar.add(dismissSelected);
         toolbar.add(skip);
         toolbar.add(stop);
-        toolbar.add(openReport);
         toolbar.glue();
         toolbar.add(scope);
 
@@ -418,19 +426,20 @@ public class CalibrationPanel extends JPanel {
         steps.add(top, BorderLayout.NORTH);
         steps.add(tableArea, BorderLayout.CENTER);
         steps.add(logScroll, BorderLayout.SOUTH);
-        report.setEditable(false);
-        report.setFont(Ui.mono(12f, Font.PLAIN));
-        report.setBorder(new EmptyBorder(10, 12, 10, 12));
-        report.setText(Translations.getString("CalibrationPanel.Report.None")); //$NON-NLS-1$
-        JScrollPane reportScroll = new JScrollPane(report);
-        reportScroll.setBorder(null);
+        // The reports are all on the report tab, the calibration's and the measurements'.
+        reports = new org.openpnp.gui.calibration.ReportsPane(configuration::getConfigurationDirectory);
         measureHolder.setOpaque(false);
         stepsTab = dock.addTab(Ui.iconSm("target"), Translations.getString("CalibrationPanel.Tab.Steps"), steps); //$NON-NLS-1$ //$NON-NLS-2$
         measureTab = dock.addTab(Ui.iconSm("activity"), Translations.getString("CalibrationPanel.Tab.Measure"), //$NON-NLS-1$ //$NON-NLS-2$
                 measureHolder);
-        dock.addTab(Ui.iconSm("file"), Translations.getString("CalibrationPanel.Tab.Report"), reportScroll); //$NON-NLS-1$ //$NON-NLS-2$
+        reportsTab = dock.addTab(Ui.iconSm("file"), Translations.getString("CalibrationPanel.Tab.Report"), reports); //$NON-NLS-1$ //$NON-NLS-2$
         dock.setMaximize(() -> frame.toggleDockMaximised());
-        dock.addChangeListener(e -> inspect());
+        dock.addChangeListener(e -> {
+            if (dock.getSelectedTab() == reportsTab) {
+                reports.refresh();
+            }
+            inspect();
+        });
         add(dock, BorderLayout.CENTER);
 
         configuration.addListener(new ConfigurationListener.Adapter() {
@@ -483,10 +492,13 @@ public class CalibrationPanel extends JPanel {
         describe();
         frame.getStatusBar().setBusy(true);
         Solutions solutions = machine.getSolutions();
+        if (solutions.promoteToCalibration()) {
+            configuration.setDirty(true);
+        }
         new SwingWorker<Void, Void>() {
             @Override
             protected Void doInBackground() throws Exception {
-                solutions.findIssues();
+                solutions.findIssues(Solutions.Milestone.Production);
                 return null;
             }
 
@@ -539,10 +551,74 @@ public class CalibrationPanel extends JPanel {
             collected = new Date();
             rebuild();
         });
+        reports.refresh();
     }
 
     private boolean isRunning() {
         return runner != null;
+    }
+
+    /** How many measured results wait to be applied or discarded. */
+    public int pendingCount() {
+        return pending.size();
+    }
+
+    /**
+     * Whether the configuration is to stay unsaved for now: what was measured is in effect but is
+     * written only once it is applied, and a run's steps are recorded together at its end.
+     */
+    public boolean holdsSaves() {
+        return !pending.isEmpty() || isRunning();
+    }
+
+    private void pendingChanged(int was) {
+        firePropertyChange(PROPERTY_PENDING, was, pending.size());
+    }
+
+    /** Writes the configuration once nothing measured is left waiting, which would be written with it. */
+    private void saveIfSettled() throws Exception {
+        if (pending.isEmpty()) {
+            configuration.save();
+        }
+    }
+
+    /**
+     * Before something that writes the configuration: what was measured and waits is applied or
+     * discarded first, since writing the configuration writes it too.
+     *
+     * @return False to leave the configuration unwritten.
+     */
+    public boolean settleBeforeSave(Component parent) {
+        if (isRunning()) {
+            Dialogs.info(parent, Translations.getString("CalibrationPanel.Save.Running.Title"), //$NON-NLS-1$
+                    Translations.getString("CalibrationPanel.Save.Running.What")); //$NON-NLS-1$
+            return false;
+        }
+        if (pending.isEmpty()) {
+            return true;
+        }
+        Dialogs.Content content = new Dialogs.Content().tone(Dialogs.Tone.Warn, "alert") //$NON-NLS-1$
+                .title(String.format(Translations.getString("CalibrationPanel.Save.Title"), pending.size())) //$NON-NLS-1$
+                .what(Translations.getString("CalibrationPanel.Save.What")) //$NON-NLS-1$
+                .list(String.join("\n", pendingTitles())); //$NON-NLS-1$
+        int answer = Dialogs.show(parent, content, List.of(Dialogs.Choice.cancel(),
+                Dialogs.Choice.plain(Translations.getString("CalibrationPanel.Save.Discard")), //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("CalibrationPanel.Save.Keep"))), 0, 2); //$NON-NLS-1$
+        if (answer == 2) {
+            keep(new ArrayList<>(pending.values()));
+        }
+        else if (answer == 1) {
+            discard(new ArrayList<>(pending.values()));
+        }
+        return answer > 0 && pending.isEmpty();
+    }
+
+    private List<String> pendingTitles() {
+        List<String> titles = new ArrayList<>();
+        for (Pending p : pending.values()) {
+            titles.add(p.getKind().getName() + " \u00b7 " + p.getSubjectName()); //$NON-NLS-1$
+        }
+        return titles;
     }
 
     private void rebuild() {
@@ -725,7 +801,6 @@ public class CalibrationPanel extends JPanel {
         stop.setVisible(isRunning());
         skip.setEnabled(isRunning() && runner.isWaitingForPerson());
         stop.setEnabled(isRunning());
-        openReport.setVisible(lastSession != null && lastSession.getReportDirectory() != null);
         logScroll.setVisible(isRunning() || lastSession != null);
         stepsTab.setCount(itemsOf(CalibrationItem.Kind.Suggestion).size() + itemsOf(CalibrationItem.Kind.Measure).size()
                 + itemsOf(CalibrationItem.Kind.Pending).size());
@@ -806,7 +881,7 @@ public class CalibrationPanel extends JPanel {
     }
 
     /** The machine settings topic of the first of those, or null when there is none. */
-    private String settingsTopic() {
+    public String settingsTopic() {
         if (!checks.all().isEmpty()) {
             return checks.all().get(0).topic;
         }
@@ -913,7 +988,7 @@ public class CalibrationPanel extends JPanel {
 
     /** Applies suggestions: writes what they propose, after a copy of machine.xml, and saves. */
     private void apply(List<Solutions.Issue> issues) {
-        if (issues.isEmpty() || isRunning()) {
+        if (issues.isEmpty() || isRunning() || !settleBeforeSave(SwingUtilities.getWindowAncestor(this))) {
             return;
         }
         UiUtils.messageBoxOnException(() -> {
@@ -965,12 +1040,17 @@ public class CalibrationPanel extends JPanel {
         refresh();
     }
 
-    /** Applies what was measured: it is in effect already, and now it is saved. */
+    /**
+     * Applies what was measured: it is in effect already, and is written with the configuration
+     * once nothing measured is left waiting.
+     */
     private void keep(List<Pending> kept) {
+        int was = pending.size();
         for (Pending p : kept) {
             pending.remove(p.getKey());
         }
-        UiUtils.messageBoxOnException(() -> configuration.save());
+        UiUtils.messageBoxOnException(this::saveIfSettled);
+        pendingChanged(was);
         refresh();
     }
 
@@ -981,12 +1061,14 @@ public class CalibrationPanel extends JPanel {
 
     /**
      * Discards what was measured: each issue a step accepted is reopened, last first, which puts
-     * back the values it found, a frame compensation is taken out, and the configuration saved.
+     * back the values it found, a frame compensation is taken out, and the configuration saved
+     * once nothing measured is left waiting.
      */
     private void discard(List<Pending> discarded) {
         if (discarded.isEmpty() || isRunning()) {
             return;
         }
+        int was = pending.size();
         UiUtils.messageBoxOnException(() -> {
             for (Pending p : discarded) {
                 if (p.getCompensation() != null && p.getCompensation().canBeUndone()) {
@@ -1001,8 +1083,9 @@ public class CalibrationPanel extends JPanel {
                 }
                 pending.remove(p.getKey());
             }
-            configuration.save();
+            saveIfSettled();
         });
+        pendingChanged(was);
         refresh();
     }
 
@@ -1016,14 +1099,10 @@ public class CalibrationPanel extends JPanel {
         if (pending.isEmpty()) {
             return true;
         }
-        List<String> titles = new ArrayList<>();
-        for (Pending p : pending.values()) {
-            titles.add(p.getKind().getName() + " \u00b7 " + p.getSubjectName()); //$NON-NLS-1$
-        }
         Dialogs.Content content = new Dialogs.Content().tone(Dialogs.Tone.Warn, "alert") //$NON-NLS-1$
                 .title(String.format(Translations.getString("CalibrationPanel.Quit.Title"), pending.size())) //$NON-NLS-1$
                 .what(Translations.getString("CalibrationPanel.Quit.What")) //$NON-NLS-1$
-                .list(String.join("\n", titles)); //$NON-NLS-1$
+                .list(String.join("\n", pendingTitles())); //$NON-NLS-1$
         int answer = Dialogs.show(parent, content, List.of(Dialogs.Choice.cancel(),
                 Dialogs.Choice.plain(Translations.getString("CalibrationPanel.Quit.Keep")), //$NON-NLS-1$
                 Dialogs.Choice.primary(Translations.getString("CalibrationPanel.Quit.Discard"))), 0, 2); //$NON-NLS-1$
@@ -1049,6 +1128,7 @@ public class CalibrationPanel extends JPanel {
             return false;
         }
         CalibrationItem item = suggestions.get(0);
+        int counted = pending.size();
         UiUtils.messageBoxOnException(() -> {
             // One element at a time, as a run measures one step at a time.
             for (CalibrationItem.Part part : item.getParts()) {
@@ -1061,6 +1141,7 @@ public class CalibrationPanel extends JPanel {
                         SettingsDiff.between(was, is), List.of(part.getIssue()), null, "", new Date(), was)); //$NON-NLS-1$
             }
         });
+        pendingChanged(counted);
         refresh();
         return !pending.isEmpty();
     }
@@ -1158,7 +1239,7 @@ public class CalibrationPanel extends JPanel {
         }
         CalibrationPlan started = plan;
         Recording machinery = new Recording(machine, configuration,
-                () -> frame.getJobTab() == null ? null : frame.getJobTab().getJob());
+                () -> frame.getJobTab() == null ? null : frame.getJobTab().getJob(), () -> !pending.isEmpty());
         runner = new CalibrationRunner(machinery, new CalibrationRunner.Listener() {
             @Override
             public void stepStarted(CalibrationPlan.Step step) {
@@ -1231,6 +1312,7 @@ public class CalibrationPanel extends JPanel {
     }
 
     private void finish(CalibrationRunner.Session session, Recording machinery, CalibrationPlan started) {
+        int pendingBefore = pending.size();
         lastSession = session;
         runner = null;
         frame.getStatusBar().setBusy(false);
@@ -1304,27 +1386,14 @@ public class CalibrationPanel extends JPanel {
             }
         }
         snapshotFailure = null;
-        report.setText(text.toString());
-        report.setCaretPosition(0);
+        pendingChanged(pendingBefore);
+        reports.setLastRun(text.toString());
         live.clear();
         before.clear();
         after.clear();
         refresh();
         // What the steps changed is found again, the issues outside calibration with it.
         collect();
-    }
-
-    private void openReport() {
-        UiUtils.messageBoxOnException(() -> {
-            File directory = lastSession == null ? null : lastSession.getReportDirectory();
-            if (directory == null || !directory.isDirectory()) {
-                throw new Exception(Translations.getString("MachineDiagnosticsWizard.Error.NoReport")); //$NON-NLS-1$
-            }
-            if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.OPEN)) {
-                throw new Exception(directory.getAbsolutePath());
-            }
-            Desktop.getDesktop().open(directory);
-        });
     }
 
     // ---- the properties column ---------------------------------------------------------------
@@ -1562,13 +1631,35 @@ public class CalibrationPanel extends JPanel {
                 steps.add(p.getStep());
             }
         }
+        // Every basis of every step, a stale measurement as stale: only the first was shown, and a
+        // measurement a step had made out of date showed only its date.
+        Set<MachineDiagnostics.TestGroup> inTurn = new java.util.LinkedHashSet<>();
         for (CalibrationPlan.Step step : steps) {
             List<CalibrationPlan.Basis> basis = step.getBasis(plan == null ? null : plan.getResults());
-            String line = basis.isEmpty() ? step.getStatus().getName() : describe(basis.get(0));
-            JTextArea note = Forms.paragraph(steps.size() > 1 ? step.getSubjectName() + "  " + line : line); //$NON-NLS-1$
+            List<String> lines = new ArrayList<>();
+            if (basis.isEmpty()) {
+                lines.add(step.getStatus().getName());
+            }
+            for (CalibrationPlan.Basis b : basis) {
+                lines.add(describe(b));
+            }
+            inTurn.addAll(step.getMissingMeasurements());
+            String text = String.join("\n", lines); //$NON-NLS-1$
+            JTextArea note = Forms.paragraph(steps.size() > 1 ? step.getSubjectName() + "\n" + text : text); //$NON-NLS-1$
             note.setAlignmentX(Component.LEFT_ALIGNMENT);
             why.add(note);
             why.add(Box.createVerticalStrut(4));
+        }
+        if (inTurn.size() > 1) {
+            List<String> names = new ArrayList<>();
+            for (MachineDiagnostics.TestGroup group : inTurn) {
+                names.add(MeasurementsPanel.name(group));
+            }
+            JTextArea order = Forms.paragraph(String.format(Translations.getString("CalibrationPanel.Basis.Order"), //$NON-NLS-1$
+                    String.join(Translations.getString("CalibrationPanel.ListSeparator"), names))); //$NON-NLS-1$
+            order.setForeground(Ui.muted());
+            order.setAlignmentX(Component.LEFT_ALIGNMENT);
+            why.add(order);
         }
         sections.add(section("activity", "CalibrationPanel.Section.WhyMeasure", why)); //$NON-NLS-1$ //$NON-NLS-2$
         Set<CalibrationPlan.Step> before = new java.util.LinkedHashSet<>();
@@ -1790,10 +1881,15 @@ public class CalibrationPanel extends JPanel {
             return String.format(Translations.getString("CalibrationPanel.Basis.Issue"), basis.getIssue().getIssue()); //$NON-NLS-1$
         }
         if (basis.getGroup() != null) {
-            return basis.getWhen() == null
-                    ? String.format(Translations.getString("CalibrationPanel.Basis.Missing"), MeasurementsPanel.name(basis.getGroup())) //$NON-NLS-1$
+            String group = MeasurementsPanel.name(basis.getGroup());
+            if (basis.getWhen() == null) {
+                return String.format(Translations.getString("CalibrationPanel.Basis.Missing"), group); //$NON-NLS-1$
+            }
+            return basis.isStale()
+                    ? String.format(Translations.getString("CalibrationPanel.Basis.Stale"), group, //$NON-NLS-1$
+                            DAY.format(basis.getWhen()), basis.getInvalidatedBy())
                     : String.format(Translations.getString("CalibrationPanel.Basis.Measured"), //$NON-NLS-1$
-                            MeasurementsPanel.name(basis.getGroup()), DAY.format(basis.getWhen()));
+                            group, DAY.format(basis.getWhen()));
         }
         return "\u2014"; //$NON-NLS-1$
     }

@@ -935,7 +935,6 @@ public class MainFrame extends JFrame {
             }
             mnView.add(mnCamera);
         }
-        mnView.add(new JMenuItem(editThemeAction));
 
         // Machine, with what used to be the Job menu: running a job is running the machine.
         //////////////////////////////////////////////////////////////////////
@@ -1345,6 +1344,26 @@ public class MainFrame extends JFrame {
         // Collects what the machine needs and carries it out; the issues page and the
         // diagnostics page before it are in it.
         calibrationPanel = new CalibrationPanel(configuration, this);
+        // While results wait to be applied nothing is saved: the top bar and status bar say so.
+        calibrationPanel.addPropertyChangeListener(CalibrationPanel.PROPERTY_PENDING, e -> {
+            int count = calibrationPanel.pendingCount();
+            if (topBarPanel != null) {
+                topBarPanel.setCalibrationPending(count);
+            }
+            String paused = count > 0 ? String.format(Translations.getString("MainFrame.Autosave.Paused"), count) //$NON-NLS-1$
+                    : null;
+            SwingUtilities.invokeLater(() -> {
+                if (paused != null) {
+                    statusBarPanel.setStatus(paused);
+                    autosavePaused = paused;
+                }
+                else if (autosavePaused != null && autosavePaused.equals(statusBarPanel.getStatus())) {
+                    // Nothing waits any more: the line saying so goes, unless something has been said since.
+                    statusBarPanel.setStatus(null);
+                    autosavePaused = null;
+                }
+            });
+        });
         addNavigation("Calibration", org.openpnp.gui.shell.Ui.icon("target", 20), calibrationPanel); //$NON-NLS-1$ //$NON-NLS-2$
         logPanel = new LogPanel(configuration);
         addNavigation("Log", org.openpnp.gui.shell.Ui.icon("log", 20), logPanel); //$NON-NLS-1$ //$NON-NLS-2$
@@ -1404,6 +1423,8 @@ public class MainFrame extends JFrame {
         topBarPanel = new TopBarPanel(configuration, jobPanel, machineControlsPanel, menuBar,
                 () -> showCalibrationStep(null, null), this::openCommandPalette,
                 stopMachineAction, this::saveConfig);
+        topBarPanel.setOpenSettingsIssues(() -> showMachineSettings(
+                calibrationPanel == null ? null : calibrationPanel.settingsTopic()));
         contentPane.add(topBarPanel, BorderLayout.NORTH);
         // The top bar is the title bar, where the look and feel can put the window's buttons in
         // it: a separate title bar cost 30 pixels of height for a name the top bar already shows.
@@ -1825,6 +1846,8 @@ public class MainFrame extends JFrame {
     private volatile boolean instructionsCounted;
     /** What the wizard put in the status bar, taken out again when it is done. */
     private String wizardStatus;
+    /** The status bar's word that autosave waits for calibration results, taken out when none wait. */
+    private String autosavePaused;
 
     public void hideInstructions() {
         boolean running = jobPanel != null && jobPanel.isJobRunning();
@@ -1925,7 +1948,9 @@ public class MainFrame extends JFrame {
      */
     private void autosave() {
         Machine machine = configuration.getMachine();
-        if ((machine != null && machine.isBusy()) || jobPanel.isJobRunning()) {
+        // Calibration results are written once applied, a run's steps together at its end.
+        if ((machine != null && machine.isBusy()) || jobPanel.isJobRunning()
+                || (calibrationPanel != null && calibrationPanel.holdsSaves())) {
             autosaveTimer.restart();
             return;
         }
@@ -2141,7 +2166,9 @@ public class MainFrame extends JFrame {
     };
 
     public boolean saveConfig() {
-        // Save the configuration
+        if (!settlePendingBeforeSave(this)) {
+            return false;
+        }
         try {
             Preferences.userRoot().flush();
         }
@@ -2172,6 +2199,16 @@ public class MainFrame extends JFrame {
 
         Logger.debug("Config saved successfully!"); //$NON-NLS-1$
         return true;
+    }
+
+    /**
+     * Before something that writes the configuration: calibration results waiting to be applied
+     * are applied or discarded first, as writing the configuration would write them.
+     *
+     * @return False to leave the configuration unwritten.
+     */
+    public boolean settlePendingBeforeSave(Component parent) {
+        return calibrationPanel == null || calibrationPanel.settleBeforeSave(parent);
     }
 
     public boolean quit() {
@@ -2454,14 +2491,6 @@ public class MainFrame extends JFrame {
             prefs.putBoolean(PREF_WINDOW_STYLE_MULTIPLE, multiple);
             MessageBoxes.infoBox(Translations.getString("CommonPhrases.windowsStyleChanged"), //$NON-NLS-1$
                     Translations.getString("CommonPhrases.windowsStyleChangedRestartToTakeEffect")); //$NON-NLS-1$
-        }
-    };
-
-    /** The settings page, where the appearance dialog used to open. */
-    private Action editThemeAction = new AbstractAction(Translations.getString("Menu.Window.Theme")) { //$NON-NLS-1$
-        @Override
-        public void actionPerformed(ActionEvent arg0) {
-            showSettings();
         }
     };
 

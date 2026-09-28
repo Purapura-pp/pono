@@ -1155,10 +1155,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "reaches placements on boards without fiducials, and the Units per "
                             + "Pixel that was calibrated by moving the machine. Correcting the "
                             + "controller's steps per millimetre changes every taught coordinate - "
-                            + "fiducials, feeders, camera and nozzle offsets. The Compensate button on "
-                            + "the diagnostics page does exactly that: a copy of machine.xml, two "
-                            + "transform axes, every taught coordinate carried across, and a "
-                            + "verification run on the board that keeps or undoes it.%s",
+                            + "fiducials, feeders, camera and nozzle offsets. The Datum board "
+                            + "compensation step on the calibration page does exactly that: a copy of "
+                            + "machine.xml, two transform axes, every taught coordinate carried across, "
+                            + "and a verification run on the board that keeps or undoes it.%s",
                             datum.getBoard(), when, axis.getName(), error * 100, datum.getPoints(),
                             Math.abs(error) * 100, steps))
                                     .measuredBy(TestGroup.DatumBoard)
@@ -1176,8 +1176,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                             + "moves X by %.3f mm, and it turns every board by that angle relative "
                             + "to its own fiducials. A linear transformed axis of type X, with the "
                             + "X axis as its input at a factor of 1 and the Y axis at a factor of "
-                            + "%+.6f, takes it out. The Compensate button on the diagnostics page "
-                            + "adds it, together with the scale, when asked to.", datum.getBoard(),
+                            + "%+.6f, takes it out. The Datum board compensation step on the "
+                            + "calibration page adds it, together with the scale, when asked to.", datum.getBoard(),
                             when, datum.getShearDegrees(), datum.getPoints(),
                             Math.abs(Math.tan(Math.toRadians(datum.getShearDegrees()))) * 100,
                             factor))
@@ -2449,12 +2449,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
         MachineCompensation compensation = MachineCompensation.of(before, anchor, includeSquareness);
 
         File configurationDirectory = getConfiguration().getConfigurationDirectory();
-        File machineXml = new File(configurationDirectory, "machine.xml");
-        File backup = new File(configurationDirectory, "machine.xml.before-compensation-"
-                + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new java.util.Date()));
-        if (machineXml.exists()) {
-            java.nio.file.Files.copy(machineXml.toPath(), backup.toPath());
-        }
+        File backup = org.openpnp.model.Backups.copy(configurationDirectory, "compensation", "machine.xml");
         log("Compensation: %s", compensation);
         log("machine.xml copied to %s", backup.getName());
 
