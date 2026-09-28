@@ -117,6 +117,16 @@ public class FormTest {
             firePropertyChange("name", null, null);
         }
 
+        /** Changes the count without telling, as a calibration changes a nozzle's offsets. */
+        public void changeCountQuietly(int count) {
+            this.count = count;
+        }
+
+        /** Moves the location without telling. */
+        public void moveQuietly(Location location) {
+            this.location = location;
+        }
+
         private String tool = "A";
 
         public String getTool() {
@@ -306,6 +316,33 @@ public class FormTest {
         sample.touch();
         assertTrue(form.changes().isEmpty());
         assertFalse(form.hasEdits(), "Apply may light up, but nothing on screen differs");
+    }
+
+    @Test
+    public void applyLeavesAValueChangedBehindTheFormAsItIs() {
+        Sample sample = new Sample();
+        FormWizard form = form(sample);
+        sample.changeCountQuietly(7);
+        sample.moveQuietly(new Location(LengthUnit.Millimeters, 1, 2, 3, 0));
+
+        field(form, "F-08").setText("F-09");
+        form.apply();
+
+        assertEquals("F-09", sample.getName());
+        assertEquals(7, sample.getCount(), "the count on screen was not edited");
+        assertEquals(new Location(LengthUnit.Millimeters, 1, 2, 3, 0), sample.getLocation(),
+                "nor was the location");
+    }
+
+    @Test
+    public void aValueChangedBehindTheFormIsNotAnEdit() {
+        Sample sample = new Sample();
+        FormWizard form = form(sample);
+        sample.changeCountQuietly(7);
+
+        assertTrue(form.changes().isEmpty());
+        form.reload();
+        field(form, "7");
     }
 
     @Test

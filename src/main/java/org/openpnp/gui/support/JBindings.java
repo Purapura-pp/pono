@@ -72,6 +72,12 @@ public class JBindings {
     public static class WrappedBinding<SS, SV, TS, TV> {
         private SS source;
         private BeanProperty<SS, SV> sourceProperty;
+        /**
+         * The source property as the object holds it now. The one the binding listens with answers
+         * from its cache, which stays as it was when an object that does not report its changes -
+         * a nozzle's offsets after a calibration - is changed.
+         */
+        private BeanProperty<SS, SV> reader;
         private TS target;
         private Wrapper<SV> wrapper;
         private AutoBinding wrappedBinding;
@@ -88,6 +94,7 @@ public class JBindings {
                 BindingListener... listeners) {
             this.source = source;
             this.sourceProperty = BeanProperty.create(sourcePropertyName);
+            this.reader = BeanProperty.create(sourcePropertyName);
             this.target = target;
             this.listeners = listeners;
             this.wrapper = new Wrapper<>(sourceProperty.getValue(source));
@@ -134,7 +141,7 @@ public class JBindings {
         }
 
         public void reset() {
-            wrapper.setValue(sourceProperty.getValue(source));
+            wrapper.setValue(reader.getValue(source));
         }
 
         public Wrapper<SV> getWrapper() {
@@ -143,12 +150,12 @@ public class JBindings {
 
         /** What the object holds, as against what is on screen waiting for Apply. */
         public SV getSourceValue() {
-            return sourceProperty.getValue(source);
+            return reader.getValue(source);
         }
 
         /** Whether the value on screen differs from the object's: an edit Apply would write. */
         public boolean isChanged() {
-            return !java.util.Objects.equals(wrapper.getValue(), sourceProperty.getValue(source));
+            return !java.util.Objects.equals(wrapper.getValue(), reader.getValue(source));
         }
 
         @Override
