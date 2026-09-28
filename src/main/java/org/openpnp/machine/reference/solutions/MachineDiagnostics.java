@@ -2639,6 +2639,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     private void runGroup(ReferenceMachine machine, TestGroup group,
             MachineDiagnosticsReport report) throws Exception {
         log("--- %s ---", group);
+        firePropertyChange("group", null, group);
         groupStartedMillis = System.currentTimeMillis();
         switch (group) {
             case Firmware:

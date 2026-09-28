@@ -19,6 +19,8 @@
 
 package org.openpnp.machine.reference.calibration;
 
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -53,6 +55,7 @@ import org.openpnp.model.Configuration;
 import org.openpnp.model.Job;
 import org.openpnp.model.Length;
 import org.openpnp.model.Solutions;
+import org.openpnp.util.SimpleGraph;
 import org.pmw.tinylog.Logger;
 
 /**
@@ -64,7 +67,11 @@ import org.pmw.tinylog.Logger;
  * the machine waits for them to say it is done. Each step that succeeds marks the measurements it
  * changed as out of date and saves the configuration straight away; the first that fails stops
  * the session, its issue having put back what it changed. Stop takes effect once the step under
- * way is done. The report goes beside the diagnostics reports.
+ * way is done, or at once while measurements run. The report goes beside the diagnostics reports.
+ * <p>
+ * While a step runs, what it tells {@link CalibrationProgress} - its phase, what the phase found,
+ * its charts, why it chose what it chose - goes to the listener under the step's key; a
+ * measurement run on its own ({@link #startMeasuring}) tells it under {@link #measurementKey}.
  * <p>
  * What reaches the machine goes through {@link Machinery}; {@link OnMachine} is the machine's.
  */
@@ -112,6 +119,47 @@ public class CalibrationRunner {
 
         default void finished(Session session) {
         }
+
+        /**
+         * The step with this key, or the measurement run on its own with it, is in its phase with
+         * this index: {@link CalibrationStep#getPhases()}; a measurement has the one.
+         */
+        default void phase(String key, int index) {
+        }
+
+        /** A line about the phase, in the display language. */
+        default void detail(String key, String text) {
+        }
+
+        /** A chart the phase draws, which goes on filling in while it runs. */
+        default void chart(String key, String title, SimpleGraph graph) {
+        }
+
+        /** Why the step chose what it chose. */
+        default void decision(String key, String text) {
+        }
+
+        /**
+         * The step waits part of the way through for someone to do what the instructions say;
+         * proceed goes on, cancel gives the step up.
+         */
+        default void person(String key, String instructions, Runnable proceed, Runnable cancel) {
+        }
+
+        default void personDone(String key) {
+        }
+
+        /** A measurement run on its own started. */
+        default void measuring(String key, TestGroup group) {
+        }
+
+        default void measured(String key, Outcome outcome, String message) {
+        }
+    }
+
+    /** The key a measurement run on its own reports under. */
+    public static String measurementKey(TestGroup group) {
+        return "Measure|" + group.name(); //$NON-NLS-1$
     }
 
     /** What happened to one step. */
@@ -163,6 +211,7 @@ public class CalibrationRunner {
         private final Date started = new Date();
         private File backup;
         private File reportDirectory;
+        private final List<File> measurements = new ArrayList<>();
         private final List<Result> results = new ArrayList<>();
         private boolean stopped;
         private String failure;
@@ -175,8 +224,14 @@ public class CalibrationRunner {
             return backup;
         }
 
+        /** Where the report went: the calibration's, or a measurement's run on its own. */
         public File getReportDirectory() {
             return reportDirectory;
+        }
+
+        /** The reports of the measurements the steps made. */
+        public List<File> getMeasurements() {
+            return Collections.unmodifiableList(measurements);
         }
 
         public List<Result> getResults() {
@@ -210,8 +265,12 @@ public class CalibrationRunner {
         /** The plan as it stands now: a search and a build. */
         CalibrationPlan plan() throws Exception;
 
-        /** Runs the measurement groups. */
-        void measure(Set<TestGroup> groups) throws Exception;
+        /** Runs the measurement groups; what they do goes to {@link CalibrationProgress}. */
+        File measure(Set<TestGroup> groups) throws Exception;
+
+        /** Stops the measurement under way, keeping what it measured so far. */
+        default void abortMeasuring() {
+        }
 
         /** Accepts the issue and waits for what it started to finish; throws if it did not succeed. */
         void accept(CalibrationPlan.Step step, Solutions.Issue issue) throws Exception;
@@ -235,6 +294,8 @@ public class CalibrationRunner {
     private SettleMethod settleMethod = SettleMethod.Measured;
     private volatile boolean stopRequested;
     private volatile CompletableFuture<Decision> person;
+    /** How to give up the step waiting part of the way through for someone, or null. */
+    private volatile Runnable personCancel;
 
     public CalibrationRunner(Machinery machinery, Listener listener) {
         this.machinery = machinery;
@@ -266,10 +327,35 @@ public class CalibrationRunner {
         return future;
     }
 
-    /** Stops once the step under way is done; a step waiting for someone stops at once. */
+    /** Runs one measurement group on its own, on a thread of its own. */
+    public CompletableFuture<Session> startMeasuring(TestGroup group) {
+        CompletableFuture<Session> future = new CompletableFuture<>();
+        Thread thread = new Thread(() -> {
+            try {
+                future.complete(measure(group));
+            }
+            catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        }, "pono-measurement"); //$NON-NLS-1$
+        thread.setDaemon(true);
+        thread.start();
+        return future;
+    }
+
+    /**
+     * Stops once the step under way is done. A step waiting for someone stops at once, and so
+     * does a measurement, keeping what it measured so far.
+     */
     public void requestStop() {
         stopRequested = true;
         answer(Decision.Stop);
+        Runnable cancel = personCancel;
+        if (cancel != null) {
+            personCancel = null;
+            cancel.run();
+        }
+        machinery.abortMeasuring();
     }
 
     /** Someone at the machine did what the step waiting for them asked. */
@@ -286,6 +372,45 @@ public class CalibrationRunner {
     public boolean isWaitingForPerson() {
         CompletableFuture<Decision> waiting = person;
         return waiting != null && !waiting.isDone();
+    }
+
+    /**
+     * The measurement group on its own, on the calling thread, which must not be the event thread.
+     * Its report is the measurement's own; there is no backup, as it changes no setting.
+     */
+    public Session measure(TestGroup group) throws Exception {
+        if (SwingUtilities.isEventDispatchThread()) {
+            throw new IllegalStateException("A measurement cannot run on the event thread."); //$NON-NLS-1$
+        }
+        stopRequested = false;
+        Session session = new Session();
+        String key = measurementKey(group);
+        String title = Translations.getString("MachineDiagnosticsWizard.Test." + group.name()); //$NON-NLS-1$
+        long began = System.currentTimeMillis();
+        Progress progress = new Progress(key, null);
+        listener.measuring(key, group);
+        CalibrationProgress.attach(progress);
+        Outcome outcome;
+        String message = ""; //$NON-NLS-1$
+        try {
+            progress.phase(0);
+            session.reportDirectory = machinery.measure(EnumSet.of(group));
+            outcome = stopRequested ? Outcome.Stopped : Outcome.Done;
+            session.stopped = stopRequested;
+        }
+        catch (Exception e) {
+            message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            Logger.warn(e, "Measurement {} failed.", group); //$NON-NLS-1$
+            outcome = Outcome.Failed;
+            session.failure = title + ": " + message; //$NON-NLS-1$
+        }
+        finally {
+            CalibrationProgress.detach(progress);
+        }
+        record(session, null, key, title, outcome, message, began);
+        listener.measured(key, outcome, message);
+        listener.finished(session);
+        return session;
     }
 
     private void answer(Decision decision) {
@@ -326,6 +451,7 @@ public class CalibrationRunner {
                 continue;
             }
             listener.stepStarted(step);
+            Progress progress = new Progress(key, step.getKind());
             if (skip != null && skip.contains(key)) {
                 record(session, step, Outcome.Skipped, Translations.getString("CalibrationRunner.SkippedThisTime"), //$NON-NLS-1$
                         Collections.emptyList(), began);
@@ -336,6 +462,7 @@ public class CalibrationRunner {
                         Collections.emptyList(), began);
                 continue;
             }
+            CalibrationProgress.attach(progress);
             try {
                 if (step.getStatus() == CalibrationPlan.Status.Waiting) {
                     throw new Exception(String.format(Translations.getString("CalibrationRunner.Waiting"), //$NON-NLS-1$
@@ -344,7 +471,12 @@ public class CalibrationRunner {
                 if (!step.getMissingMeasurements().isEmpty()) {
                     log(String.format(Translations.getString("CalibrationRunner.Measuring"), //$NON-NLS-1$
                             step.getTitle(), step.getMissingMeasurements()));
-                    machinery.measure(step.getMissingMeasurements());
+                    session.measurements.add(machinery.measure(step.getMissingMeasurements()));
+                    if (stopRequested) {
+                        session.stopped = true;
+                        record(session, step, Outcome.Stopped, "", Collections.emptyList(), began); //$NON-NLS-1$
+                        break;
+                    }
                     step = machinery.plan().getStep(key);
                     if (step == null || step.getStatus().isSettled()) {
                         record(session, step, key, step == null ? key : step.getTitle(), Outcome.Done,
@@ -355,7 +487,10 @@ public class CalibrationRunner {
                         throw new Exception(Translations.getString("CalibrationRunner.StillUnmeasured")); //$NON-NLS-1$
                     }
                 }
+                boolean waited = false;
                 if (step.isNeedsPerson()) {
+                    progress.phase(Math.max(0, step.getKind().firstPersonPhase()));
+                    waited = true;
                     Decision decision = waitForPerson(step);
                     if (decision == Decision.Skip) {
                         record(session, step, Outcome.Skipped,
@@ -376,7 +511,8 @@ public class CalibrationRunner {
                     }
                 }
                 List<String> changes = describe(step.getChanges());
-                carryOut(step, changed);
+                progress.ownPhase(waited);
+                carryOut(step, changed, session);
                 Set<TestGroup> invalidated = CalibrationPlan.invalidatedBy(step.getKind());
                 machinery.invalidate(invalidated, step.getKind().name());
                 changed.addAll(invalidated);
@@ -390,6 +526,10 @@ public class CalibrationRunner {
                 session.failure = step.getTitle() + ": " + message; //$NON-NLS-1$
                 break;
             }
+            finally {
+                CalibrationProgress.detach(progress);
+                personCancel = null;
+            }
         }
         writeReport(session);
         listener.finished(session);
@@ -397,7 +537,7 @@ public class CalibrationRunner {
     }
 
     /** Does what the step does: accepts its issues, or its own procedure for the two that have one. */
-    private void carryOut(CalibrationPlan.Step step, Set<TestGroup> changed) throws Exception {
+    private void carryOut(CalibrationPlan.Step step, Set<TestGroup> changed, Session session) throws Exception {
         switch (step.getKind()) {
             case Remeasure: {
                 Set<TestGroup> groups = new LinkedHashSet<>(changed);
@@ -405,7 +545,7 @@ public class CalibrationRunner {
                 groups.addAll(plan.invalidated());
                 if (!groups.isEmpty()) {
                     log(String.format(Translations.getString("CalibrationRunner.Remeasuring"), groups)); //$NON-NLS-1$
-                    machinery.measure(EnumSet.copyOf(groups));
+                    session.measurements.add(machinery.measure(EnumSet.copyOf(groups)));
                 }
                 return;
             }
@@ -477,6 +617,109 @@ public class CalibrationRunner {
         }
         finally {
             person = null;
+        }
+    }
+
+    /** Passes on what the step under way, or the measurement, tells {@link CalibrationProgress}. */
+    private final class Progress implements CalibrationProgress.Sink {
+        private final String key;
+        private final CalibrationStep kind;
+        private volatile int phase = -1;
+
+        /** @param kind The step, or null for a measurement on its own. */
+        Progress(String key, CalibrationStep kind) {
+            this.key = key;
+            this.kind = kind;
+        }
+
+        @Override
+        public void phase(int index) {
+            if (index != phase) {
+                phase = index;
+                listener.phase(key, index);
+            }
+        }
+
+        @Override
+        public void phase(String key) {
+            int index = kind == null ? -1 : kind.phaseOf(key);
+            if (index >= 0) {
+                phase(index);
+            }
+        }
+
+        /**
+         * The first of the step's own phases, once what came before it is over: the measurements,
+         * and what someone did when the runner waited for them. A phase someone does that the
+         * runner did not wait for is the step's own code's to ask for.
+         */
+        void ownPhase(boolean waited) {
+            List<CalibrationStep.Phase> phases = kind.getPhases();
+            for (int i = Math.max(0, phase); i < phases.size(); i++) {
+                CalibrationStep.Phase p = phases.get(i);
+                if (p.getGroup() != null || (p.isPerson() && waited)) {
+                    continue;
+                }
+                if (!p.isPerson() && i > phase) {
+                    phase(i);
+                }
+                return;
+            }
+        }
+
+        private boolean inPersonPhase() {
+            return kind != null && phase >= 0 && phase < kind.getPhases().size()
+                    && kind.getPhases().get(phase).isPerson();
+        }
+
+        @Override
+        public void group(String name) {
+            if (kind == null) {
+                phase(0);
+                return;
+            }
+            int index = kind.phaseOfGroup(name);
+            if (index >= 0) {
+                phase(index);
+            }
+        }
+
+        @Override
+        public void detail(String text) {
+            listener.detail(key, text);
+        }
+
+        @Override
+        public void chart(String title, SimpleGraph graph) {
+            listener.chart(key, title, graph);
+        }
+
+        @Override
+        public void decision(String text) {
+            listener.decision(key, text);
+        }
+
+        @Override
+        public void person(String instructions, Runnable proceed, Runnable cancel) {
+            personCancel = cancel;
+            if (kind != null && !inPersonPhase()) {
+                for (int i = Math.max(0, phase); i < kind.getPhases().size(); i++) {
+                    if (kind.getPhases().get(i).isPerson()) {
+                        phase(i);
+                        break;
+                    }
+                }
+            }
+            listener.person(key, instructions, proceed, cancel);
+        }
+
+        @Override
+        public void personDone() {
+            personCancel = null;
+            if (inPersonPhase() && phase + 1 < kind.getPhases().size()) {
+                phase(phase + 1);
+            }
+            listener.personDone(key);
         }
     }
 
@@ -569,6 +812,9 @@ public class CalibrationRunner {
             else if (session.stopped) {
                 out.println("Stopped on request."); //$NON-NLS-1$
             }
+            for (File measurement : session.measurements) {
+                out.println("Measured " + measurement); //$NON-NLS-1$
+            }
             out.println();
             for (Result result : session.results) {
                 out.println(String.format("%-8s %s  (%.1f s)%s", result.getOutcome(), result.getTitle(), //$NON-NLS-1$
@@ -621,10 +867,25 @@ public class CalibrationRunner {
         }
 
         @Override
-        public void measure(Set<TestGroup> groups) throws Exception {
+        public File measure(Set<TestGroup> groups) throws Exception {
             MachineDiagnostics diagnostics = machine.getMachineDiagnostics();
             Set<TestGroup> copy = groups.isEmpty() ? EnumSet.noneOf(TestGroup.class) : EnumSet.copyOf(groups);
-            result(machine.submit(() -> diagnostics.run(machine, copy)));
+            Forwarding forwarding = new Forwarding();
+            diagnostics.addPropertyChangeListener(forwarding);
+            try {
+                return result(machine.submit(() -> diagnostics.run(machine, copy)));
+            }
+            finally {
+                diagnostics.removePropertyChangeListener(forwarding);
+            }
+        }
+
+        @Override
+        public void abortMeasuring() {
+            MachineDiagnostics diagnostics = machine.getMachineDiagnostics();
+            if (diagnostics.isRunning()) {
+                diagnostics.abort();
+            }
         }
 
         @Override
@@ -767,6 +1028,42 @@ public class CalibrationRunner {
                 throw new IOException("Cannot create " + directory); //$NON-NLS-1$
             }
             return directory;
+        }
+    }
+
+    /**
+     * Tells {@link CalibrationProgress} what a measurement does, from what the diagnostics tell
+     * their own page: the group under way, the log a line at a time, and the charts.
+     */
+    static final class Forwarding implements PropertyChangeListener {
+        private int logLength;
+
+        @Override
+        public synchronized void propertyChange(PropertyChangeEvent e) {
+            String property = e.getPropertyName();
+            if ("group".equals(property) && e.getNewValue() instanceof TestGroup) { //$NON-NLS-1$
+                CalibrationProgress.group(((TestGroup) e.getNewValue()).name());
+            }
+            else if ("log".equals(property) && e.getNewValue() instanceof String) { //$NON-NLS-1$
+                String log = (String) e.getNewValue();
+                if (log.length() < logLength) {
+                    logLength = 0;
+                }
+                String added = log.substring(logLength);
+                logLength = log.length();
+                for (String line : added.split("\n")) { //$NON-NLS-1$
+                    if (!line.trim().isEmpty() && !line.startsWith("--- ")) { //$NON-NLS-1$
+                        CalibrationProgress.detail(Translations.translateText(line));
+                    }
+                }
+            }
+            else if (property != null && property.endsWith("Graph") && e.getNewValue() instanceof SimpleGraph) { //$NON-NLS-1$
+                String name = Character.toUpperCase(property.charAt(0))
+                        + property.substring(1, property.length() - "Graph".length()); //$NON-NLS-1$
+                CalibrationProgress.chart(Translations.getString(
+                        "MachineDiagnosticsWizard.GraphsPanel." + name + ".text"), //$NON-NLS-1$ //$NON-NLS-2$
+                        (SimpleGraph) e.getNewValue());
+            }
         }
     }
 

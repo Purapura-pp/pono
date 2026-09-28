@@ -465,6 +465,37 @@ public class CalibrationPlan {
         return Collections.unmodifiableSet(NEEDS.get(kind));
     }
 
+    /** The groups no step measures as one of its phases: they only report, the page's diagnostics. */
+    public static Set<TestGroup> diagnosticGroups() {
+        Set<TestGroup> groups = EnumSet.allOf(TestGroup.class);
+        for (CalibrationStep kind : CalibrationStep.values()) {
+            for (CalibrationStep.Phase phase : kind.getPhases()) {
+                if (phase.getGroup() != null) {
+                    groups.remove(TestGroup.valueOf(phase.getGroup()));
+                }
+            }
+        }
+        return groups;
+    }
+
+    /** The steps still to do because of what the group found. */
+    public List<Step> foundBy(TestGroup group) {
+        List<Step> found = new ArrayList<>();
+        for (Step step : steps) {
+            if (step.getStatus().isSettled()) {
+                continue;
+            }
+            for (Solutions.Issue issue : step.issues) {
+                if (issue.getState() == Solutions.State.Open && issue instanceof MachineDiagnostics.Finding
+                        && ((MachineDiagnostics.Finding) issue).getMeasuredBy() == group) {
+                    found.add(step);
+                    break;
+                }
+            }
+        }
+        return found;
+    }
+
     // ----- building ---------------------------------------------------------------------------------
 
     /** Every step the machine's elements call for, before any issue is attached. */

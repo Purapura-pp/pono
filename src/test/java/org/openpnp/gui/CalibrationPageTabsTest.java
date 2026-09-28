@@ -1,32 +1,37 @@
 package org.openpnp.gui;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 
-import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.openpnp.gui.calibration.MeasurementForms;
 import org.openpnp.gui.form.Form;
 import org.openpnp.gui.form.FormWizard;
 import org.openpnp.machine.reference.ReferenceMachine;
+import org.openpnp.machine.reference.calibration.CalibrationPlan;
 import org.openpnp.machine.reference.solutions.MachineDiagnostics.TestGroup;
+import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Configuration;
 
 /**
- * The issues page's two tabs that were the diagnostics page: the overview describes the default
- * machine in every cell without being shown, and every measurement group has a parameter form
- * whose fields name real properties of the diagnostics.
+ * What the calibration page took over from the diagnostics page: the overview describes the
+ * default machine in every cell without being shown, every measurement group has a parameter
+ * form whose fields name real properties of the diagnostics, and every group is either one of a
+ * step's phases or one of the page's diagnostics.
  */
-public class IssuesPageTabsTest {
+public class CalibrationPageTabsTest {
     @TempDir
     Path tempDir;
 
@@ -66,17 +71,38 @@ public class IssuesPageTabsTest {
 
     @Test
     public void everyGroupHasItsParametersForm() {
-        MeasurementsPanel measurements = new MeasurementsPanel(machine, new JPanel(), () -> {
-        });
         for (TestGroup group : TestGroup.values()) {
-            FormWizard form = measurements.form(group);
+            FormWizard form = MeasurementForms.form(machine.getMachineDiagnostics(), group);
             assertNotNull(form, group.name());
             // Built means every field named a readable and writable property of the diagnostics.
             Form.properties(form);
         }
-        assertFalse(MeasurementsPanel.calibrationGroups().isEmpty(), "the calibration decides by no measurement");
-        assertFalse(MeasurementsPanel.calibrationGroups().contains(TestGroup.ConfigSnapshot),
-                "the snapshot decides no calibration step");
+    }
+
+    @Test
+    public void everyGroupIsAStepsPhaseOrADiagnostic() {
+        assertEquals(EnumSet.of(TestGroup.VisionNoise, TestGroup.CameraLatency, TestGroup.XyPositioning,
+                TestGroup.Homing, TestGroup.HysteresisMap, TestGroup.ConfigSnapshot),
+                CalibrationPlan.diagnosticGroups(), "the diagnostics are the groups no step measures");
+        for (CalibrationStep step : CalibrationStep.values()) {
+            assertNotNull(step.getWay(), step.name());
+            assertFalse(step.getPhases().isEmpty(), step.name());
+            for (CalibrationStep.Phase phase : step.getPhases()) {
+                String name = phase.getName();
+                assertFalse(name.startsWith("!") && name.endsWith("!"), "a missing translation: " + name);
+            }
+            for (TestGroup group : CalibrationPlan.decidedBy(step)) {
+                assertTrue(step.phaseOfGroup(group.name()) >= 0,
+                        step + " is decided by " + group + ", which is not one of its phases");
+            }
+            boolean someoneFirst = step.getWay() != CalibrationStep.Way.Auto
+                    && step.getWay() != CalibrationStep.Way.Recurring;
+            assertEquals(someoneFirst, step.firstPersonPhase() == 0,
+                    step + ": only a step that is not all automatic starts with someone's part");
+            if (step.getWay() == CalibrationStep.Way.Manual || step.getWay() == CalibrationStep.Way.Prepare) {
+                assertTrue(step.isNeedsPerson(), step + " is waited for before it starts");
+            }
+        }
     }
 
     private static void collect(java.awt.Container container, List<JTable> tables) {

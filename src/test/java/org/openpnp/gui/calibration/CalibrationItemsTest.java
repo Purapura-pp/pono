@@ -132,6 +132,33 @@ public class CalibrationItemsTest {
     }
 
     @Test
+    public void theGroupsNoStepMeasuresAreTheDiagnosticsOneRowEach() throws Exception {
+        List<CalibrationItem> items = collectedOnLumen();
+        List<org.openpnp.machine.reference.solutions.MachineDiagnostics.TestGroup> groups = new ArrayList<>();
+        for (CalibrationItem item : items) {
+            if (item.getKind() == CalibrationItem.Kind.Diagnostic) {
+                groups.add(item.getGroup());
+                assertNull(item.getStep(), "a diagnostic carries out no step");
+                assertNull(item.getWay());
+                assertEquals(1, item.getParts().size());
+                assertEquals(MeasurementForms.name(item.getGroup()), item.getTitle());
+            }
+            else {
+                assertNull(item.getGroup(), item.toString());
+            }
+        }
+        assertEquals(new ArrayList<>(CalibrationPlan.diagnosticGroups()), groups);
+        CalibrationItem backlash = null;
+        for (CalibrationItem item : items) {
+            if (item.getKind() == CalibrationItem.Kind.Measure && item.getStep() == CalibrationStep.XyBacklash) {
+                backlash = item;
+            }
+        }
+        assertNotNull(backlash);
+        assertEquals(CalibrationStep.Way.Auto, backlash.getWay(), "a step's row says how it is carried out");
+    }
+
+    @Test
     public void theRowsComeInTheOrderOfTheirGroups() throws Exception {
         List<CalibrationItem> items = collectedOnLumen();
         int previous = -1;

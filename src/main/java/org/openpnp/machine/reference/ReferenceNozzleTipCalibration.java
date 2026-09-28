@@ -770,9 +770,16 @@ public class ReferenceNozzleTipCalibration extends AbstractModelObject {
             List<Location> nozzleTipMeasuredLocations = new ArrayList<>();
             List<Location> nozzleTipExpectedLocations = new ArrayList<>();
             int misdetects = 0;
+            boolean told = org.openpnp.machine.reference.calibration.CalibrationProgress.isAttached();
+            org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Angles"); //$NON-NLS-1$
             for (int i = 0; i <= angleSubdivisions; i++) {
                 // calc the current measurement-angle
                 double measureAngle = angleStart + (i * angleIncrement); 
+                if (told) {
+                    org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                            org.openpnp.Translations.getString("CalibrationProgress.NozzleTip.Angle"), //$NON-NLS-1$
+                            i + 1, angleSubdivisions + 1, Math.round(measureAngle)));
+                }
 
                 Logger.debug("[nozzleTipCalibration]i: {}, measureAngle: {}", i, measureAngle);
 
@@ -820,6 +827,12 @@ public class ReferenceNozzleTipCalibration extends AbstractModelObject {
             }
 
             nozzle.getMachine().getScripting().on("NozzleCalibration.Finished", params);
+            org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Fit"); //$NON-NLS-1$
+            if (told) {
+                org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                        org.openpnp.Translations.getString("CalibrationProgress.NozzleTip.Fit"), //$NON-NLS-1$
+                        nozzleTipMeasuredLocations.size(), misdetects));
+            }
 
             if (!calibrateCamera) {
                 if (this.runoutCompensationAlgorithm == RunoutCompensationAlgorithm.Model) {
@@ -885,6 +898,7 @@ public class ReferenceNozzleTipCalibration extends AbstractModelObject {
 
             if (!calibrateCamera) {
                 // Finish the background calibration, if images were successfully collected.  
+                org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Background"); //$NON-NLS-1$
                 finishBackgroundCalibration(referenceCamera, nozzle);
             }
 

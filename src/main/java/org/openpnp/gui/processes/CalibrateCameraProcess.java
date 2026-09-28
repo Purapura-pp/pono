@@ -49,6 +49,7 @@ import org.openpnp.gui.components.CameraView;
 import org.openpnp.gui.components.CameraViewFilter;
 import org.openpnp.machine.reference.ReferenceMachine;
 import org.openpnp.machine.reference.ReferenceNozzleTip;
+import org.openpnp.machine.reference.calibration.CalibrationProgress;
 import org.openpnp.machine.reference.camera.ReferenceCamera;
 import org.openpnp.machine.reference.camera.calibration.AdvancedCalibration;
 import org.openpnp.model.Configuration;
@@ -539,6 +540,7 @@ public abstract class CalibrateCameraProcess {
      */
     private boolean collectCalibrationPointsAlongRadialLinesAction() {
         Logger.trace("Entering collectCalibrationPointsAlongRadialLinesAction");
+        CalibrationProgress.phase(calibrationHeightIndex == 0 ? "Walk1" : "Walk2"); //$NON-NLS-1$ //$NON-NLS-2$
         List<double[]> testPattern3dPoints = new ArrayList<>();
         List<double[]> testPatternImagePoints = new ArrayList<>();
         cameraWalker.setSaveCoordinates(testPattern3dPoints, testPatternImagePoints);
@@ -696,6 +698,7 @@ public abstract class CalibrateCameraProcess {
                 
                 calibrationHeightIndex++;
                 if (calibrationHeightIndex >= numberOfCalibrationHeights) {
+                    CalibrationProgress.phase("Compute"); //$NON-NLS-1$
                     mainFrame.showInstructions("Camera Calibration Instructions/Status", 
                             "<html><body>" + "Processing calibration data - this may take a few seconds." + "</body></html>", 
                             true, false,  "Next", cancelActionListener, proceedActionListener);
@@ -1121,6 +1124,7 @@ public abstract class CalibrateCameraProcess {
     private void displayStatus(String status, Object... statusArguments) {
         String str = String.format(status, statusArguments);
         Logger.trace(str);
+        CalibrationProgress.detail(Translations.translateText(plain(str)));
         mainFrame.showInstructions("Camera Calibration Instructions/Status", 
                 "<html><body>" + str + "</body></html>", 
                 true, false, "Next", cancelActionListener, proceedActionListener);
@@ -1143,6 +1147,15 @@ public abstract class CalibrateCameraProcess {
                 "<html><body>" + str + "</body></html>", 
                 true, true,  "Next", cancelActionListener, proceedActionListener);
         this.proceedAction = proceedAction;
+        // The calibration page shows it where the step is, with the same two answers.
+        CalibrationProgress.phase(calibrationHeightIndex == 0 ? "Height1" : "Height2"); //$NON-NLS-1$ //$NON-NLS-2$
+        CalibrationProgress.person(plain(str), () -> proceedActionListener.actionPerformed(null),
+                () -> cancelActionListener.actionPerformed(null));
+    }
+
+    /** The text of instructions written as HTML, for where they are shown as text. */
+    private static String plain(String html) {
+        return html.replaceAll("(?i)<br\\s*/?>", "\n").replaceAll("<[^>]+>", "").trim(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
     }
     
     /**
@@ -1155,6 +1168,7 @@ public abstract class CalibrateCameraProcess {
             if (proceedAction != null) {
                 Thrunnable tempAction = proceedAction;
                 proceedAction = null;
+                CalibrationProgress.personDone();
                 try {
                     tempAction.thrun();
                 }

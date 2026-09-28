@@ -29,6 +29,7 @@ import java.util.Set;
 import org.openpnp.Translations;
 import org.openpnp.machine.reference.calibration.CalibrationPlan;
 import org.openpnp.machine.reference.calibration.SettingChange;
+import org.openpnp.machine.reference.solutions.MachineDiagnostics.TestGroup;
 import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Solutions;
 import org.openpnp.spi.Axis;
@@ -51,6 +52,8 @@ public final class CalibrationItem {
         Suggestion,
         /** A step that has to measure, move the machine, or have someone at it before it can say. */
         Measure,
+        /** A measurement group that only reports: what it finds points to the steps to do. */
+        Diagnostic,
         /** Nothing to do. */
         Done,
         /** Decided against, on this page or the issues page. */
@@ -112,12 +115,27 @@ public final class CalibrationItem {
     private final CalibrationStep step;
     private final List<Part> parts = new ArrayList<>();
     private boolean waiting;
+    private TestGroup group;
 
     CalibrationItem(Kind kind, String key, String title, CalibrationStep step) {
         this.kind = kind;
         this.key = key;
         this.title = title;
         this.step = step;
+    }
+
+    /** The measurement group of a diagnostic, or null. */
+    public TestGroup getGroup() {
+        return group;
+    }
+
+    void setGroup(TestGroup group) {
+        this.group = group;
+    }
+
+    /** How its step is carried out, or null for a suggestion or a diagnostic. */
+    public CalibrationStep.Way getWay() {
+        return step == null || kind == Kind.Suggestion ? null : step.getWay();
     }
 
     public Kind getKind() {

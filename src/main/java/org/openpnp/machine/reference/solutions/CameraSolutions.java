@@ -541,6 +541,7 @@ public class CameraSolutions implements Solutions.Subject  {
     }
 
     public void calibrateCameraSettling(Solutions.Issue issue, ReferenceMachine machine, HeadMountable movable, Location location) throws Exception {
+        org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Apply"); //$NON-NLS-1$
         VisionSolutions visionSolutions = machine.getVisionSolutions();
         camera.setSettleMethod(SettleMethod.Motion);
         camera.setSettleMaskCircle(0);
@@ -586,6 +587,10 @@ public class CameraSolutions implements Solutions.Subject  {
             movable.moveTo(location);
         }
         camera.lightSettleAndCapture();
+        org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                org.openpnp.Translations.getString("CalibrationProgress.Settle.Test"), //$NON-NLS-1$
+                org.openpnp.gui.support.DisplayNames.of(camera.getSettleMethod()),
+                camera.getRecordedComputeMilliseconds(), camera.getRecordedSettleMilliseconds()));
         Logger.debug("Settle test with method "+camera.getSettleMethod()+" has "
         + "compute time "+camera.getRecordedComputeMilliseconds()+"ms, "
         + "settle time "+camera.getRecordedSettleMilliseconds()+"ms.");
