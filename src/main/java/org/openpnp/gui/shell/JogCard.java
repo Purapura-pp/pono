@@ -111,7 +111,8 @@ public class JogCard extends JPanel {
             case Compact:
                 return 266;
             case Min:
-                return 218;
+                // Its note on two lines, as the English one is.
+                return 236;
             default:
                 return 142;
         }
@@ -354,8 +355,10 @@ public class JogCard extends JPanel {
             right.add(row(6, stateDot, grow(stateTitle), primary, moreButton));
             right.add(row(0, grow(controls.getHeadMountableCombo())));
             right.add(stepRow(24, false));
-            right.add(note("JogCard.InMenu.Short")); //$NON-NLS-1$
-            face.add(row(16, pads(m), grow(right)));
+            JComponent pads = pads(m);
+            right.add(note("JogCard.InMenu.Short", //$NON-NLS-1$
+                    WIDE_WIDTH - 2 * m.pad - pads.getPreferredSize().width - 16));
+            face.add(row(16, pads, grow(right)));
             styleHeader(Ui.Size.Sm, 30);
             return face;
         }
@@ -375,11 +378,19 @@ public class JogCard extends JPanel {
         face.add(pads(m));
         face.add(stepRow(m.step, true));
         if (level == Level.Min) {
-            face.add(note("JogCard.InMenu")); //$NON-NLS-1$
+            face.add(note("JogCard.InMenu", WIDTH - 2 * m.pad)); //$NON-NLS-1$
         }
         else {
             face.add(speedRow());
-            JPanel foot = new JPanel(new GridLayout(1, footButtons.size(), 5, 0));
+            // The five share the column's width, however long their words: in English they asked
+            // for a few pixels more than the column has, and the card was cut at the right.
+            JPanel foot = new JPanel(new GridLayout(1, footButtons.size(), 4, 0)) {
+                @Override
+                public Dimension getPreferredSize() {
+                    // Qualified: in a component, WIDTH alone is ImageObserver's.
+                    return new Dimension(JogCard.WIDTH - 2 * m.pad, super.getPreferredSize().height);
+                }
+            };
             foot.setOpaque(false);
             for (JButton button : footButtons) {
                 foot.add(button);
@@ -413,10 +424,11 @@ public class JogCard extends JPanel {
         showState();
     }
 
-    private JComponent note(String key) {
-        JLabel note = Ui.muted(Translations.getString(key));
+    /** A line of small print that wraps at the width given rather than widening the card. */
+    private JComponent note(String key, int width) {
+        JLabel note = Ui.muted("<html>" + Translations.getString(key) + "</html>"); //$NON-NLS-1$ //$NON-NLS-2$
         note.setFont(Ui.font(11f));
-        return note;
+        return Ui.wrapAt(note, width);
     }
 
     private JComponent stepRow(int height, boolean units) {
@@ -698,6 +710,7 @@ public class JogCard extends JPanel {
     private void foot(String key, Action action) {
         String text = Translations.getString(key);
         JButton button = Ui.button(text, null, Ui.Size.Xs, Ui.Variant.Default);
+        button.setFont(Ui.weighted(11f, Tokens.FW_BUTTON));
         // They move the machine: no focus stop for a stray space bar.
         button.setFocusable(false);
         // Five across 272 pixels leaves 50 each; the sheet's 8 pixel padding does not fit CJK text.
