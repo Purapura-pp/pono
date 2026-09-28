@@ -1028,7 +1028,7 @@ public class FormWizard extends AbstractConfigurationWizard {
     public List<Change> changes() {
         List<Change> changes = new ArrayList<>();
         for (Tracked t : tracked) {
-            if (t.binding.isChanged()) {
+            if (isEdited(t.binding) && t.binding.isChanged()) {
                 String label = t.axis == null ? t.field.label : t.field.label + " " + t.axis; //$NON-NLS-1$
                 changes.add(new Change(label, shown(t, t.binding.getSourceValue()),
                         shown(t, t.binding.getWrapper().getValue())));

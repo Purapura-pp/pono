@@ -63,6 +63,7 @@ final class ConnectionTopic extends Topic {
     private final List<FormWizard> driverForms = new ArrayList<>();
     private final JPanel hints = new JPanel();
     private Driver selected;
+    private Chip firmware;
 
     ConnectionTopic(MachineSettingsPanel page, ReferenceMachine machine) {
         super(MachineSettingsPanel.CONNECTION, "power"); //$NON-NLS-1$
@@ -153,14 +154,14 @@ final class ConnectionTopic extends Topic {
             driverForms.add(communications);
             column.add(MachineSettingsPanel.capped(communications));
             if (driver instanceof GcodeDriver) {
-                column.add(MachineSettingsPanel.capped(test((GcodeDriver) driver, communications)));
-                column.add(MachineSettingsPanel.capped(gcode((GcodeDriver) driver)));
                 FormWizard timing = forms.add(Form.of(driver).named(driver.getName())
                         .section("DriverForms.Timing", "clock") //$NON-NLS-1$ //$NON-NLS-2$
                         .integer("timeoutMilliseconds", "DriverForms.Timeout").unit("ms").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         .integer("connectWaitTimeMilliseconds", "DriverForms.ConnectWait").unit("ms").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         .build());
                 driverForms.add(timing);
+                column.add(MachineSettingsPanel.capped(test((GcodeDriver) driver, communications, timing)));
+                column.add(MachineSettingsPanel.capped(gcode((GcodeDriver) driver)));
                 column.add(MachineSettingsPanel.capped(timing));
             }
         }
@@ -179,7 +180,7 @@ final class ConnectionTopic extends Topic {
      * The test: the port opened, the firmware asked for with M115 and the port closed again, which
      * moves nothing. What is on screen is applied first, being what the user means to test.
      */
-    private JComponent test(GcodeDriver driver, FormWizard communications) {
+    private JComponent test(GcodeDriver driver, FormWizard... settings) {
         Forms.Section section = new Forms.Section("activity", Translations.getString("MachineSettings.Connection.Test")); //$NON-NLS-1$ //$NON-NLS-2$
         JButton test = Ui.button(Translations.getString("MachineSettings.Connection.Test.Do"), Ui.iconSm("activity"), //$NON-NLS-1$ //$NON-NLS-2$
                 Ui.Size.Sm, Ui.Variant.Default);
@@ -188,8 +189,23 @@ final class ConnectionTopic extends Topic {
         JLabel detail = Ui.t2(""); //$NON-NLS-1$
         detail.setFont(Ui.font(Tokens.FS_SMALL));
         test.addActionListener(e -> {
-            if (communications.hasEdits()) {
-                communications.apply();
+            boolean unapplied = false;
+            for (FormWizard form : settings) {
+                if (form.hasEdits()) {
+                    form.apply();
+                }
+                unapplied |= !form.changes().isEmpty();
+            }
+            if (unapplied) {
+                // An edit that fails its checks stays on screen unapplied, and the test would try
+                // the settings from before it.
+                String said = Translations.getString("MachineSettings.Connection.Test.Unapplied"); //$NON-NLS-1$
+                result.setVisible(true);
+                result.setTone(Chip.Tone.Err);
+                result.setText(Translations.getString("MachineSettings.Connection.Test.Failed")); //$NON-NLS-1$
+                detail.setText(said);
+                detail.setToolTipText(said);
+                return;
             }
             test.setEnabled(false);
             result.setVisible(true);
@@ -222,6 +238,7 @@ final class ConnectionTopic extends Topic {
                             : "MachineSettings.Connection.Test.Failed")); //$NON-NLS-1$
                     detail.setText(said);
                     detail.setToolTipText(said);
+                    describeFirmware();
                     page.refreshChecks();
                 });
             }, "Pono connection test"); //$NON-NLS-1$
@@ -240,9 +257,9 @@ final class ConnectionTopic extends Topic {
     /** The firmware as the controller reported it, and the way to the commands it is sent. */
     private JComponent gcode(GcodeDriver driver) {
         Forms.Section section = new Forms.Section("file", Translations.getString("MachineSettings.Connection.Gcode")); //$NON-NLS-1$ //$NON-NLS-2$
-        String firmware = driver.getFirmwareProperty("FIRMWARE_NAME", null); //$NON-NLS-1$
-        Chip chip = new Chip(firmware == null ? Translations.getString("MachineSettings.Connection.Firmware.Unknown") //$NON-NLS-1$
-                : firmware, firmware == null ? Chip.Tone.Pending : Chip.Tone.Ok, Chip.Shape.Status);
+        Chip chip = new Chip("", Chip.Tone.Pending, Chip.Shape.Status); //$NON-NLS-1$
+        firmware = chip;
+        describeFirmware();
         JButton commands = Ui.button(Translations.getString("MachineSettings.Connection.Commands"), Ui.iconSm("tree"), //$NON-NLS-1$ //$NON-NLS-2$
                 Ui.Size.Sm, Ui.Variant.Ghost);
         commands.addActionListener(e -> page.showInTree(driver));
@@ -272,9 +289,25 @@ final class ConnectionTopic extends Topic {
         hints.repaint();
     }
 
+    /** The firmware the selected driver's controller last reported: a test or a connection asks. */
+    private void describeFirmware() {
+        if (firmware == null || !(selected instanceof GcodeDriver)) {
+            return;
+        }
+        String name = ((GcodeDriver) selected).getFirmwareProperty("FIRMWARE_NAME", null); //$NON-NLS-1$
+        firmware.setText(name == null ? Translations.getString("MachineSettings.Connection.Firmware.Unknown") : name); //$NON-NLS-1$
+        firmware.setTone(name == null ? Chip.Tone.Pending : Chip.Tone.Ok);
+    }
+
+    @Override
+    void shown() {
+        describeFirmware();
+    }
+
     @Override
     void checksChanged() {
         showHints();
+        describeFirmware();
     }
 
     private static JComponent hint(SetupChecks.Check check) {

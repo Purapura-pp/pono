@@ -155,6 +155,24 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
         this.container = container;
         this.configuration = configuration;
         configuration.getBus().register(this);
+        if (container != null) {
+            // The feeders are switched on and given their parts on a page of their own: the
+            // status column looks at them again each time this page comes back.
+            container.addHierarchyListener(e -> {
+                if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0
+                        && container.isShowing()) {
+                    feedersChanged();
+                }
+            });
+        }
+    }
+
+    /** The feeders are looked at again for the status column. */
+    public void feedersChanged() {
+        partsWithEnabledFeeder = null;
+        if (getRowCount() > 0) {
+            fireTableRowsUpdated(0, getRowCount() - 1);
+        }
     }
     
     @Subscribe
@@ -630,9 +648,8 @@ public class PlacementsHolderPlacementsTableModel extends AbstractObjectTableMod
      * whole table when it is sorted by that column, so the work was the placement count times the
      * feeder count.
      * <p>
-     * Built on first use after the table data changes. A feeder enabled or reassigned while this
-     * table is on screen is therefore not reflected until the table reloads - which was already
-     * the case, since nothing here listens for feeder changes to repaint in the first place.
+     * Built on first use after the table data changes, and again each time the page with the
+     * table comes on screen: the feeders are switched on and given their parts on another page.
      * <p>
      * Membership is by identity, matching the reference comparison this replaces.
      */

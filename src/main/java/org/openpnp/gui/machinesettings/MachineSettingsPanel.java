@@ -25,6 +25,7 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.awt.event.HierarchyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -164,6 +165,11 @@ public class MachineSettingsPanel extends JPanel {
         main.add(foot, BorderLayout.SOUTH);
         add(nav, BorderLayout.WEST);
         add(main, BorderLayout.CENTER);
+        addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) {
+                pageShown();
+            }
+        });
 
         configuration.addListener(new ConfigurationListener.Adapter() {
             @Override
@@ -301,16 +307,24 @@ public class MachineSettingsPanel extends JPanel {
                 previous.hidden();
             }
             current = topic;
-            if (!topic.isBuilt() || topic.view().getParent() != cards) {
+            boolean built = topic.isBuilt();
+            if (!built || topic.view().getParent() != cards) {
                 cards.add(topic.view(), topic.key);
             }
             ((CardLayout) cards.getLayout()).show(cards, topic.key);
             for (Map.Entry<Topic, TopicItem> entry : items.entrySet()) {
                 entry.getValue().setActive(entry.getKey() == topic);
             }
+            if (built) {
+                topic.forms.reloadUnedited();
+            }
             topic.shown();
             if (ADVANCED.equals(topic.key)) {
                 tree.selectCurrentTreePath();
+            }
+            if (previous != null && ADVANCED.equals(previous.key)) {
+                // The tree's forms apply to the machine directly, not through this page.
+                refreshChecks();
             }
             describeIssues();
             describeFoot();
@@ -324,11 +338,40 @@ public class MachineSettingsPanel extends JPanel {
     }
 
     /**
+     * The page came on screen again. The other pages - a calibration, the properties column - may
+     * have changed the machine meanwhile, and the topic on show and the counts are brought up to
+     * date.
+     */
+    private void pageShown() {
+        if (machine == null || selecting) {
+            return;
+        }
+        if (current != null && current.isBuilt() && !ADVANCED.equals(current.key)) {
+            current.forms.reloadUnedited();
+            current.shown();
+        }
+        refreshChecks();
+        describeFoot();
+    }
+
+    /**
      * Asks about the edits on the topic on show that were never applied, and does what the user
      * says: applies them, or throws them away. False when the user would rather stay.
      */
     public boolean settleUnappliedEdits() {
-        if (current == null || !current.forms.isDirty()) {
+        if (current == null) {
+            return true;
+        }
+        if (current.forms.isBlocked()) {
+            // An edit failing its checks cannot be applied: it is corrected, or thrown away with
+            // the rest.
+            if (askBlocked(this, current.title()) != 0) {
+                return false;
+            }
+            current.forms.reset();
+            return true;
+        }
+        if (!current.forms.isDirty()) {
             return true;
         }
         int selection = askUnapplied(this, current.title());
@@ -357,6 +400,16 @@ public class MachineSettingsPanel extends JPanel {
                 Dialogs.Choice.primary(Translations.getString("PropertySheetPresenter.ApplyChanges.Apply"))); //$NON-NLS-1$
     }
 
+    /** The question about edits that fail their checks: 0 to throw the page's edits away, anything else to stay. */
+    static int askBlocked(Component parent, String name) {
+        return Dialogs.ask(parent, Dialogs.Tone.Warn, "edit", //$NON-NLS-1$
+                Translations.getString("MachineSettings.Blocked.Title"), //$NON-NLS-1$
+                Translations.getString("MachineSettings.Blocked.Message").replace("%s", name), //$NON-NLS-1$ //$NON-NLS-2$
+                null,
+                Dialogs.Choice.plain(Translations.getString("MachineSettings.Blocked.Discard")), //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("MachineSettings.Blocked.Stay"))); //$NON-NLS-1$
+    }
+
     /** The foot says what Apply would write, and is there only for a topic with forms. */
     private void describeFoot() {
         boolean forms = current != null && !current.forms.isEmpty();
@@ -372,6 +425,7 @@ public class MachineSettingsPanel extends JPanel {
             pending.setText(Translations.getString(blocked ? "MachineSettings.Foot.Blocked" //$NON-NLS-1$
                     : dirty ? "MachineSettings.Foot.Edited" : "MachineSettings.Foot.None")); //$NON-NLS-1$ //$NON-NLS-2$
             pending.setFont(Ui.font(Tokens.FS_SMALL));
+            pending.setToolTipText(null);
         }
         else {
             FormWizard.Change first = changes.get(0);

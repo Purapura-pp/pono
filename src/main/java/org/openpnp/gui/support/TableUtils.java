@@ -252,7 +252,8 @@ public class TableUtils {
             }
         });
         table.getModel().addTableModelListener(e -> {
-            if (e.getFirstRow() == TableModelEvent.HEADER_ROW || e.getType() != TableModelEvent.UPDATE
+            // A null event is everything changed, as JTable takes it.
+            if (e == null || e.getFirstRow() == TableModelEvent.HEADER_ROW || e.getType() != TableModelEvent.UPDATE
                     || e.getLastRow() == Integer.MAX_VALUE) {
                 SwingUtilities.invokeLater(fit);
             }
@@ -340,6 +341,14 @@ public class TableUtils {
         else {
             java.awt.Toolkit.getDefaultToolkit().beep();
         }
+    }
+
+    /**
+     * Says why under a cell, as a refusal does: for a value set from a menu rather than in the
+     * cell. A hidden column says it under the row's first.
+     */
+    public static void explained(JTable table, int viewRow, int viewColumn, String reason) {
+        SwingUtilities.invokeLater(() -> showRejection(table, viewRow, Math.max(0, viewColumn), reason));
     }
 
     /** Why a value was refused, in the words the user needs: a number, mostly. */

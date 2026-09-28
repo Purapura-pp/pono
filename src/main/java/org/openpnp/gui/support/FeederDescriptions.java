@@ -243,6 +243,30 @@ public final class FeederDescriptions {
                         String.join(Translations.getString("FeederDescriptions.ListSeparator"), missing)); //$NON-NLS-1$
             }
         }
+        // A slot is on once a feeder with a part is in it.
+        boolean slot = false;
+        boolean inSlot = false;
+        boolean fed = false;
+        if (feeder instanceof org.openpnp.machine.reference.feeder.ReferenceSlotAutoFeeder) {
+            org.openpnp.machine.reference.feeder.ReferenceSlotAutoFeeder.Feeder in =
+                    ((org.openpnp.machine.reference.feeder.ReferenceSlotAutoFeeder) feeder).getFeeder();
+            slot = true;
+            inSlot = in != null;
+            fed = in != null && in.getPart() != null;
+        }
+        else if (feeder instanceof org.openpnp.machine.reference.feeder.SlotSchultzFeeder) {
+            org.openpnp.machine.reference.feeder.SlotSchultzFeeder.Feeder in =
+                    ((org.openpnp.machine.reference.feeder.SlotSchultzFeeder) feeder).getFeeder();
+            slot = true;
+            inSlot = in != null;
+            fed = in != null && in.getPart() != null;
+        }
+        if (slot && !inSlot) {
+            return Translations.getString("FeederDescriptions.NotEnabled.Slot.NoFeeder"); //$NON-NLS-1$
+        }
+        if (slot && !fed) {
+            return Translations.getString("FeederDescriptions.NotEnabled.Slot.NoPart"); //$NON-NLS-1$
+        }
         return Translations.getString("FeederDescriptions.NotEnabled"); //$NON-NLS-1$
     }
 

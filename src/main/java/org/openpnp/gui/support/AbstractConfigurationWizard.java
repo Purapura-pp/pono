@@ -23,7 +23,9 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.awt.event.ActionEvent;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -32,9 +34,12 @@ import javax.swing.JButton;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 
+import org.jdesktop.beansbinding.AbstractBindingListener;
 import org.jdesktop.beansbinding.AutoBinding;
 import org.jdesktop.beansbinding.AutoBinding.UpdateStrategy;
+import org.jdesktop.beansbinding.Binding;
 import org.jdesktop.beansbinding.Converter;
+import org.jdesktop.beansbinding.PropertyStateEvent;
 import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.JBindings.WrappedBinding;
@@ -54,6 +59,13 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
     
     private List<AutoBinding> autoBindings = new ArrayList<>();
     private List<WrappedBinding> wrappedBindings = new ArrayList<>();
+    /**
+     * The bindings whose field was edited since the form was loaded or applied, the ones Apply
+     * writes. A field left alone keeps the value it was loaded with, which is out of date once
+     * something else - a calibration, another page - changed an object that does not report its
+     * changes, and writing it back would undo that.
+     */
+    private final Set<WrappedBinding> edited = new HashSet<>();
     private ApplyResetBindingListener listener;
     
     protected String id;
@@ -115,6 +127,7 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
         for (WrappedBinding wrappedBinding : wrappedBindings) {
             wrappedBinding.reset();
         }
+        edited.clear();
         applyAction.setEnabled(false);
         resetAction.setEnabled(false);
     }
@@ -137,8 +150,11 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
             return;
         }
         for (WrappedBinding wrappedBinding : wrappedBindings) {
-            wrappedBinding.save();
+            if (edited.contains(wrappedBinding)) {
+                wrappedBinding.save();
+            }
         }
+        edited.clear();
         applyAction.setEnabled(false);
         resetAction.setEnabled(false);
         if (modifiesConfiguration()) {
@@ -214,8 +230,19 @@ public abstract class AbstractConfigurationWizard extends JPanel implements Wiza
 
     public WrappedBinding addWrappedBinding(WrappedBinding binding) {
         binding.addBindingListener(listener);
+        binding.addBindingListener(new AbstractBindingListener() {
+            @Override
+            public void targetChanged(Binding changed, PropertyStateEvent event) {
+                edited.add(binding);
+            }
+        });
         wrappedBindings.add(binding);
         return binding;
+    }
+
+    /** Whether the field of a binding was edited since the form was loaded or applied. */
+    protected boolean isEdited(WrappedBinding binding) {
+        return edited.contains(binding);
     }
 
     /**

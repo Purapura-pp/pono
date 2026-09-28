@@ -33,6 +33,7 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
 import org.openpnp.Translations;
@@ -143,7 +144,8 @@ final class CamerasTopic extends Topic {
         }
         for (FormWizard form : cameraForms) {
             if (form.hasEdits()) {
-                int choice = MachineSettingsPanel.askUnapplied(cameraHolder, selected.getName());
+                int choice = MachineSettingsPanel.askUnapplied(cameraHolder,
+                        (selected != null ? selected : camera).getName());
                 if (choice == 1) {
                     form.apply();
                 }
@@ -227,13 +229,33 @@ final class CamerasTopic extends Topic {
                 lights.add(actuator);
             }
         }
+        Camera.Looking looking = camera.getLooking();
         return Form.of(camera).named(camera.getName())
                 .section("MachineSettings.Cameras.Mount", "sliders") //$NON-NLS-1$ //$NON-NLS-2$
                 .segmented("looking", "CameraConfigurationWizard.PropertiesPanel.LookingLabel.text", Camera.Looking.class) //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("lightActuator", "CameraConfigurationWizard.LightPanel.LightActuatorLabel.text", lights, null) //$NON-NLS-1$ //$NON-NLS-2$
                 .toggle("beforeCaptureLightOn", "CameraForm.Light.Before", "CameraForm.Light.Before.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .visibleWhen("lightActuator", Objects::nonNull) //$NON-NLS-1$
+                .onApply(f -> {
+                    if (camera.getLooking() != looking) {
+                        // What was measured differs for a camera looking up: its forms are built
+                        // again, once the others applied.
+                        SwingUtilities.invokeLater(() -> rebuild(camera));
+                    }
+                })
                 .build();
+    }
+
+    /** The selected camera's forms built afresh, and every card saying again how it looks. */
+    private void rebuild(ReferenceCamera camera) {
+        if (camera != selected) {
+            return;
+        }
+        selected = null;
+        select(camera);
+        for (CameraCard card : cards) {
+            card.describe();
+        }
     }
 
     /** What the calibration measured, read only, with the step that measures it at the right. */

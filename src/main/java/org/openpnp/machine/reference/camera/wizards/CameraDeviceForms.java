@@ -365,9 +365,22 @@ public final class CameraDeviceForms {
                 .visibleWhen("freezeProperties", Boolean.TRUE::equals) //$NON-NLS-1$
                 .onChange(f -> {
                     Object chosen = f.value("device"); //$NON-NLS-1$
-                    if (chosen != device[0]) {
+                    if (!java.util.Objects.equals(chosen, device[0])) {
                         device[0] = chosen;
-                        f.setItems("formatName", formats((CaptureDevice) chosen)); //$NON-NLS-1$
+                        List<String> items = formats((CaptureDevice) chosen);
+                        String own = camera.getFormatName();
+                        if (own != null && java.util.Objects.equals(chosen, camera.getDevice())) {
+                            // Back on the camera's own device, as Reset puts it: its format with it,
+                            // rather than the first of the list.
+                            if (!items.contains(own)) {
+                                items.add(0, own);
+                            }
+                            f.setItems("formatName", items); //$NON-NLS-1$
+                            f.set("formatName", own); //$NON-NLS-1$
+                        }
+                        else {
+                            f.setItems("formatName", items); //$NON-NLS-1$
+                        }
                     }
                 })
                 .onReload(f -> controls.load())

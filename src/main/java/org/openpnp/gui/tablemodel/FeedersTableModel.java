@@ -195,8 +195,18 @@ public class FeedersTableModel extends AbstractObjectTableModel implements Table
     public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
         try {
             Feeder feeder = feeders.get(rowIndex);
+            // The editor starts from what the cell shows: an unconfigured Photon feeder's title,
+            // a dash for no slot. Committed unchanged, it is not a name.
+            if ((columnIndex == NAME || columnIndex == SLOT)
+                    && java.util.Objects.equals(aValue, getValueAt(rowIndex, columnIndex))) {
+                return;
+            }
             if (columnIndex == NAME) {
                 feeder.setName((String) aValue);
+                if (feeder instanceof org.openpnp.machine.photon.PhotonFeeder
+                        && ((org.openpnp.machine.photon.PhotonFeeder) feeder).getHardwareId() == null) {
+                    TableUtils.explained(this, Translations.getString("FeedersTableModel.PhotonNameLater")); //$NON-NLS-1$
+                }
             }
             else if (columnIndex == SLOT) {
                 ((org.openpnp.spi.base.AbstractFeeder) feeder).setSlotName((String) aValue);

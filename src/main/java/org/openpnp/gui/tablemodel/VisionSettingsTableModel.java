@@ -143,6 +143,11 @@ public class VisionSettingsTableModel extends AbstractObjectTableModel
     public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
         AbstractVisionSettings visionSettings = this.visionSettings.get(rowIndex);
         if (columnIndex == NAME) {
+            // The editor starts from the name as shown, which for the two built-in settings is
+            // translated: written back unchanged, it would rename them from their stored names.
+            if (java.util.Objects.equals(aValue, DisplayNames.visionSettingsName(visionSettings.getName()))) {
+                return;
+            }
             visionSettings.setName((String) aValue);
             configuration.setDirty(true);
         }

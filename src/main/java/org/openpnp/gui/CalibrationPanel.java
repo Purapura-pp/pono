@@ -455,6 +455,12 @@ public class CalibrationPanel extends JPanel {
                 }
             }
         });
+        // What the other pages changed - a setting, a nozzle tip - shows when the page comes back.
+        addHierarchyListener(e -> {
+            if ((e.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) {
+                refresh();
+            }
+        });
         describe();
     }
 
@@ -1130,9 +1136,13 @@ public class CalibrationPanel extends JPanel {
         }
         catch (Exception e) {
             Logger.warn(e, "Calibration: the machine could not be written out to compare."); //$NON-NLS-1$
+            snapshotFailure = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             return null;
         }
     }
+
+    /** Why machine.xml could not be written out for a comparison during the run, for its report. */
+    private String snapshotFailure;
 
     private void start(List<String> keys, Set<String> leaveOut) {
         live.clear();
@@ -1225,6 +1235,8 @@ public class CalibrationPanel extends JPanel {
         runner = null;
         frame.getStatusBar().setBusy(false);
         frame.hideInstructions();
+        // The steps whose changes could not be recorded, and so neither applied nor undone here.
+        List<String> unrecorded = new ArrayList<>();
         for (CalibrationRunner.Result result : session.getResults()) {
             if (result.getOutcome() != CalibrationRunner.Outcome.Done) {
                 continue;
@@ -1233,7 +1245,11 @@ public class CalibrationPanel extends JPanel {
             CalibrationPlan.Step step = started == null ? null : started.getStep(key);
             String was = before.get(key);
             String is = after.containsKey(key) ? after.get(key) : snapshot();
-            if (step == null || was == null || is == null) {
+            if (step == null) {
+                continue;
+            }
+            if (was == null || is == null) {
+                unrecorded.add(result.getTitle());
                 continue;
             }
             List<SettingsDiff.Difference> differences;
@@ -1243,6 +1259,7 @@ public class CalibrationPanel extends JPanel {
             catch (Exception e) {
                 Logger.warn(e, "Calibration: comparing machine.xml before and after {} failed.", key); //$NON-NLS-1$
                 differences = List.of();
+                unrecorded.add(result.getTitle());
             }
             MachineDiagnostics.CompensationOutcome compensation = step.getKind() == CalibrationStep.FrameCompensation
                     ? machinery.getLastCompensation() : null;
@@ -1276,6 +1293,17 @@ public class CalibrationPanel extends JPanel {
         if (session.getFailure() != null) {
             text.append('\n').append(Translations.translateText(session.getFailure())).append('\n');
         }
+        if (!unrecorded.isEmpty()) {
+            text.append('\n').append(Translations.getString("CalibrationPanel.Report.Unrecorded")).append('\n'); //$NON-NLS-1$
+            for (String title : unrecorded) {
+                text.append("    ").append(title).append('\n'); //$NON-NLS-1$
+            }
+            if (snapshotFailure != null) {
+                text.append(String.format(Translations.getString("CalibrationPanel.Report.Unrecorded.Why"), //$NON-NLS-1$
+                        org.openpnp.gui.shell.ErrorMessages.explain(null, snapshotFailure).what)).append('\n');
+            }
+        }
+        snapshotFailure = null;
         report.setText(text.toString());
         report.setCaretPosition(0);
         live.clear();

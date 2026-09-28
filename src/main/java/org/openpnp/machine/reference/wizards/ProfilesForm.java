@@ -118,6 +118,12 @@ public final class ProfilesForm {
                     String tip = row < 0 ? null : profiles.getToolTipAt(row, column);
                     return tip != null ? tip : super.getToolTipText(e);
                 }
+
+                @Override
+                public void setValueAt(Object value, int row, int column) {
+                    super.setValueAt(value, row, column);
+                    changed();
+                }
             };
             table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
             table.getSelectionModel().addListSelectionListener(e -> updateButtons());
@@ -148,7 +154,19 @@ public final class ProfilesForm {
                 form.apply();
             }
             UiUtils.messageBoxOnException(change);
+            changed();
             updateButtons();
+        }
+
+        /** The table is edited in place, without Apply: the configuration is told it has something to save. */
+        private void changed() {
+            if (actuator.getMachine() instanceof org.openpnp.spi.base.AbstractMachine) {
+                org.openpnp.model.Configuration configuration =
+                        ((org.openpnp.spi.base.AbstractMachine) actuator.getMachine()).getConfiguration();
+                if (configuration != null) {
+                    configuration.setDirty(true);
+                }
+            }
         }
 
         private Profile selected() {

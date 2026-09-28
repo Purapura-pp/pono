@@ -90,10 +90,18 @@ public final class FeederStockForm {
                 .validate(FeederStockForm::nonNegative, "FeederStockForm.NotNegative") //$NON-NLS-1$
                 .readOnly("lastPick", "FeederStockForm.LastPick") //$NON-NLS-1$ //$NON-NLS-2$
                 .action("FeederStockForm.Refill", "refresh", () -> { //$NON-NLS-1$ //$NON-NLS-2$
+                    // The count typed is what the feeder is refilled to.
+                    if (form[0].hasEdits()) {
+                        form[0].apply();
+                    }
+                    if (!form[0].changes().isEmpty()) {
+                        return;
+                    }
                     feeder.refill(null);
                     form[0].reload();
                 });
         form[0] = builder.build();
+        form[0].putClientProperty(org.openpnp.gui.shell.InspectorPanel.LIVE, Boolean.TRUE);
         return form[0];
     }
 

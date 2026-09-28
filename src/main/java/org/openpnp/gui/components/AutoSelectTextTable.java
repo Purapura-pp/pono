@@ -167,8 +167,10 @@ public class AutoSelectTextTable extends JTable {
      */
     public boolean editCellAt(int row, int column, EventObject e) {
         TableCellEditor editor = getCellEditor(row, column);
-        if (!isCellSelected(row, column)) {
-            // do not show editor when clicked cell from outside. First select cell and next open editor
+        if (!isCellSelected(row, column) && getColumnClass(column) != Boolean.class) {
+            // A text cell clicked from outside is selected first and edited with the next click. A
+            // switch or a check box is switched with the first: the table asks to edit before it
+            // selects, so it would take two clicks.
             return false;
         }
         boolean result = super.editCellAt(row, column, e);

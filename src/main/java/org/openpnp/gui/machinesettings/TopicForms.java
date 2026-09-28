@@ -120,6 +120,23 @@ final class TopicForms implements WizardContainer {
         changed();
     }
 
+    /**
+     * Shows again what the objects hold in the forms without edits, as a calibration or another
+     * page may have changed them meanwhile. A form with edits keeps them for Apply.
+     */
+    void reloadUnedited() {
+        boolean reloaded = false;
+        for (FormWizard form : new ArrayList<>(forms)) {
+            if (!form.hasEdits() && form.changes().isEmpty()) {
+                form.reload();
+                reloaded = true;
+            }
+        }
+        if (reloaded) {
+            changed();
+        }
+    }
+
     void dispose() {
         for (FormWizard form : forms) {
             form.dispose();

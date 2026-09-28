@@ -58,8 +58,13 @@ public final class Backups {
         return backups;
     }
 
-    /** Puts backed up files back where they were, over what was written since. */
-    static void restore(File directory, List<File> backups) {
+    /**
+     * Puts backed up files back where they were, over what was written since.
+     *
+     * @return The backups that could not be put back, which the user is to copy back by hand.
+     */
+    static List<File> restore(File directory, List<File> backups) {
+        List<File> left = new ArrayList<>();
         for (File backup : backups) {
             String name = backup.getName();
             File original = new File(directory, name.substring(0, name.indexOf(".before-"))); //$NON-NLS-1$
@@ -68,8 +73,10 @@ public final class Backups {
             }
             catch (Exception e) {
                 Logger.error(e, "Could not put {} back from {}.", original, backup); //$NON-NLS-1$
+                left.add(backup);
             }
         }
+        return left;
     }
 
     private static String stamp() {

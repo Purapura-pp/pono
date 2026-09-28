@@ -177,9 +177,11 @@ public class InspectorPanel extends RoundedPanel {
         footer.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(1, 0, 0, 0, Ui.border()),
                 new EmptyBorder(10, 16, 10, 16)));
-        resetButton.addActionListener(e -> forEachWizard(org.openpnp.gui.support.AbstractConfigurationWizard::reset));
+        resetButton.addActionListener(e -> forEachWizard(InspectorPanel::edited,
+                org.openpnp.gui.support.AbstractConfigurationWizard::reset));
         footer.add(resetButton);
-        applyButton.addActionListener(e -> forEachWizard(org.openpnp.gui.support.AbstractConfigurationWizard::apply));
+        applyButton.addActionListener(e -> forEachWizard(wizard -> Boolean.TRUE.equals(wizard.isDirty()),
+                org.openpnp.gui.support.AbstractConfigurationWizard::apply));
         footer.add(applyButton);
         footer.setVisible(false);
         add(footer, BorderLayout.SOUTH);
@@ -237,13 +239,43 @@ public class InspectorPanel extends RoundedPanel {
         }
     }
 
-    private void forEachWizard(java.util.function.Consumer<org.openpnp.gui.support.AbstractConfigurationWizard> action) {
+    private void forEachWizard(java.util.function.Predicate<org.openpnp.gui.support.AbstractConfigurationWizard> which,
+            java.util.function.Consumer<org.openpnp.gui.support.AbstractConfigurationWizard> action) {
         for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
-            if (wizard.isDirty()) {
+            if (which.test(wizard)) {
                 action.accept(wizard);
             }
         }
     }
+
+    /** Whether a wizard holds edits: ones Apply writes, or ones failing their checks that only Reset takes back. */
+    private static boolean edited(org.openpnp.gui.support.AbstractConfigurationWizard wizard) {
+        return Boolean.TRUE.equals(wizard.isDirty()) || wizard instanceof org.openpnp.gui.form.FormWizard
+                && !((org.openpnp.gui.form.FormWizard) wizard).changes().isEmpty();
+    }
+
+    /** Set on a form whose values change by themselves, a feeder's stock: see reloadLive(). */
+    public static final String LIVE = "Pono.form.live"; //$NON-NLS-1$
+
+    /**
+     * Shows again, in the live forms of the object on show that hold no edits, what the object did
+     * by itself: a feeder picked from in a job.
+     */
+    public void reloadLive(Object subject) {
+        if (subject == null || presenter.getShown() != subject) {
+            return;
+        }
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            if (wizard instanceof org.openpnp.gui.form.FormWizard
+                    && Boolean.TRUE.equals(wizard.getClientProperty(LIVE)) && !edited(wizard)) {
+                ((org.openpnp.gui.form.FormWizard) wizard).reload();
+            }
+        }
+    }
+
+    /** The forms whose edits the footer follows, each once however often the sheets are adopted. */
+    private final java.util.Set<org.openpnp.gui.form.FormWizard> following =
+            java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
 
     /** One footer for all the sheets: it lights up while any of them has something to apply. */
     private void adoptWizards() {
@@ -252,6 +284,11 @@ public class InspectorPanel extends RoundedPanel {
             wizard.setActionsShown(false);
             wizard.getApplyAction().removePropertyChangeListener(dirtyListener);
             wizard.getApplyAction().addPropertyChangeListener(dirtyListener);
+            if (wizard instanceof org.openpnp.gui.form.FormWizard
+                    && following.add((org.openpnp.gui.form.FormWizard) wizard)) {
+                // An edit failing its checks leaves Apply as it was: the form says so itself.
+                ((org.openpnp.gui.form.FormWizard) wizard).onEdited(this::followDirty);
+            }
             any = true;
         }
         footer.setVisible(any && !collapsed);
@@ -260,10 +297,12 @@ public class InspectorPanel extends RoundedPanel {
 
     private void followDirty() {
         boolean dirty = false;
+        boolean resettable = false;
         for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
-            dirty |= wizard.isDirty();
+            dirty |= Boolean.TRUE.equals(wizard.isDirty());
+            resettable |= edited(wizard);
         }
-        resetButton.setEnabled(dirty);
+        resetButton.setEnabled(resettable);
         applyButton.setEnabled(dirty);
         if (resetButton.getClientProperty(Ui.WHY_DISABLED) == null) {
             java.util.function.Supplier<String> none = () -> Translations.getString("InspectorPanel.Disabled.NoChanges"); //$NON-NLS-1$
