@@ -116,6 +116,56 @@ public class FormTest {
         public void touch() {
             firePropertyChange("name", null, null);
         }
+
+        private String tool = "A";
+
+        public String getTool() {
+            return tool;
+        }
+
+        public void setTool(String tool) {
+            String old = this.tool;
+            this.tool = tool;
+            firePropertyChange("tool", old, tool);
+        }
+    }
+
+    /** A choice with none among its items, as an actuator not used is. */
+    private FormWizard toolForm(Sample sample) {
+        FormWizard form = Form.of(sample).preferences(MM)
+                .section("Basic", "info")
+                .choice("tool", "Tool", java.util.Arrays.asList(null, "A", "B"), null)
+                .build();
+        form.setWizardContainer(CONTAINER);
+        return form;
+    }
+
+    @Test
+    public void choosingNoneIsAnEditThatApplyWrites() {
+        Sample sample = new Sample();
+        FormWizard form = toolForm(sample);
+        JComboBox<?> combo = all(form, JComboBox.class).get(0);
+        assertEquals("A", combo.getSelectedItem());
+
+        combo.setSelectedItem(null);
+
+        assertEquals(1, form.changes().size(), "choosing none is an edit");
+        form.apply();
+        assertEquals(null, sample.getTool());
+    }
+
+    @Test
+    public void choosingSomethingOverNoneIsAnEditThatApplyWrites() {
+        Sample sample = new Sample();
+        sample.setTool(null);
+        FormWizard form = toolForm(sample);
+        JComboBox<?> combo = all(form, JComboBox.class).get(0);
+
+        combo.setSelectedItem("B");
+
+        assertEquals(1, form.changes().size(), "choosing a tool over none is an edit");
+        form.apply();
+        assertEquals("B", sample.getTool());
     }
 
     private static final WizardContainer CONTAINER = new WizardContainer() {
