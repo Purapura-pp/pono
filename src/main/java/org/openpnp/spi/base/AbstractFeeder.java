@@ -34,8 +34,9 @@ public abstract class AbstractFeeder extends AbstractMachineElement implements F
     @Attribute
     protected boolean enabled;
 
+    /** Required in machine.xml: empty rather than null for no part, as setPart(null) leaves it. */
     @Attribute
-    protected String partId;
+    protected String partId = "";
     
     /**
      * Note: This is feedRetryCount in reality. It was left as retryCount for backwards

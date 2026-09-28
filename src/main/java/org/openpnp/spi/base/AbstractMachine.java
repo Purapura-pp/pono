@@ -467,8 +467,9 @@ public abstract class AbstractMachine extends AbstractModelObject implements Mac
         int index = axes.indexOf(axis);
         if (axes.remove(axis)) {
             fireIndexedPropertyChange("axes", index, axis, null);
-            // Purge it out of Head-Mountables.
-            for (Head head : getHeads()) {
+            // Purge it out of Head-Mountables, which hold an axis by its type: one not given a
+            // type yet is held by none.
+            for (Head head : axis.getType() == null ? java.util.List.<Head>of() : getHeads()) {
                 for (HeadMountable hm : head.getHeadMountables()) {
                     if (hm.getAxis(axis.getType()) == axis) {
                         ((AbstractHeadMountable)hm).setAxis(null, axis.getType());
