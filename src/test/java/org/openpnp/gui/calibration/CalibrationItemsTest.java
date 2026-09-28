@@ -14,10 +14,12 @@ import java.util.List;
 
 import javax.swing.SwingUtilities;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.openpnp.Translations;
 import org.openpnp.gui.machinesettings.SetupChecks;
+import org.openpnp.gui.machinesettings.SetupIssues;
 import org.openpnp.machine.reference.ReferenceMachine;
 import org.openpnp.machine.reference.ReferenceNozzleTip;
 import org.openpnp.machine.reference.calibration.CalibrationPlan;
@@ -32,6 +34,16 @@ import org.openpnp.model.Solutions;
 public class CalibrationItemsTest {
     @TempDir
     Path tempDir;
+
+    private ReferenceMachine machine;
+
+    /** A collection opens the machine's cameras, which render frames until the machine is closed. */
+    @AfterEach
+    public void tearDown() throws Exception {
+        if (machine != null) {
+            machine.close();
+        }
+    }
 
     private static MachinePreset lumen() throws Exception {
         for (MachinePreset preset : MachinePresets.builtIn()) {
@@ -51,7 +63,7 @@ public class CalibrationItemsTest {
         MachinePresets.apply(lumen(), configuration);
         Configuration.initialize(configuration);
         Configuration.get().load();
-        ReferenceMachine machine = (ReferenceMachine) Configuration.get().getMachine();
+        machine = (ReferenceMachine) Configuration.get().getMachine();
         List<Solutions.Issue> tagged = new ArrayList<>();
         SwingUtilities.invokeAndWait(() -> tagged.addAll(CalibrationPlan.scan(machine, machine.getSolutions())));
         CalibrationPlan plan = CalibrationPlan.of(machine, tagged);
@@ -59,7 +71,7 @@ public class CalibrationItemsTest {
             machine.getSolutions().findIssues();
             machine.getSolutions().publishIssues();
         });
-        return CalibrationItems.of(plan, machine.getSolutions().getIssues(), SetupChecks.of(machine), List.of());
+        return CalibrationItems.of(plan, machine.getSolutions().getIssues(), List.of());
     }
 
     private static CalibrationItem find(List<CalibrationItem> items, CalibrationItem.Kind kind, String title) {
@@ -88,22 +100,18 @@ public class CalibrationItemsTest {
     }
 
     @Test
-    public void whatTheMachineSettingsPageShowsIsAHintAndNoIssue() throws Exception {
+    public void whatTheMachineSettingsPageShowsIsNotOnTheCalibrationPage() throws Exception {
         List<CalibrationItem> items = collectedOnLumen();
-        CalibrationItem diameter = null;
         for (CalibrationItem item : items) {
             for (Solutions.Issue issue : item.getIssues()) {
                 assertFalse(issue.getUntranslatedIssue().contains("Min. Part Diameter"), item.toString());
                 assertFalse(issue.getUntranslatedIssue().equals(
                         org.openpnp.machine.reference.solutions.CameraSolutions.NOT_CONNECTED), item.toString());
-            }
-            if (item.getCheck() != null && item.getCheck().kind.equals(SetupChecks.MIN_DIAMETER)) {
-                diameter = item;
+                assertFalse(SetupIssues.isSetupIssue(issue), "a setup issue among the rows: " + item);
             }
         }
-        assertNotNull(diameter);
-        assertEquals(CalibrationItem.Kind.Hint, diameter.getKind());
-        assertEquals(6, diameter.getParts().size());
+        // The nozzle tips' smallest part is one of the machine settings checks, not a row here.
+        assertTrue(SetupChecks.of(machine).count(org.openpnp.gui.machinesettings.MachineSettingsPanel.NOZZLES) > 0);
     }
 
     @Test
@@ -188,11 +196,12 @@ public class CalibrationItemsTest {
     }
 
     @Test
-    public void theSameAdviceAboutSeveralElementsIsOneRowAndEachElementAPart() {
+    public void theSameAdviceAboutSeveralElementsIsOneRowAndTheSetupIssuesAreLeftOut() {
+        Calibrate setup = new Calibrate(new Thing("N1"));
         List<Solutions.Issue> issues = List.of(new Align(new Thing("N1")), new Align(new Thing("N2")),
-                new Calibrate(new Thing("N1")), new Calibrate(new Thing("N2")));
-        List<CalibrationItem> items = CalibrationItems.of(null, issues, SetupChecks.none(), List.of());
-        assertEquals(2, items.size(), items.toString());
+                setup, new Calibrate(new Thing("N2")));
+        List<CalibrationItem> items = CalibrationItems.of(null, issues, List.of());
+        assertEquals(1, items.size(), items.toString());
         CalibrationItem align = items.get(0);
         assertEquals(CalibrationItem.Kind.Suggestion, align.getKind());
         assertEquals(Translations.translateText("Part-aligned rotation"), align.getTitle());
@@ -200,36 +209,33 @@ public class CalibrationItemsTest {
                 align.getParts().get(1).getSubject()));
         assertEquals(Boolean.FALSE, align.commonValue(false));
         assertEquals(Boolean.TRUE, align.commonValue(true));
-        // Named in each issue's own wording, the advice is what the row says.
-        CalibrationItem calibrate = items.get(1);
-        assertEquals(CalibrationItem.Kind.Hint, calibrate.getKind());
-        assertEquals("Run the calibration.", calibrate.getTitle());
-        assertEquals(2, calibrate.getParts().size());
+        // Advice that does more than write one value, and no step carries out, is the machine
+        // settings page's.
+        assertTrue(SetupIssues.isSetupIssue(setup));
     }
 
     @Test
     public void aDismissedSuggestionIsKeptWhereItCanBeTakenBack() throws Exception {
         Align dismissed = new Align(new Thing("N1"));
         dismissed.setState(Solutions.State.Dismissed);
-        List<CalibrationItem> items = CalibrationItems.of(null, List.of(dismissed), SetupChecks.none(), List.of());
+        List<CalibrationItem> items = CalibrationItems.of(null, List.of(dismissed), List.of());
         assertEquals(1, items.size());
         assertEquals(CalibrationItem.Kind.Dismissed, items.get(0).getKind());
         assertTrue(items.get(0).canBeDismissed());
     }
 
     @Test
-    public void whatWasMeasuredComesFirstAndInformationNotAtAll() {
+    public void whatWasMeasuredComesFirstAndNeitherInformationNorSetupIssuesAreRows() {
         Solutions.Issue information = new Solutions.PlainIssue(new Solutions.Subject() {
         }, "Milestone.", "Done.", Solutions.Severity.Information, null);
-        Solutions.Issue hint = new Solutions.PlainIssue(new Solutions.Subject() {
-        }, "A hint.", "Do this.", Solutions.Severity.Warning, null);
+        Solutions.Issue setup = new Solutions.PlainIssue(new Solutions.Subject() {
+        }, "A setup issue.", "Do this.", Solutions.Severity.Warning, null);
         Pending measured = new Pending("XyBacklash:X", CalibrationStep.XyBacklash, null, "x", List.of(), List.of(),
                 null, "", new Date(), "<a/>");
-        List<CalibrationItem> items = CalibrationItems.of(null, List.of(information, hint), SetupChecks.none(),
-                List.of(measured));
-        assertEquals(2, items.size());
+        List<CalibrationItem> items = CalibrationItems.of(null, List.of(information, setup), List.of(measured));
+        assertEquals(1, items.size());
         assertEquals(CalibrationItem.Kind.Pending, items.get(0).getKind());
-        assertEquals(CalibrationItem.Kind.Hint, items.get(1).getKind());
-        assertEquals("A hint.", items.get(1).getTitle());
+        assertTrue(SetupIssues.isSetupIssue(setup));
+        assertFalse(SetupIssues.isSetupIssue(information));
     }
 }

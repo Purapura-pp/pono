@@ -27,7 +27,6 @@ import java.util.Objects;
 import java.util.Set;
 
 import org.openpnp.Translations;
-import org.openpnp.gui.machinesettings.SetupChecks;
 import org.openpnp.machine.reference.calibration.CalibrationPlan;
 import org.openpnp.machine.reference.calibration.SettingChange;
 import org.openpnp.model.CalibrationStep;
@@ -52,8 +51,6 @@ public final class CalibrationItem {
         Suggestion,
         /** A step that has to measure, move the machine, or have someone at it before it can say. */
         Measure,
-        /** Not calibration: what the machine settings page is for, and issues of the setup. */
-        Hint,
         /** Nothing to do. */
         Done,
         /** Decided against, on this page or the issues page. */
@@ -113,16 +110,14 @@ public final class CalibrationItem {
     private final String key;
     private final String title;
     private final CalibrationStep step;
-    private final SetupChecks.Check check;
     private final List<Part> parts = new ArrayList<>();
     private boolean waiting;
 
-    CalibrationItem(Kind kind, String key, String title, CalibrationStep step, SetupChecks.Check check) {
+    CalibrationItem(Kind kind, String key, String title, CalibrationStep step) {
         this.kind = kind;
         this.key = key;
         this.title = title;
         this.step = step;
-        this.check = check;
     }
 
     public Kind getKind() {
@@ -141,11 +136,6 @@ public final class CalibrationItem {
     /** The kind of calibration step, or null for an item that is not one. */
     public CalibrationStep getStep() {
         return step;
-    }
-
-    /** The machine settings check it is, or null. */
-    public SetupChecks.Check getCheck() {
-        return check;
     }
 
     public List<Part> getParts() {
@@ -225,7 +215,7 @@ public final class CalibrationItem {
 
     /** Whether it can be dismissed: every part has an issue open or measured. */
     public boolean canBeDismissed() {
-        if (parts.isEmpty() || check != null) {
+        if (parts.isEmpty()) {
             return false;
         }
         for (Part part : parts) {
@@ -238,9 +228,6 @@ public final class CalibrationItem {
 
     /** "N045", or "6 个吸嘴头" for more than one. */
     public String getSubjects() {
-        if (check != null) {
-            return check.subject();
-        }
         if (parts.size() == 1) {
             return parts.get(0).subject;
         }

@@ -444,10 +444,10 @@ public class Solutions {
             }
 
             public String getLabel() {
-                return label;
+                return Translations.translateText(label);
             }
             public String getToolTip() {
-                return toolTip;
+                return Translations.translateText(toolTip);
             }
         }
         public abstract class StringProperty extends CustomProperty {

@@ -32,6 +32,7 @@ import org.openpnp.Translations;
 import org.openpnp.gui.calibration.CalibrationItem.Kind;
 import org.openpnp.gui.calibration.CalibrationItem.Part;
 import org.openpnp.gui.machinesettings.SetupChecks;
+import org.openpnp.gui.machinesettings.SetupIssues;
 import org.openpnp.machine.reference.calibration.CalibrationPlan;
 import org.openpnp.machine.reference.calibration.SettingChange;
 import org.openpnp.model.Solutions;
@@ -42,9 +43,9 @@ import org.openpnp.model.Solutions;
  * An issue that says what it writes, and writes nothing else, is a suggestion however it was
  * found; the same suggestion about several elements is one row. A step that has to measure, move
  * the machine or have someone at it is a measurement, one row for the elements of a kind. What was
- * measured and not yet applied or discarded stands for its step. The machine settings checks, and
- * the issues of the setup that are neither, are hints; the issues the machine settings page shows
- * where they are fixed are left to it.
+ * measured and not yet applied or discarded stands for its step. The machine settings checks and
+ * the issues of the setup are not calibration: the machine settings page shows them where they are
+ * fixed.
  */
 public final class CalibrationItems {
     private CalibrationItems() {
@@ -53,16 +54,15 @@ public final class CalibrationItems {
     /**
      * @param plan The plan, or null before the first collection.
      * @param others The issues of the whole search that no calibration step carries out.
-     * @param checks What the machine settings page finds missing.
      * @param pending The steps measured and neither applied nor discarded yet.
      */
     public static List<CalibrationItem> of(CalibrationPlan plan, List<Solutions.Issue> others,
-            SetupChecks checks, Collection<Pending> pending) {
+            Collection<Pending> pending) {
         Map<String, CalibrationItem> items = new LinkedHashMap<>();
         Set<String> measured = new HashSet<>();
         for (Pending p : pending) {
             measured.add(p.getKey());
-            item(items, Kind.Pending, "P|" + p.getKind(), p.getKind().getName(), p.getKind(), null) //$NON-NLS-1$
+            item(items, Kind.Pending, "P|" + p.getKind(), p.getKind().getName(), p.getKind()) //$NON-NLS-1$
                     .add(new Part(p.getSubjectName(), p.getSubject(), null, null, p));
         }
         if (plan != null) {
@@ -84,29 +84,15 @@ public final class CalibrationItems {
                 steps(items, step);
             }
         }
-        // The machine settings checks before the other hints: the machine does not work without them.
-        if (checks != null) {
-            for (SetupChecks.Check check : checks.all()) {
-                CalibrationItem hint = item(items, Kind.Hint, "C|" + check.kind + "|" + check.text(), //$NON-NLS-1$ //$NON-NLS-2$
-                        check.text(), null, check);
-                for (Object subject : check.subjects) {
-                    hint.add(new Part(CalibrationPlan.nameOf(subject), subject, null, null, null));
-                }
-            }
-        }
+        // What is left of the whole search, once the setup issues are, is one value to write.
         for (Solutions.Issue issue : others) {
             if (issue.getCalibrationStep() != null
                     || issue.getSeverity().ordinal() <= Solutions.Severity.Information.ordinal()
-                    || SetupChecks.covers(issue)) {
+                    || SetupChecks.covers(issue) || SetupIssues.isSetupIssue(issue)) {
                 continue;
             }
             if (issue.getState() == Solutions.State.Open) {
-                if (issue.canBeAccepted() && SettingChange.of(issue) != null) {
-                    suggestion(items, issue, null);
-                }
-                else {
-                    hint(items, issue);
-                }
+                suggestion(items, issue, null);
             }
             else if (issue.getState() == Solutions.State.Dismissed) {
                 dismissed(items, issue, null);
@@ -122,11 +108,11 @@ public final class CalibrationItems {
         String kind = step.getKind().name();
         switch (step.getStatus()) {
             case Done:
-                item(items, Kind.Done, "D|" + kind, step.getKind().getName(), step.getKind(), null) //$NON-NLS-1$
+                item(items, Kind.Done, "D|" + kind, step.getKind().getName(), step.getKind()) //$NON-NLS-1$
                         .add(part(step, null));
                 return;
             case Dismissed:
-                item(items, Kind.Dismissed, "X|" + kind, step.getKind().getName(), step.getKind(), null) //$NON-NLS-1$
+                item(items, Kind.Dismissed, "X|" + kind, step.getKind().getName(), step.getKind()) //$NON-NLS-1$
                         .add(part(step, null));
                 return;
             default:
@@ -148,7 +134,7 @@ public final class CalibrationItems {
         }
         boolean waiting = step.getStatus() == CalibrationPlan.Status.Waiting;
         CalibrationItem measure = item(items, Kind.Measure, "M|" + kind + (waiting ? "|waiting" : ""), //$NON-NLS-1$ //$NON-NLS-2$
-                step.getKind().getName(), step.getKind(), null);
+                step.getKind().getName(), step.getKind());
         measure.setWaiting(waiting);
         measure.add(part(step, action));
     }
@@ -161,7 +147,7 @@ public final class CalibrationItems {
             CalibrationPlan.Step step) {
         SettingChange change = SettingChange.of(issue);
         item(items, Kind.Suggestion, "S|" + typeOf(issue), Translations.translateText(change.getSettingName()), //$NON-NLS-1$
-                step == null ? null : step.getKind(), null)
+                step == null ? null : step.getKind())
                 .add(new Part(CalibrationPlan.nameOf(issue.getSubject()), issue.getSubject(), issue, step, null));
     }
 
@@ -169,25 +155,8 @@ public final class CalibrationItems {
             CalibrationPlan.Step step) {
         SettingChange change = SettingChange.of(issue);
         String title = change != null ? Translations.translateText(change.getSettingName()) : issue.getIssue();
-        item(items, Kind.Dismissed, "Y|" + typeOf(issue), title, step == null ? null : step.getKind(), null) //$NON-NLS-1$
+        item(items, Kind.Dismissed, "Y|" + typeOf(issue), title, step == null ? null : step.getKind()) //$NON-NLS-1$
                 .add(new Part(CalibrationPlan.nameOf(issue.getSubject()), issue.getSubject(), issue, step, null));
-    }
-
-    private static void hint(Map<String, CalibrationItem> items, Solutions.Issue issue) {
-        String key = "H|" + typeOf(issue); //$NON-NLS-1$
-        CalibrationItem existing = items.get(key);
-        String title = issue.getIssue();
-        if (existing != null && !existing.getTitle().equals(title)) {
-            // The same advice about several elements, each named in its own wording: the advice
-            // is what they share.
-            CalibrationItem merged = new CalibrationItem(Kind.Hint, key, issue.getSolution(), null, null);
-            for (Part part : existing.getParts()) {
-                merged.add(part);
-            }
-            items.put(key, merged);
-        }
-        item(items, Kind.Hint, key, title, null, null)
-                .add(new Part(CalibrationPlan.nameOf(issue.getSubject()), issue.getSubject(), issue, null, null));
     }
 
     /**
@@ -199,7 +168,7 @@ public final class CalibrationItems {
     }
 
     private static CalibrationItem item(Map<String, CalibrationItem> items, Kind kind, String key, String title,
-            org.openpnp.model.CalibrationStep step, SetupChecks.Check check) {
-        return items.computeIfAbsent(key, k -> new CalibrationItem(kind, k, title, step, check));
+            org.openpnp.model.CalibrationStep step) {
+        return items.computeIfAbsent(key, k -> new CalibrationItem(kind, k, title, step));
     }
 }

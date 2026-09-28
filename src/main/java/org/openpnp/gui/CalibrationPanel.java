@@ -75,9 +75,9 @@ import org.openpnp.gui.calibration.IssueInputs;
 import org.openpnp.gui.calibration.Pending;
 import org.openpnp.gui.calibration.SettingsDiff;
 import org.openpnp.gui.components.AutoSelectTextTable;
-import org.openpnp.gui.components.IssuePanel;
 import org.openpnp.gui.machinesettings.Backups;
 import org.openpnp.gui.machinesettings.SetupChecks;
+import org.openpnp.gui.machinesettings.SetupIssues;
 import org.openpnp.gui.shell.Chip;
 import org.openpnp.gui.shell.Dialogs;
 import org.openpnp.gui.shell.DockPanel;
@@ -541,7 +541,7 @@ public class CalibrationPanel extends JPanel {
 
     private void rebuild() {
         String selected = keyOf(selectedRow());
-        items = CalibrationItems.of(plan, others, checks, pending.values());
+        items = CalibrationItems.of(plan, others, pending.values());
         boolean all = Boolean.FALSE.equals(scope.getSelectedItem());
         model.rows.clear();
         GroupRow group = null;
@@ -739,9 +739,20 @@ public class CalibrationPanel extends JPanel {
         else {
             collectedBanner.setTitle(String.format(Translations.getString("CalibrationPanel.Banner.Collected"), //$NON-NLS-1$
                     CLOCK.format(collected)));
-            collectedBanner.setText(String.format(Translations.getString("CalibrationPanel.Banner.CollectedText"), //$NON-NLS-1$
-                    itemsOf(CalibrationItem.Kind.Suggestion).size(), itemsOf(CalibrationItem.Kind.Measure).size(),
-                    itemsOf(CalibrationItem.Kind.Hint).size()));
+            String text = String.format(Translations.getString("CalibrationPanel.Banner.CollectedText"), //$NON-NLS-1$
+                    itemsOf(CalibrationItem.Kind.Suggestion).size(), itemsOf(CalibrationItem.Kind.Measure).size());
+            int settings = settingsCount();
+            if (settings > 0) {
+                text += String.format(Translations.getString("CalibrationPanel.Banner.Settings"), settings); //$NON-NLS-1$
+                JButton toSettings = Ui.button(Translations.getString("CalibrationPanel.Banner.ToSettings"), //$NON-NLS-1$
+                        Ui.iconSm("sliders"), Ui.Size.Sm, Ui.Variant.Default); //$NON-NLS-1$
+                toSettings.addActionListener(e -> frame.showMachineSettings(settingsTopic()));
+                collectedBanner.setActions(toSettings);
+            }
+            else {
+                collectedBanner.setActions();
+            }
+            collectedBanner.setText(text);
         }
         List<CalibrationItem> measured = itemsOf(CalibrationItem.Kind.Pending);
         pendingBanner.getParent().setVisible(!measured.isEmpty());
@@ -778,13 +789,23 @@ public class CalibrationPanel extends JPanel {
             frame.getNavigation().setBadge(this, count, org.openpnp.gui.shell.NavigationRail.Badge.Warn);
         }
         if (frame.getTopBar() != null) {
-            List<CalibrationItem> hints = itemsOf(CalibrationItem.Kind.Hint);
-            boolean severe = !itemsOf(CalibrationItem.Kind.Pending).isEmpty();
-            for (CalibrationItem hint : hints) {
-                severe |= hint.getCheck() != null;
-            }
-            frame.getTopBar().setNotifications(count, hints.size(), severe);
+            boolean severe = !itemsOf(CalibrationItem.Kind.Pending).isEmpty() || !checks.all().isEmpty();
+            frame.getTopBar().setNotifications(count, settingsCount(), severe);
         }
+    }
+
+    /** What the machine settings page has to fix, found with the calibration's collection. */
+    private int settingsCount() {
+        return checks.all().size() + SetupIssues.open(others, null).size();
+    }
+
+    /** The machine settings topic of the first of those, or null when there is none. */
+    private String settingsTopic() {
+        if (!checks.all().isEmpty()) {
+            return checks.all().get(0).topic;
+        }
+        List<Solutions.Issue> open = SetupIssues.open(others, null);
+        return open.isEmpty() ? null : SetupIssues.topicOf(open.get(0));
     }
 
     // ---- what the rows do ----------------------------------------------------------------------
@@ -870,18 +891,6 @@ public class CalibrationPanel extends JPanel {
                 return discardable ? keep.withSecond(Translations.getString("CalibrationPanel.Action.DiscardShort"), //$NON-NLS-1$
                         () -> discard(of)) : keep;
             }
-            case Hint:
-                if (item.getCheck() != null) {
-                    String topic = item.getCheck().topic;
-                    return new RowAction(String.format(Translations.getString("CalibrationPanel.Action.Settings"), //$NON-NLS-1$
-                            Translations.getString("MachineSettings.Topic." + topic)), false, true, //$NON-NLS-1$
-                            () -> frame.showMachineSettings(topic)).asLink();
-                }
-                if (!issues.isEmpty() && issues.get(0).canBeAccepted()) {
-                    return new RowAction(Translations.getString("CalibrationPanel.Action.Accept"), false, //$NON-NLS-1$
-                            !isRunning(), () -> apply(issues));
-                }
-                return null;
             case Dismissed:
                 return new RowAction(Translations.getString("CalibrationPanel.Action.Restore"), false, !isRunning(), //$NON-NLS-1$
                         () -> restore(part == null ? item.getParts() : List.of(part)));
@@ -1325,8 +1334,6 @@ public class CalibrationPanel extends JPanel {
                 return "target"; //$NON-NLS-1$
             case Pending:
                 return "activity"; //$NON-NLS-1$
-            case Hint:
-                return "info"; //$NON-NLS-1$
             default:
                 return "check"; //$NON-NLS-1$
         }
@@ -1336,10 +1343,7 @@ public class CalibrationPanel extends JPanel {
     private String subtitle(CalibrationItem item, CalibrationItem.Part part) {
         String subjects = part != null ? part.getSubject() : item.getSubjects();
         List<String> bits = new ArrayList<>();
-        bits.add(item.getKind() == CalibrationItem.Kind.Hint && item.getCheck() != null
-                ? String.format(Translations.getString("CalibrationPanel.Subtitle.Settings"), //$NON-NLS-1$
-                        Translations.getString("MachineSettings.Topic." + item.getCheck().topic)) //$NON-NLS-1$
-                : item.getKind().getName());
+        bits.add(item.getKind().getName());
         bits.add(subjects);
         switch (item.getKind()) {
             case Suggestion:
@@ -1386,9 +1390,6 @@ public class CalibrationPanel extends JPanel {
                 break;
             case Pending:
                 pendingPane(sections, buttons, item, parts);
-                break;
-            case Hint:
-                hintPane(sections, buttons, item, parts, issues);
                 break;
             case Done:
                 if (item.getStep() != null) {
@@ -1501,6 +1502,7 @@ public class CalibrationPanel extends JPanel {
         sections.add(section("edit", "CalibrationPanel.Section.Change", what)); //$NON-NLS-1$ //$NON-NLS-2$
         sections.add(section("file", "CalibrationPanel.Section.Source", Forms.paragraph(source(item)))); //$NON-NLS-1$ //$NON-NLS-2$
 
+        wiki(buttons, issues);
         JButton dismiss = Ui.button(Translations.getString("CalibrationPanel.Action.Dismiss"), null, //$NON-NLS-1$
                 Ui.Size.Md, Ui.Variant.Default);
         dismiss.setToolTipText(Translations.getString("CalibrationPanel.Action.Dismiss.toolTipText")); //$NON-NLS-1$
@@ -1557,10 +1559,13 @@ public class CalibrationPanel extends JPanel {
             }
             sections.add(section("check", "CalibrationPanel.Section.Before", chips)); //$NON-NLS-1$ //$NON-NLS-2$
         }
-        if (issues.size() == 1 && machine != null) {
-            IssuePanel controls = new IssuePanel(issues.get(0), machine).controlsOnly();
-            if (controls.hasControls()) {
-                controls.setOpaque(false);
+        if (issues.size() == 1) {
+            String notes = org.openpnp.gui.calibration.IssueControls.description(issues.get(0));
+            if (notes != null) {
+                sections.add(section("alert", "CalibrationPanel.Section.Notes", Forms.paragraph(notes))); //$NON-NLS-1$ //$NON-NLS-2$
+            }
+            JComponent controls = org.openpnp.gui.calibration.IssueControls.of(issues.get(0), configuration);
+            if (controls != null) {
                 sections.add(section("sliders", "CalibrationPanel.Section.Inputs", controls)); //$NON-NLS-1$ //$NON-NLS-2$
             }
         }
@@ -1578,6 +1583,7 @@ public class CalibrationPanel extends JPanel {
             inputs.add(editors);
             sections.add(section("sliders", "CalibrationPanel.Section.Inputs", inputs)); //$NON-NLS-1$ //$NON-NLS-2$
         }
+        wiki(buttons, issues);
         if (item.canBeDismissed()) {
             JButton dismiss = Ui.button(Translations.getString("CalibrationPanel.Action.Dismiss"), null, //$NON-NLS-1$
                     Ui.Size.Md, Ui.Variant.Default);
@@ -1694,54 +1700,17 @@ public class CalibrationPanel extends JPanel {
         buttons.add(keep);
     }
 
-    private void hintPane(JPanel sections, List<JButton> buttons, CalibrationItem item,
-            List<CalibrationItem.Part> parts, List<Solutions.Issue> issues) {
-        SetupChecks.Check check = item.getCheck();
-        if (check != null) {
-            sections.add(section("info", "CalibrationPanel.Section.Fix", Forms.paragraph(check.fix()))); //$NON-NLS-1$ //$NON-NLS-2$
-            JButton go = Ui.button(String.format(Translations.getString("CalibrationPanel.Action.Settings"), //$NON-NLS-1$
-                    Translations.getString("MachineSettings.Topic." + check.topic)), null, Ui.Size.Md, //$NON-NLS-1$
-                    Ui.Variant.Primary);
-            go.addActionListener(e -> frame.showMachineSettings(check.topic));
-            buttons.add(go);
+    /** The Wiki page the issue points to, which its description sends the reader to. */
+    private static void wiki(List<JButton> buttons, List<Solutions.Issue> issues) {
+        String uri = issues.isEmpty() ? null : issues.get(0).getUri();
+        if (uri == null || uri.isEmpty()) {
             return;
         }
-        Solutions.Issue first = issues.isEmpty() ? null : issues.get(0);
-        if (first == null) {
-            return;
-        }
-        String more = Html.plain(first.getExtendedDescription());
-        sections.add(section("info", "CalibrationPanel.Section.What", Forms.paragraph(first.getIssue() + "\n" //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                + first.getSolution() + (more.isEmpty() ? "" : "\n" + more)))); //$NON-NLS-1$ //$NON-NLS-2$
-        if (issues.size() > 1) {
-            List<String> names = new ArrayList<>();
-            for (CalibrationItem.Part p : parts) {
-                names.add(p.getSubject());
-            }
-            sections.add(section("layers", "CalibrationPanel.Section.About", //$NON-NLS-1$ //$NON-NLS-2$
-                    Forms.paragraph(String.join(Translations.getString("CalibrationPanel.ListSeparator"), names)))); //$NON-NLS-1$
-        }
-        else if (machine != null) {
-            IssuePanel controls = new IssuePanel(first, machine).controlsOnly();
-            if (controls.hasControls()) {
-                controls.setOpaque(false);
-                sections.add(section("sliders", "CalibrationPanel.Section.Inputs", controls)); //$NON-NLS-1$ //$NON-NLS-2$
-            }
-        }
-        JButton dismiss = Ui.button(Translations.getString("CalibrationPanel.Action.Dismiss"), null, //$NON-NLS-1$
-                Ui.Size.Md, Ui.Variant.Default);
-        dismiss.setToolTipText(Translations.getString("CalibrationPanel.Action.Dismiss.toolTipText")); //$NON-NLS-1$
-        dismiss.setEnabled(!isRunning());
-        dismiss.addActionListener(e -> dismiss(issues));
-        buttons.add(dismiss);
-        if (first.canBeAccepted()) {
-            JButton accept = Ui.button(Translations.getString("CalibrationPanel.Action.Accept"), null, //$NON-NLS-1$
-                    Ui.Size.Md, Ui.Variant.Primary);
-            accept.setToolTipText(Translations.getString("CalibrationPanel.Action.Accept.toolTipText")); //$NON-NLS-1$
-            accept.setEnabled(!isRunning());
-            accept.addActionListener(e -> apply(issues));
-            buttons.add(accept);
-        }
+        JButton wiki = Ui.button(Translations.getString("CalibrationPanel.Action.Wiki"), Ui.iconSm("book"), //$NON-NLS-1$ //$NON-NLS-2$
+                Ui.Size.Md, Ui.Variant.Ghost);
+        wiki.setToolTipText(uri);
+        wiki.addActionListener(e -> UiUtils.browseUri(uri));
+        buttons.add(wiki);
     }
 
     /** "19:40 采集 · 吸嘴头跳动与背景 · 应用前备份 machine.xml". */
@@ -1864,11 +1833,6 @@ public class CalibrationPanel extends JPanel {
             case Pending:
                 chip.setTone(Chip.Tone.Warn);
                 return Translations.getString("CalibrationPanel.Status.Pending"); //$NON-NLS-1$
-            case Hint:
-                chip.setTone(item.getCheck() == null && !item.getIssues().isEmpty()
-                        && item.getIssues().get(0).canBeAccepted() ? Chip.Tone.Run : Chip.Tone.Neutral);
-                return Translations.getString(item.getCheck() != null ? "CalibrationPanel.Status.Settings" //$NON-NLS-1$
-                        : "CalibrationPanel.Status.Hint"); //$NON-NLS-1$
             case Done:
                 chip.setTone(Chip.Tone.Ok);
                 return Translations.getString("CalibrationPanel.Status.Done"); //$NON-NLS-1$
@@ -1876,6 +1840,112 @@ public class CalibrationPanel extends JPanel {
                 chip.setTone(Chip.Tone.Skip);
                 return Translations.getString("CalibrationPanel.Status.Dismissed"); //$NON-NLS-1$
         }
+    }
+
+    /**
+     * What the setting a measurement writes holds now, one value for all the item's elements,
+     * "各不相同" when they differ, or null when the step's setting cannot be said in a few words.
+     */
+    private static String measuredNow(CalibrationItem item, CalibrationItem.Part part) {
+        String common = null;
+        for (CalibrationItem.Part p : part != null ? List.of(part) : item.getParts()) {
+            String now = p.getStep() == null ? null : now(p.getStep());
+            if (now == null) {
+                return null;
+            }
+            if (common == null) {
+                common = now;
+            }
+            else if (!common.equals(now)) {
+                return CalibrationItem.Differs.VALUE.toString();
+            }
+        }
+        return common;
+    }
+
+    /** "单侧定位 0.1 mm", "217.29, 196.53 mm", "未启用": the setting a step measures, as it is. */
+    private static String now(CalibrationPlan.Step step) {
+        Object subject = step.getSubject();
+        try {
+            switch (step.getKind()) {
+                case Home:
+                    return subject instanceof org.openpnp.spi.Machine ? Translations.getString(
+                            ((org.openpnp.spi.Machine) subject).isHomed() ? "CalibrationPanel.Now.Homed" //$NON-NLS-1$
+                                    : "CalibrationPanel.Now.NotHomed") : null; //$NON-NLS-1$
+                case PrimaryFiducial:
+                    return subject instanceof org.openpnp.spi.base.AbstractHead
+                            ? xy(((org.openpnp.spi.base.AbstractHead) subject).getCalibrationPrimaryFiducialLocation())
+                            : null;
+                case SecondaryFiducial:
+                    return subject instanceof org.openpnp.spi.base.AbstractHead
+                            ? xy(((org.openpnp.spi.base.AbstractHead) subject).getCalibrationSecondaryFiducialLocation())
+                            : null;
+                case BottomCamera:
+                    return subject instanceof org.openpnp.spi.Camera
+                            ? xy(((org.openpnp.spi.Camera) subject).getLocation()) : null;
+                case NozzleTouchPrimary:
+                case OtherNozzleOffsets:
+                case PreciseNozzleOffsets:
+                    return subject instanceof org.openpnp.machine.reference.ReferenceNozzle
+                            ? xy(((org.openpnp.machine.reference.ReferenceNozzle) subject).getHeadOffsets()) : null;
+                case OtherCameraOffsets:
+                    return subject instanceof org.openpnp.machine.reference.camera.ReferenceCamera
+                            ? xy(((org.openpnp.machine.reference.camera.ReferenceCamera) subject).getHeadOffsets())
+                            : null;
+                case CameraSettle: {
+                    if (!(subject instanceof org.openpnp.machine.reference.camera.AbstractSettlingCamera)) {
+                        return null;
+                    }
+                    org.openpnp.machine.reference.camera.AbstractSettlingCamera camera =
+                            (org.openpnp.machine.reference.camera.AbstractSettlingCamera) subject;
+                    return value(camera.getSettleMethod())
+                            + (camera.getSettleMethod() == org.openpnp.machine.reference.camera.AbstractSettlingCamera.SettleMethod.FixedTime
+                                    ? " " + camera.getSettleTimeMs() + " ms" : ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                }
+                case XyBacklash:
+                case ZBacklash:
+                case RotationBacklash: {
+                    if (!(subject instanceof org.openpnp.machine.reference.axis.ReferenceControllerAxis)) {
+                        return null;
+                    }
+                    org.openpnp.machine.reference.axis.ReferenceControllerAxis axis =
+                            (org.openpnp.machine.reference.axis.ReferenceControllerAxis) subject;
+                    return value(axis.getBacklashCompensationMethod())
+                            + (axis.getBacklashCompensationMethod() != org.openpnp.machine.reference.axis.ReferenceControllerAxis.BacklashCompensationMethod.None
+                                    ? " " + value(axis.getBacklashOffset()) : ""); //$NON-NLS-1$ //$NON-NLS-2$
+                }
+                case FeedAcceleration:
+                    return subject instanceof org.openpnp.machine.reference.axis.ReferenceControllerAxis
+                            ? value(((org.openpnp.machine.reference.axis.ReferenceControllerAxis) subject)
+                                    .getFeedratePerSecond()) + "/s" : null; //$NON-NLS-1$
+                case AdvancedDownCamera:
+                case AdvancedUpCamera:
+                    return subject instanceof org.openpnp.machine.reference.camera.ReferenceCamera
+                            ? Translations.getString(((org.openpnp.machine.reference.camera.ReferenceCamera) subject)
+                                    .getAdvancedCalibration().isOverridingOldTransformsAndDistortionCorrectionSettings()
+                                            ? "CalibrationPanel.Now.On" : "CalibrationPanel.Now.Off") //$NON-NLS-1$ //$NON-NLS-2$
+                            : null;
+                default:
+                    return null;
+            }
+        }
+        catch (RuntimeException e) {
+            // An element the step names but that is not set up enough to say: nothing shown.
+            return null;
+        }
+    }
+
+    /** "217.29, 196.53 mm", or "未设置" for a location never captured. */
+    private static String xy(org.openpnp.model.Location location) {
+        if (location == null || (location.getX() == 0 && location.getY() == 0)) {
+            return Translations.getString("CalibrationPanel.Now.NotSet"); //$NON-NLS-1$
+        }
+        return number(location.getX()) + ", " + number(location.getY()) + " " //$NON-NLS-1$ //$NON-NLS-2$
+                + location.getUnits().getShortName();
+    }
+
+    private static String number(double value) {
+        return String.format(Locale.ROOT, "%.3f", value).replaceAll("0+$", "").replaceAll("\\.$", ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
     }
 
     /** "5 → 1", "测完给出", or the first change a measurement made. */
@@ -1891,8 +1961,11 @@ public class CalibrationPanel extends JPanel {
                 }
                 return value(item.commonValue(false)) + "  \u2192  " + value(item.commonValue(true)); //$NON-NLS-1$
             }
-            case Measure:
-                return Translations.getString("CalibrationPanel.Value.AfterMeasuring"); //$NON-NLS-1$
+            case Measure: {
+                String now = measuredNow(item, part);
+                String after = Translations.getString("CalibrationPanel.Value.AfterMeasuring"); //$NON-NLS-1$
+                return now == null ? after : now + "  \u2192  " + after; //$NON-NLS-1$
+            }
             case Pending: {
                 // "x 0.1 → 0.22   y 0.1 → 0.15": the first change of each element measured.
                 List<Pending> measured = part != null ? List.of(part.getPending()) : item.getPending();
@@ -2089,13 +2162,7 @@ public class CalibrationPanel extends JPanel {
                     boxCell.setOpaque(true);
                     return boxCell;
                 }
-                JLabel label = plain(table, "", isSelected, background); //$NON-NLS-1$
-                if (r instanceof ItemRow && item.getKind() == CalibrationItem.Kind.Hint) {
-                    label.setIcon(Ui.icon("alert", 14, Ui.warn())); //$NON-NLS-1$
-                    label.setHorizontalAlignment(SwingConstants.CENTER);
-                    label.setBorder(null);
-                }
-                return label;
+                return plain(table, "", isSelected, background); //$NON-NLS-1$
             }
             if (r instanceof MoreRow) {
                 MoreRow more = (MoreRow) r;
@@ -2153,7 +2220,8 @@ public class CalibrationPanel extends JPanel {
                     String change = change(r);
                     JLabel label = plain(table, change, isSelected, background);
                     label.setToolTipText(change.isEmpty() ? null : change);
-                    if (item.getKind() == CalibrationItem.Kind.Measure) {
+                    if (item.getKind() == CalibrationItem.Kind.Measure
+                            && change.equals(Translations.getString("CalibrationPanel.Value.AfterMeasuring"))) { //$NON-NLS-1$
                         label.setForeground(isSelected ? table.getSelectionForeground() : Ui.muted());
                     }
                     else {
