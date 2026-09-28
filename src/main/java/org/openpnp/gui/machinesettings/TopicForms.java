@@ -69,6 +69,16 @@ final class TopicForms implements WizardContainer {
         return false;
     }
 
+    /** Whether a form holds an edit that fails its checks, which Apply does not write and Reset undoes. */
+    boolean isBlocked() {
+        for (FormWizard form : forms) {
+            if (!form.hasEdits() && !form.changes().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** What Apply would write, form after form. */
     List<FormWizard.Change> changes() {
         List<FormWizard.Change> changes = new ArrayList<>();
@@ -95,7 +105,7 @@ final class TopicForms implements WizardContainer {
 
     void reset() {
         for (FormWizard form : new ArrayList<>(forms)) {
-            if (Boolean.TRUE.equals(form.isDirty())) {
+            if (Boolean.TRUE.equals(form.isDirty()) || !form.changes().isEmpty()) {
                 form.reset();
             }
         }

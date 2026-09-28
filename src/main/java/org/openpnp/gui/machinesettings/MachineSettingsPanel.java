@@ -350,9 +350,11 @@ public class MachineSettingsPanel extends JPanel {
         }
         List<FormWizard.Change> changes = current.forms.changes();
         boolean dirty = current.forms.isDirty();
+        boolean blocked = current.forms.isBlocked();
+        pending.setForeground(blocked ? Ui.errText() : Ui.text2());
         if (changes.isEmpty()) {
-            pending.setText(Translations.getString(dirty ? "MachineSettings.Foot.Edited" //$NON-NLS-1$
-                    : "MachineSettings.Foot.None")); //$NON-NLS-1$
+            pending.setText(Translations.getString(blocked ? "MachineSettings.Foot.Blocked" //$NON-NLS-1$
+                    : dirty ? "MachineSettings.Foot.Edited" : "MachineSettings.Foot.None")); //$NON-NLS-1$ //$NON-NLS-2$
             pending.setFont(Ui.font(Tokens.FS_SMALL));
         }
         else {
@@ -370,7 +372,7 @@ public class MachineSettingsPanel extends JPanel {
             }
             pending.setToolTipText(String.join("\n", all)); //$NON-NLS-1$
         }
-        reset.setEnabled(dirty);
+        reset.setEnabled(dirty || blocked);
         apply.setEnabled(dirty);
     }
 
