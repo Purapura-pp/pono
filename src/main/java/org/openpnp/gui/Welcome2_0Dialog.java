@@ -297,7 +297,12 @@ public class Welcome2_0Dialog extends JDialog {
         View html = (View) detail.getClientProperty(BasicHTML.propertyKey);
         if (html != null && textWidth > 0) {
             html.setSize(textWidth, 0);
-            detail.setPreferredSize(new Dimension(textWidth, (int) Math.ceil(html.getPreferredSpan(View.Y_AXIS))));
+            // All three: the column it is in never makes it larger than its maximum, which for a
+            // label is its text on one line.
+            Dimension size = new Dimension(textWidth, (int) Math.ceil(html.getPreferredSpan(View.Y_AXIS)));
+            detail.setPreferredSize(size);
+            detail.setMinimumSize(size);
+            detail.setMaximumSize(size);
         }
         return row;
     }
