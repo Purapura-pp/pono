@@ -215,9 +215,7 @@ public final class Ui {
         @Override
         public void paintIcon(Component c, Graphics g, int x, int y) {
             Color was = currentForeground;
-            // A dimmed button is already painted at the disabled opacity, icon and all.
-            currentForeground = c.isEnabled() || c instanceof Dimmed ? c.getForeground()
-                    : alpha(c.getForeground(), DISABLED_OPACITY);
+            currentForeground = c.isEnabled() ? c.getForeground() : disabledForeground(c);
             try {
                 inner.paintIcon(c, g, x, y);
             }
@@ -242,19 +240,92 @@ public final class Ui {
     /** The stylesheet's .btn.disabled: the same colours, at this opacity. */
     public static final float DISABLED_OPACITY = 0.45f;
 
-    /** A control that paints itself at {@link #DISABLED_OPACITY} when disabled. */
+    /** A control that paints itself at {@link #DISABLED_OPACITY} when disabled, unless it has disabled colours of its own. */
     public interface Dimmed {
     }
 
+    /**
+     * Set on a button that carries its own disabled colours, as every variant here does: it is
+     * painted in them rather than at {@link #DISABLED_OPACITY}, which left the white text of a
+     * faded accent or green button all but invisible.
+     */
+    public static final String OWN_DISABLED = "Pono.ownDisabled"; //$NON-NLS-1$
+    /** A {@code Supplier<Color>}: what a foreground-following icon is drawn in on such a button, disabled. */
+    public static final String DISABLED_FOREGROUND = "Pono.disabledForeground"; //$NON-NLS-1$
+    /** The colour of a button's focus ring where it is not the accent: red, on the buttons that stop things. */
+    public static final String FOCUS_RING = "Pono.focusRing"; //$NON-NLS-1$
+    /** The corner radius the focus ring follows, where it is not the buttons' own. */
+    public static final String RING_ARC = "Pono.ringArc"; //$NON-NLS-1$
+
+    /** Of two colours, the first in this proportion. */
+    public static Color mix(Color a, Color b, double weight) {
+        double w = Math.max(0, Math.min(1, weight));
+        return new Color((int) Math.round(b.getRed() + (a.getRed() - b.getRed()) * w),
+                (int) Math.round(b.getGreen() + (a.getGreen() - b.getGreen()) * w),
+                (int) Math.round(b.getBlue() + (a.getBlue() - b.getBlue()) * w));
+    }
+
+    static Color disabledForeground(Component c) {
+        if (c instanceof JComponent) {
+            Object own = ((JComponent) c).getClientProperty(DISABLED_FOREGROUND);
+            if (own instanceof java.util.function.Supplier) {
+                Object color = ((java.util.function.Supplier<?>) own).get();
+                if (color instanceof Color) {
+                    return (Color) color;
+                }
+            }
+        }
+        // A dimmed control is painted at the disabled opacity already, icon and all.
+        return c instanceof Dimmed && !ownsDisabled(c) ? c.getForeground() : alpha(c.getForeground(), DISABLED_OPACITY);
+    }
+
+    private static boolean ownsDisabled(Component c) {
+        return c instanceof JComponent && Boolean.TRUE.equals(((JComponent) c).getClientProperty(OWN_DISABLED));
+    }
+
     static void paintDimmed(JComponent c, Graphics g, java.util.function.Consumer<Graphics> paint) {
-        if (c.isEnabled()) {
+        if (c.isEnabled() || ownsDisabled(c)) {
             paint.accept(g);
+        }
+        else {
+            Graphics2D g2 = (Graphics2D) g.create();
+            try {
+                g2.setComposite(java.awt.AlphaComposite.SrcOver.derive(DISABLED_OPACITY));
+                paint.accept(g2);
+            }
+            finally {
+                g2.dispose();
+            }
+        }
+        if (c instanceof javax.swing.AbstractButton) {
+            paintFocusRing((javax.swing.AbstractButton) c, g);
+        }
+    }
+
+    /**
+     * The focus of a button as a ring round it, with a gap in the page's colour inside, over its
+     * own colours. FlatLaf's light theme showed it by swapping the fill for near white instead:
+     * the white words of an accent button disappeared with it, and Stop machine lost its red.
+     */
+    static void paintFocusRing(javax.swing.AbstractButton b, Graphics g) {
+        if (!b.isEnabled() || !b.isFocusable() || !com.formdev.flatlaf.ui.FlatUIUtils.isPermanentFocusOwner(b)) {
             return;
         }
+        Object own = b.getClientProperty(FOCUS_RING);
+        Object arcOwn = b.getClientProperty(RING_ARC);
+        float arc = arcOwn instanceof Number ? ((Number) arcOwn).floatValue() : 2 * Tokens.R_SM;
+        float w = b.getWidth(), h = b.getHeight();
         Graphics2D g2 = (Graphics2D) g.create();
         try {
-            g2.setComposite(java.awt.AlphaComposite.SrcOver.derive(DISABLED_OPACITY));
-            paint.accept(g2);
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+            g2.setColor(own instanceof Color ? (Color) own : accent());
+            g2.setStroke(new java.awt.BasicStroke(2f));
+            g2.draw(new java.awt.geom.RoundRectangle2D.Float(1f, 1f, w - 2f, h - 2f, arc, arc));
+            g2.setColor(surface());
+            g2.setStroke(new java.awt.BasicStroke(1.5f));
+            g2.draw(new java.awt.geom.RoundRectangle2D.Float(2.75f, 2.75f, w - 5.5f, h - 5.5f,
+                    Math.max(0, arc - 3.5f), Math.max(0, arc - 3.5f)));
         }
         finally {
             g2.dispose();
@@ -263,7 +334,8 @@ public final class Ui {
 
     /**
      * A button that keeps its colours when disabled and is painted at the stylesheet's opacity,
-     * so a greyed-out Start still reads as the green Start, only unavailable.
+     * so a greyed-out Start still reads as the green Start, only unavailable. Styled as one of the
+     * variants, it has disabled colours of its own instead.
      */
     @SuppressWarnings("serial")
     public static class Button extends JButton implements Dimmed {
@@ -685,7 +757,12 @@ public final class Ui {
      * button then paints its parent's, a box where the mockups have none.
      */
     static String borderless(String foreground, String selectedBackground, String selectedForeground) {
-        return "foreground: " + foreground + "; disabledText: " + foreground //$NON-NLS-1$ //$NON-NLS-2$
+        return borderless(foreground, selectedBackground, selectedForeground, foreground);
+    }
+
+    static String borderless(String foreground, String selectedBackground, String selectedForeground,
+            String disabledForeground) {
+        return "foreground: " + foreground + "; disabledText: " + disabledForeground //$NON-NLS-1$ //$NON-NLS-2$
                 + "; toolbar.hoverBackground: $Pono.hover; toolbar.pressedBackground: $Pono.surface3" //$NON-NLS-1$
                 + "; toolbar.selectedBackground: " + selectedBackground //$NON-NLS-1$
                 + "; toolbar.selectedForeground: " + selectedForeground //$NON-NLS-1$
@@ -698,53 +775,86 @@ public final class Ui {
         button.putClientProperty(FlatClientProperties.STYLE, style);
     }
 
-    /** The FlatLaf style of a button variant: its colours, the same again for the disabled state. */
+    /**
+     * The FlatLaf style of a button variant: its colours, its disabled colours - a soft fill of
+     * its own colour and words still to be read - and a focus that leaves them as they are.
+     */
     static String colours(Variant variant) {
         // Background, border, foreground, and the rest of the states.
         String[] v;
+        // Disabled background, border and text.
+        String[] d;
         switch (variant) {
             case Ghost:
                 // A dialog's Cancel is often its default button: still no fill, where the look
                 // and feel filled it with the accent.
-                return borderless("$Pono.text2", "$Pono.surface3", "$Pono.text") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                return borderless("$Pono.text2", "$Pono.surface3", "$Pono.text", "$Pono.textMuted") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
                         + "; default.background: null; default.foreground: $Pono.text2" //$NON-NLS-1$
-                        + "; default.hoverBackground: $Pono.hover; default.pressedBackground: $Pono.surface3"; //$NON-NLS-1$
+                        + "; default.hoverBackground: $Pono.hover; default.pressedBackground: $Pono.surface3" //$NON-NLS-1$
+                        + "; focusedBackground: null"; //$NON-NLS-1$
             case Primary:
                 v = new String[] { "$Pono.accent", "$Pono.accent", "$Pono.onAccent", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "hoverBackground: $Pono.accentStrong; hoverBorderColor: $Pono.accentStrong; " //$NON-NLS-1$
                                 + "pressedBackground: $Pono.accentStrong" }; //$NON-NLS-1$
+                d = new String[] { "mix($Pono.accent,$Pono.surface,13%)", "mix($Pono.accent,$Pono.surface,24%)", //$NON-NLS-1$ //$NON-NLS-2$
+                        "mix($Pono.accent,$Pono.textSecondary,72%)" }; //$NON-NLS-1$
                 break;
             case PrimaryOk:
                 v = new String[] { "$Pono.ok", "$Pono.ok", "#05140b", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "hoverBackground: darken($Pono.ok,5%); hoverBorderColor: darken($Pono.ok,5%); " //$NON-NLS-1$
                                 + "pressedBackground: darken($Pono.ok,10%)" }; //$NON-NLS-1$
+                d = new String[] { "mix($Pono.ok,$Pono.surface,15%)", "mix($Pono.ok,$Pono.surface,28%)", //$NON-NLS-1$ //$NON-NLS-2$
+                        "mix($Pono.ok,$Pono.text,55%)" }; //$NON-NLS-1$
                 break;
             case Danger:
                 v = new String[] { "$Pono.errSoft", "fade($Pono.err,45%)", "$Pono.err", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "hoverBackground: fade($Pono.err,25%); hoverBorderColor: fade($Pono.err,60%); " //$NON-NLS-1$
                                 + "pressedBackground: fade($Pono.err,35%)" }; //$NON-NLS-1$
+                d = new String[] { "mix($Pono.err,$Pono.surface,12%)", "mix($Pono.err,$Pono.surface,26%)", //$NON-NLS-1$ //$NON-NLS-2$
+                        "mix($Pono.err,$Pono.text,78%)" }; //$NON-NLS-1$
                 break;
             case SolidDanger:
                 v = new String[] { "$Pono.err", "$Pono.err", "#ffffff", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "hoverBackground: darken($Pono.err,6%); hoverBorderColor: darken($Pono.err,6%); " //$NON-NLS-1$
                                 + "pressedBackground: darken($Pono.err,12%)" }; //$NON-NLS-1$
+                d = new String[] { "mix($Pono.err,$Pono.surface,12%)", "mix($Pono.err,$Pono.surface,26%)", //$NON-NLS-1$ //$NON-NLS-2$
+                        "mix($Pono.err,$Pono.text,78%)" }; //$NON-NLS-1$
                 break;
             case Default:
             default:
                 v = new String[] { "$Pono.surface2", "$Pono.borderStrong", "$Pono.text", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                         "hoverBackground: $Pono.surface3; hoverBorderColor: $Pono.borderStrong; " //$NON-NLS-1$
                                 + "pressedBackground: $Pono.surface3; selectedBackground: $Pono.accentSoft; selectedForeground: $Pono.accent" }; //$NON-NLS-1$
+                d = new String[] { "$Pono.surface2", "$Pono.border", "$Pono.textMuted" }; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 break;
         }
         return "background: " + v[0] + "; borderColor: " + v[1] + "; foreground: " + v[2] //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                + "; disabledBackground: " + v[0] + "; disabledBorderColor: " + v[1] //$NON-NLS-1$ //$NON-NLS-2$
-                + "; disabledText: " + v[2] + "; " + v[3] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; disabledBackground: " + d[0] + "; disabledBorderColor: " + d[1] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; disabledText: " + d[2] + "; " + v[3] //$NON-NLS-1$ //$NON-NLS-2$
+                // The focus is a ring round the button (paintFocusRing), not a fill or a border.
+                + "; focusedBackground: null; focusedBorderColor: " + v[1] //$NON-NLS-1$
                 // The same as the default button of a dialog, which the look and feel otherwise
                 // paints in colours of its own: white with an accent border in the light theme,
                 // over the variant's.
-                + "; default.background: " + v[0] + "; default.focusedBackground: " + v[0] //$NON-NLS-1$ //$NON-NLS-2$
-                + "; default.borderColor: " + v[1] + "; default.foreground: " + v[2] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; default.background: " + v[0] + "; default.focusedBackground: null" //$NON-NLS-1$ //$NON-NLS-2$
+                + "; default.borderColor: " + v[1] + "; default.focusedBorderColor: " + v[1] //$NON-NLS-1$ //$NON-NLS-2$
+                + "; default.foreground: " + v[2] //$NON-NLS-1$
                 + "; default.borderWidth: 1" + defaultStates(v[3]); //$NON-NLS-1$
+    }
+
+    /** What an icon is drawn in on a disabled button of a variant: its disabled text colour. */
+    static Color disabledForeground(Variant variant) {
+        switch (variant) {
+            case Primary:
+                return mix(accent(), text2(), 0.72);
+            case PrimaryOk:
+                return mix(ok(), text(), 0.55);
+            case Danger:
+            case SolidDanger:
+                return mix(err(), text(), 0.78);
+            default:
+                return muted();
+        }
     }
 
     private static final java.util.regex.Pattern STATE_COLOUR = java.util.regex.Pattern
@@ -785,6 +895,9 @@ public final class Ui {
         }
         button.putClientProperty(HEIGHT, size.height);
         button.putClientProperty(SQUARE, square);
+        button.putClientProperty(OWN_DISABLED, Boolean.TRUE);
+        button.putClientProperty(DISABLED_FOREGROUND, (java.util.function.Supplier<Color>) () -> disabledForeground(variant));
+        button.putClientProperty(FOCUS_RING, variant == Variant.Danger || variant == Variant.SolidDanger ? err() : null);
     }
 
     /**

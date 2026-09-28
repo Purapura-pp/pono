@@ -21,9 +21,11 @@ package org.openpnp.gui;
 
 import java.awt.Color;
 import java.awt.EventQueue;
+import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -390,7 +392,7 @@ public class MachineControlsPanel extends JPanel {
     public Action startStopMachineAction = new AbstractAction(Translations.getString("MachineControls.Action.Stop"), Icons.powerOn) { //$NON-NLS-1$
         {
             putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke('E',
-                    Toolkit.getDefaultToolkit().getMenuShortcutKeyMask()));
+                    menuShortcutKey()));
         }
 
         @Override
@@ -429,11 +431,17 @@ public class MachineControlsPanel extends JPanel {
         }
     };
 
+    /** The platform's menu shortcut key; with no screen, as in the tests, Ctrl. */
+    private static int menuShortcutKey() {
+        return GraphicsEnvironment.isHeadless() ? InputEvent.CTRL_MASK
+                : Toolkit.getDefaultToolkit().getMenuShortcutKeyMask();
+    }
+
     public class HomeAction extends AbstractAction {
         public HomeAction() {
             super(Translations.getString("MachineControls.Action.Home"), Icons.home); //$NON-NLS-1$
             putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke(KeyEvent.VK_BACK_QUOTE,
-                    Toolkit.getDefaultToolkit().getMenuShortcutKeyMask()));
+                    menuShortcutKey()));
         }
         public void setHomed(boolean homed) {
             putValue(Action.SMALL_ICON, homed ? Icons.home : Icons.homeWarning);
