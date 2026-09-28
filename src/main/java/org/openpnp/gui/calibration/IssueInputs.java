@@ -43,8 +43,6 @@ import org.openpnp.gui.support.DisplayNames;
 import org.openpnp.model.Length;
 import org.openpnp.model.LengthUnit;
 import org.openpnp.model.Solutions;
-import org.pmw.tinylog.Logger;
-
 /**
  * What an issue asks before it is accepted - a choice, a number, a length - for one issue or for
  * the several of a row at once: each edit goes to all of them, which is what "统一改成" means.
@@ -298,7 +296,8 @@ public final class IssueInputs {
     }
 
     private static void set(Solutions.Issue.CustomProperty property, Object value) {
-        try {
+        // A value the issue refuses is said, rather than left as it was with only a line in the log.
+        org.openpnp.util.UiUtils.messageBoxOnException(() -> {
             if (property instanceof Solutions.Issue.IntegerProperty) {
                 ((Solutions.Issue.IntegerProperty) property).set(((Number) value).intValue());
             }
@@ -311,9 +310,6 @@ public final class IssueInputs {
             else if (property instanceof Solutions.Issue.LengthProperty) {
                 ((Solutions.Issue.LengthProperty) property).set((Length) value);
             }
-        }
-        catch (Exception e) {
-            Logger.warn(e, "Setting {} of an issue failed.", property.getLabel()); //$NON-NLS-1$
-        }
+        });
     }
 }
