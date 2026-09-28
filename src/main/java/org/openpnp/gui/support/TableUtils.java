@@ -320,7 +320,14 @@ public class TableUtils {
     public static void rejected(javax.swing.table.TableModel model, int column, Object value, Exception e) {
         Logger.warn(e, "Failed to apply the edit of column {}, the value was discarded.", //$NON-NLS-1$
                 model.getColumnName(column));
-        String reason = rejection(value, e);
+        explained(model, rejection(value, e));
+    }
+
+    /**
+     * For a table model whose setValueAt took the value but cannot show it yet: says why under the
+     * cell, as a refusal does, in words of its own.
+     */
+    public static void explained(javax.swing.table.TableModel model, String reason) {
         Component focus = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
         JTable table = focus instanceof JTable ? (JTable) focus
                 : (JTable) SwingUtilities.getAncestorOfClass(JTable.class, focus);

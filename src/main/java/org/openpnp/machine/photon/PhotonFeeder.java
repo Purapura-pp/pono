@@ -487,7 +487,7 @@ public class PhotonFeeder extends ReferenceFeeder {
     public boolean isEnabled() {
         return super.isEnabled() &&
                 hardwareId != null &&
-                partId != null &&
+                getPart() != null &&
                 slotAddress != null &&
                 offset != null &&
                 getSlot().getLocation() != null;

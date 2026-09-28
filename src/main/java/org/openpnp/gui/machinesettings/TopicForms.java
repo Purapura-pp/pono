@@ -20,6 +20,8 @@ package org.openpnp.gui.machinesettings;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.swing.SwingUtilities;
+
 import org.openpnp.gui.form.FormWizard;
 import org.openpnp.gui.support.Wizard;
 import org.openpnp.gui.support.WizardContainer;
@@ -39,9 +41,10 @@ final class TopicForms implements WizardContainer {
         form.setWizardContainer(this);
         form.getApplyAction().addPropertyChangeListener(e -> {
             if ("enabled".equals(e.getPropertyName())) { //$NON-NLS-1$
-                changed();
+                SwingUtilities.invokeLater(this::changed);
             }
         });
+        form.onEdited(this::changed);
         forms.add(form);
         return form;
     }
@@ -60,6 +63,16 @@ final class TopicForms implements WizardContainer {
     boolean isDirty() {
         for (FormWizard form : forms) {
             if (form.hasEdits()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether a form holds an edit that fails its checks, which Apply does not write and Reset undoes. */
+    boolean isBlocked() {
+        for (FormWizard form : forms) {
+            if (!form.hasEdits() && !form.changes().isEmpty()) {
                 return true;
             }
         }
@@ -92,7 +105,7 @@ final class TopicForms implements WizardContainer {
 
     void reset() {
         for (FormWizard form : new ArrayList<>(forms)) {
-            if (Boolean.TRUE.equals(form.isDirty())) {
+            if (Boolean.TRUE.equals(form.isDirty()) || !form.changes().isEmpty()) {
                 form.reset();
             }
         }

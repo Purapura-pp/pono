@@ -63,6 +63,7 @@ final class CamerasTopic extends Topic {
     private final List<CameraCard> cards = new ArrayList<>();
     private final JPanel cameraHolder = new JPanel(new BorderLayout(16, 0));
     private final List<FormWizard> cameraForms = new ArrayList<>();
+    private final JPanel hints = new JPanel();
     private ReferenceCamera selected;
     /** One view for the topic's life: each holds a thread of its own. */
     private CameraView preview;
@@ -71,6 +72,8 @@ final class CamerasTopic extends Topic {
         super(MachineSettingsPanel.CAMERAS, "camera"); //$NON-NLS-1$
         this.page = page;
         this.machine = machine;
+        hints.setOpaque(false);
+        hints.setLayout(new BoxLayout(hints, BoxLayout.Y_AXIS));
     }
 
     @Override
@@ -165,13 +168,8 @@ final class CamerasTopic extends Topic {
         JPanel column = new JPanel();
         column.setOpaque(false);
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
-        SetupChecks.Check missing = page.getChecks().about(SetupChecks.DEVICE_MISSING, camera);
-        if (missing == null) {
-            missing = page.getChecks().about(SetupChecks.NO_DEVICE, camera);
-        }
-        if (missing != null) {
-            column.add(MachineSettingsPanel.capped(hint(missing)));
-        }
+        column.add(MachineSettingsPanel.capped(hints));
+        showHints();
         Wizard device = camera.getConfigurationWizard();
         if (device instanceof FormWizard) {
             FormWizard form = forms.add((FormWizard) device);
@@ -252,6 +250,31 @@ final class CamerasTopic extends Topic {
             form.readOnly("defaultZ", "MachineSettings.Cameras.DefaultZ"); //$NON-NLS-1$ //$NON-NLS-2$
         }
         return form.readOnly("settle", "MachineSettings.Cameras.Settle").build(); //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
+    /** What the selected camera's device is missing, as the page last found it. */
+    private void showHints() {
+        hints.removeAll();
+        if (selected != null) {
+            SetupChecks.Check missing = page.getChecks().about(SetupChecks.DEVICE_MISSING, selected);
+            if (missing == null) {
+                missing = page.getChecks().about(SetupChecks.NO_DEVICE, selected);
+            }
+            if (missing != null) {
+                hints.add(MachineSettingsPanel.capped(hint(missing)));
+            }
+        }
+        hints.setVisible(hints.getComponentCount() > 0);
+        hints.revalidate();
+        hints.repaint();
+    }
+
+    @Override
+    void checksChanged() {
+        showHints();
+        for (CameraCard card : cards) {
+            card.describe();
+        }
     }
 
     private static JComponent hint(SetupChecks.Check check) {

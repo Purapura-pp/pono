@@ -67,4 +67,8 @@ abstract class Topic {
     /** The topic left the screen. */
     void hidden() {
     }
+
+    /** The page looked again at what the machine's definition is missing; a built topic says so. */
+    void checksChanged() {
+    }
 }

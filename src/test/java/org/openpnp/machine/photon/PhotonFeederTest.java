@@ -188,6 +188,33 @@ public class PhotonFeederTest {
     }
 
     @Test
+    public void isEnabledReturnsFalseOnceThePartIsTakenAway() {
+        feeder.setEnabled(true);
+        feeder.setHardwareId(hardwareId);
+        feeder.setPart(new Part("test-part"));
+        feeder.setSlotAddress(feederAddress);
+        setSlotLocation(feederAddress, baseLocation);
+        feeder.setOffset(feederOffset);
+        feeder.setPart(null);
+
+        assertFalse(feeder.isEnabled());
+    }
+
+    @Test
+    public void aFeederSwitchedOnWithoutItsPartAndOffsetSaysWhatItLacks() {
+        feeder.setEnabled(true);
+        feeder.setHardwareId(hardwareId);
+        feeder.setSlotAddress(feederAddress);
+        setSlotLocation(feederAddress, baseLocation);
+
+        String why = org.openpnp.gui.support.FeederDescriptions.notEnabled(feeder);
+
+        assertTrue(why.contains(org.openpnp.Translations.getString("FeederDescriptions.Missing.Part")), why);
+        assertTrue(why.contains(org.openpnp.Translations.getString("FeederDescriptions.Missing.Offset")), why);
+        assertFalse(why.contains(org.openpnp.Translations.getString("FeederDescriptions.Missing.Slot")), why);
+    }
+
+    @Test
     public void getNameByDefaultReturnsClassSimpleName() {
         assertEquals(
                 String.format(org.openpnp.Translations.getString("PhotonFeeder.Title.Unconfigured"), org.openpnp.gui.support.DisplayNames.typeName(PhotonFeeder.class)),

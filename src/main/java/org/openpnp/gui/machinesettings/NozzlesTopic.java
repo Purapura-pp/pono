@@ -155,6 +155,11 @@ final class NozzlesTopic extends Topic {
         describeTipCheck();
     }
 
+    @Override
+    void checksChanged() {
+        describeTipCheck();
+    }
+
     // ---- how many and how they move -----------------------------------------------------------
 
     private JComponent structure() {

@@ -205,7 +205,11 @@ public class FeedersTableModel extends AbstractObjectTableModel implements Table
                 feeder.setPriority((Feeder.Priority) aValue);
             }
             else if (columnIndex == ENABLED) {
-                feeder.setEnabled((Boolean) aValue);
+                boolean enabled = (Boolean) aValue;
+                feeder.setEnabled(enabled);
+                if (enabled && !feeder.isEnabled()) {
+                    TableUtils.explained(this, org.openpnp.gui.support.FeederDescriptions.notEnabled(feeder));
+                }
             }
             else if (columnIndex == FEED_OPTIONS) {
                 ((ReferenceFeeder) feeder).setFeedOptions((ReferenceFeeder.FeedOptions) aValue);

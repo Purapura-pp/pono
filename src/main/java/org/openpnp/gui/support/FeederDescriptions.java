@@ -212,6 +212,40 @@ public final class FeederDescriptions {
         return number(length) + " mm"; //$NON-NLS-1$
     }
 
+    /**
+     * Why a feeder switched on still reads as off, or null when it is on. A Photon feeder is on only
+     * once it has its hardware, part, slot and offset; the switch is kept and takes effect then.
+     */
+    public static String notEnabled(Feeder feeder) {
+        if (feeder.isEnabled()) {
+            return null;
+        }
+        if (feeder instanceof PhotonFeeder) {
+            PhotonFeeder photon = (PhotonFeeder) feeder;
+            java.util.List<String> missing = new java.util.ArrayList<>();
+            if (photon.getHardwareId() == null) {
+                missing.add(Translations.getString("FeederDescriptions.Missing.Hardware")); //$NON-NLS-1$
+            }
+            if (photon.getPart() == null) {
+                missing.add(Translations.getString("FeederDescriptions.Missing.Part")); //$NON-NLS-1$
+            }
+            if (photon.getSlotAddress() == null) {
+                missing.add(Translations.getString("FeederDescriptions.Missing.Slot")); //$NON-NLS-1$
+            }
+            else if (photon.getSlot().getLocation() == null) {
+                missing.add(Translations.getString("FeederDescriptions.Missing.SlotLocation")); //$NON-NLS-1$
+            }
+            if (photon.getOffset() == null) {
+                missing.add(Translations.getString("FeederDescriptions.Missing.Offset")); //$NON-NLS-1$
+            }
+            if (!missing.isEmpty()) {
+                return String.format(Translations.getString("FeederDescriptions.NotEnabled.Photon"), //$NON-NLS-1$
+                        String.join(Translations.getString("FeederDescriptions.ListSeparator"), missing)); //$NON-NLS-1$
+            }
+        }
+        return Translations.getString("FeederDescriptions.NotEnabled"); //$NON-NLS-1$
+    }
+
     /** The millimetres without the unit: "8", "0.45". */
     private static String number(Length length) {
         double mm = length.convertToUnits(LengthUnit.Millimeters).getValue();
