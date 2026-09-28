@@ -505,6 +505,18 @@ public class MachineDiagnosticsIssuesTest {
         assertTrue(issue.getExtendedDescription().contains("+0.210%"));
         assertTrue(issue.getExtendedDescription().contains("80.1680"),
                 "80 steps per mm scaled by 1.0021: " + issue.getExtendedDescription());
+        namesTheCompensationStep(issue.getExtendedDescription());
+    }
+
+    /**
+     * The explanation leads to the calibration page's step, in the display language: it named a
+     * Compensate button on a diagnostics page that is gone, in English whatever the language.
+     */
+    private static void namesTheCompensationStep(String explanation) {
+        assertFalse(explanation.contains("diagnostics page"), explanation);
+        boolean chinese = java.util.Locale.getDefault().getLanguage().equals("zh");
+        assertTrue(explanation.contains(chinese ? "\u57fa\u51c6\u677f\u5750\u6807\u8865\u507f" : "Datum board compensation"),
+                explanation);
     }
 
     @Test
@@ -518,6 +530,7 @@ public class MachineDiagnosticsIssuesTest {
         assertFalse(issue.canBeAccepted());
         assertTrue(issue.getExtendedDescription().contains("-0.004363"),
                 "minus the tangent of 0.25 degrees: " + issue.getExtendedDescription());
+        namesTheCompensationStep(issue.getExtendedDescription());
         List<String> reported = wordings(results);
         assertFalse(reported.contains(MILLIMETRE_IS_NOT_A_MILLIMETRE),
                 "a hundredth of a percent is the board, not the machine");

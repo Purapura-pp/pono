@@ -30,9 +30,10 @@ import org.openpnp.model.Solutions;
 
 /**
  * A calibration step that measured and changed the machine, and waits to be applied or
- * discarded. What it changed is in effect, and saved, from the moment it was measured; discarding
- * takes it out again the way each change knows how: the issues it accepted are reopened, which
- * puts back what they found, and a frame compensation is taken out.
+ * discarded. What it changed is in effect from the moment it was measured, and written to the
+ * configuration only when it is applied; discarding takes it out again the way each change knows
+ * how: the issues it accepted are reopened, which puts back what they found, and a frame
+ * compensation is taken out.
  */
 public final class Pending {
     private final String key;

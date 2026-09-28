@@ -80,21 +80,35 @@ public class TopBarPanel extends JPanel {
     private JButton themeButton;
     private final JMenuBar menuBar;
 
-    /** Shown while the configuration has changes that are not on disk yet; a click saves them. */
+    /**
+     * Shown while the configuration has changes that are not on disk yet, a click saving them.
+     * While measured calibration results wait to be applied it says so instead: nothing is saved
+     * until they are, and a click goes to them.
+     */
     private final Chip configurationDirty = new Chip(
             Translations.getString("TopBar.ConfigurationDirty"), Chip.Tone.Warn, Chip.Shape.Chip); //$NON-NLS-1$
+    private boolean dirty;
+    private int calibrationPending;
 
     /** The bell, with how many things want attention in a badge on it. */
     private final BadgeIcon bellIcon = new BadgeIcon(Ui.icon("bell")); //$NON-NLS-1$
 
     private JButton bell;
+    private int toDo;
+    private int hints;
+    private Runnable openCalibration;
+    private Runnable openSettingsIssues;
 
     /**
-     * The count on the bell: what the calibration page has to do and its other hints, as its rows
-     * count them - the same suggestion about six nozzle tips is one. Red while something measured
-     * waits to be confirmed or the machine settings lack something the machine needs.
+     * The count on the bell: what the calibration page has to do, as its rows count them - the
+     * same suggestion about six nozzle tips is one - and what the machine settings page has to
+     * fix. Red while something measured waits to be applied or the machine settings lack
+     * something the machine needs. A click lists the two with a way to each: it used to go to
+     * the calibration page whichever of them the count was for.
      */
     public void setNotifications(int toDo, int hints, boolean severe) {
+        this.toDo = toDo;
+        this.hints = hints;
         bellIcon.setCount(toDo + hints, severe);
         if (bell != null) {
             bell.setToolTipText(toDo + hints == 0 ? Translations.getString("TopBar.Notifications.toolTipText") //$NON-NLS-1$
@@ -169,6 +183,7 @@ public class TopBarPanel extends JPanel {
         this.menuBar = menuBar;
         this.machineControls = machineControls;
         this.stopMachine = stopMachine;
+        this.openCalibration = openIssues;
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
         setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
@@ -185,15 +200,20 @@ public class TopBarPanel extends JPanel {
         jobPill = jobName();
         add(jobPill);
         add(Box.createHorizontalStrut(8));
-        configurationDirty.setToolTipText(Translations.getString("TopBar.ConfigurationDirty.toolTipText")); //$NON-NLS-1$
         configurationDirty.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         configurationDirty.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseClicked(java.awt.event.MouseEvent e) {
-                saveConfiguration.run();
+                if (calibrationPending > 0) {
+                    openIssues.run();
+                }
+                else {
+                    saveConfiguration.run();
+                }
             }
         });
-        configurationDirty.setVisible(configuration.isDirty());
+        dirty = configuration.isDirty();
+        showSaveState();
         add(configurationDirty);
         add(Box.createHorizontalGlue());
         MachineStateChip state = new MachineStateChip(configuration, machineControls.startStopMachineAction);
@@ -250,7 +270,7 @@ public class TopBarPanel extends JPanel {
         add(Box.createHorizontalStrut(6));
         bell = Ui.iconButton(bellIcon, Ui.Size.Md, Ui.Variant.Ghost,
                 Translations.getString("TopBar.Notifications.toolTipText")); //$NON-NLS-1$
-        bell.addActionListener(e -> openIssues.run());
+        bell.addActionListener(e -> showNotifications());
         add(neverNarrower(bell));
         add(Box.createHorizontalStrut(6));
         themeButton = Ui.iconButton(Ui.icon(FlatLaf.isLafDark() ? "moon" : "sun"), Ui.Size.Md, //$NON-NLS-1$ //$NON-NLS-2$
@@ -529,9 +549,49 @@ public class TopBarPanel extends JPanel {
                 new EmptyBorder(0, 12, 0, windowButtons ? 0 : 14));
     }
 
+    /** Where the bell's machine settings line goes: the topic of the first thing to fix. */
+    public void setOpenSettingsIssues(Runnable openSettingsIssues) {
+        this.openSettingsIssues = openSettingsIssues;
+    }
+
+    private void showNotifications() {
+        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        menu.add(notification(String.format(Translations.getString("TopBar.Notifications.Calibration"), toDo), //$NON-NLS-1$
+                "target", toDo, openCalibration)); //$NON-NLS-1$
+        menu.add(notification(String.format(Translations.getString("TopBar.Notifications.Settings"), hints), //$NON-NLS-1$
+                "sliders", hints, openSettingsIssues)); //$NON-NLS-1$
+        menu.show(bell, bell.getWidth() - menu.getPreferredSize().width, bell.getHeight());
+    }
+
+    private static javax.swing.JMenuItem notification(String text, String icon, int count, Runnable open) {
+        javax.swing.JMenuItem item = new javax.swing.JMenuItem(text, Ui.iconSm(icon));
+        item.setEnabled(count > 0 && open != null);
+        if (open != null) {
+            item.addActionListener(e -> open.run());
+        }
+        return item;
+    }
+
     /** Whether to show that the configuration has unsaved changes. */
     public void setConfigurationDirty(boolean dirty) {
-        configurationDirty.setVisible(dirty);
+        this.dirty = dirty;
+        showSaveState();
+    }
+
+    /** How many measured calibration results wait to be applied, which holds the saving back. */
+    public void setCalibrationPending(int count) {
+        calibrationPending = count;
+        showSaveState();
+    }
+
+    private void showSaveState() {
+        boolean held = calibrationPending > 0;
+        configurationDirty.setText(held
+                ? String.format(Translations.getString("TopBar.CalibrationPending"), calibrationPending) //$NON-NLS-1$
+                : Translations.getString("TopBar.ConfigurationDirty")); //$NON-NLS-1$
+        configurationDirty.setToolTipText(Translations.getString(held ? "TopBar.CalibrationPending.toolTipText" //$NON-NLS-1$
+                : "TopBar.ConfigurationDirty.toolTipText")); //$NON-NLS-1$
+        configurationDirty.setVisible(dirty || held);
         revalidate();
         repaint();
     }

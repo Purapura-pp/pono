@@ -100,11 +100,9 @@ final class CamerasTopic extends Topic {
                 .withRight(String.format(Translations.getString("MachineSettings.Cameras.Count"), cameras.size())) //$NON-NLS-1$
                 .content(row);
         cameraHolder.setOpaque(false);
-        JButton calibration = Ui.button(Translations.getString("MachineSettings.Guide.ToCalibration"), //$NON-NLS-1$
-                Ui.iconSm("target"), Ui.Size.Sm, Ui.Variant.Ghost); //$NON-NLS-1$
-        calibration.addActionListener(e -> page.getFrame().showCalibrationStep(null, null));
         JComponent view = MachineSettingsPanel.page(
-                Guide.of(Translations.getString("MachineSettings.Guide.Cameras"), calibration), //$NON-NLS-1$
+                Guide.of(Translations.getString("MachineSettings.Guide.Cameras"), //$NON-NLS-1$
+                        Guide.toCalibration(page, org.openpnp.model.CalibrationStep.Exposure, org.openpnp.model.CalibrationStep.CameraSettle)),
                 list, cameraHolder);
         select(cameras.get(0));
         return view;

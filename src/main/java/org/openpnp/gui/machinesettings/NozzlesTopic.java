@@ -61,6 +61,7 @@ import org.openpnp.machine.reference.solutions.HeadSolutions.NozzlePlan;
 import org.openpnp.machine.reference.wizards.HeadForm;
 import org.openpnp.machine.reference.wizards.NozzleForm;
 import org.openpnp.machine.reference.wizards.NozzleTipForm;
+import org.openpnp.model.Backups;
 import org.openpnp.model.Length;
 import org.openpnp.model.Location;
 import org.openpnp.spi.Actuator;
@@ -135,11 +136,9 @@ final class NozzlesTopic extends Topic {
                 tipModel.fireTableRowsUpdated(0, tips.size() - 1);
             }
         });
-        JButton calibration = Ui.button(Translations.getString("MachineSettings.Guide.ToCalibration"), //$NON-NLS-1$
-                Ui.iconSm("target"), Ui.Size.Sm, Ui.Variant.Ghost); //$NON-NLS-1$
-        calibration.addActionListener(e -> page.getFrame().showCalibrationStep(null, null));
         JComponent view = MachineSettingsPanel.page(
-                Guide.of(Translations.getString("MachineSettings.Guide.Nozzles"), calibration), //$NON-NLS-1$
+                Guide.of(Translations.getString("MachineSettings.Guide.Nozzles"), //$NON-NLS-1$
+                        Guide.toCalibration(page, org.openpnp.model.CalibrationStep.OtherNozzleOffsets, org.openpnp.model.CalibrationStep.NozzleTipCalibration)),
                 sections.toArray(new JComponent[0]));
         if (!nozzles.isEmpty()) {
             nozzleTable.setRowSelectionInterval(0, 0);
@@ -251,7 +250,7 @@ final class NozzlesTopic extends Topic {
                 .more(Translations.getString("MachineSettings.Nozzles.Change.More")); //$NON-NLS-1$
         int answer = Dialogs.show(change, content, Arrays.asList(Dialogs.Choice.cancel(),
                 Dialogs.Choice.primary(Translations.getString("MachineSettings.Nozzles.Change.Do"))), 0, 1); //$NON-NLS-1$
-        if (answer != 1) {
+        if (answer != 1 || !page.getFrame().settlePendingBeforeSave(change)) {
             return;
         }
         UiUtils.messageBoxOnException(() -> {

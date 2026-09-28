@@ -122,11 +122,9 @@ final class MotionTopic extends Topic {
                 model.fireTableRowsUpdated(0, axes.size() - 1);
             }
         });
-        JButton calibration = Ui.button(Translations.getString("MachineSettings.Guide.ToCalibration"), //$NON-NLS-1$
-                Ui.iconSm("target"), Ui.Size.Sm, Ui.Variant.Ghost); //$NON-NLS-1$
-        calibration.addActionListener(e -> page.getFrame().showCalibrationStep(null, null));
         JComponent view = MachineSettingsPanel.page(
-                Guide.of(Translations.getString("MachineSettings.Guide.Motion"), calibration), //$NON-NLS-1$
+                Guide.of(Translations.getString("MachineSettings.Guide.Motion"), //$NON-NLS-1$
+                        Guide.toCalibration(page, org.openpnp.model.CalibrationStep.XyBacklash, org.openpnp.model.CalibrationStep.FeedAcceleration)),
                 sections.toArray(new JComponent[0]));
         if (!axes.isEmpty()) {
             table.setRowSelectionInterval(0, 0);

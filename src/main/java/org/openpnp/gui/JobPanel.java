@@ -425,8 +425,7 @@ public class JobPanel extends JPanel {
                 Translations.getString("JobPanel.Tab.Boards"), pnlBoards); //$NON-NLS-1$
         placementsTab = dock.addTab(org.openpnp.gui.shell.Ui.iconSm("parts"), //$NON-NLS-1$
                 Translations.getString("JobPlacementsPanel.Border.title"), jobPlacementsPanel); //$NON-NLS-1$
-        // This run's own events: a second copy of the global log, as it was, set the whole
-        // program's log level from its settings.
+        // This run's own events, not the program's log.
         dock.addTab(org.openpnp.gui.shell.Ui.iconSm("log"), //$NON-NLS-1$
                 Translations.getString("JobPanel.Tab.RunLog"), runLogPanel); //$NON-NLS-1$
         runRefresh.setRepeats(false);

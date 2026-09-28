@@ -96,11 +96,14 @@ public class CalibrationPlan {
         private final Solutions.Issue issue;
         private final TestGroup group;
         private final Date when;
+        private final String invalidatedBy;
 
-        Basis(Solutions.Issue issue, TestGroup group, Date when) {
+        Basis(Solutions.Issue issue, TestGroup group, MachineDiagnosticsResults results) {
             this.issue = issue;
             this.group = group;
-            this.when = when;
+            MachineDiagnosticsResults.Run run = results == null || group == null ? null : results.getRun(group);
+            this.when = run == null ? null : run.getWhen();
+            this.invalidatedBy = run == null ? null : run.getInvalidatedBy();
         }
 
         /** The issue, or null for a basis that is a measurement alone. */
@@ -116,6 +119,19 @@ public class CalibrationPlan {
         /** When the group measured it, or null if it never has. */
         public Date getWhen() {
             return when;
+        }
+
+        /**
+         * Whether a step has changed what the group measured since: it has a date, and is still
+         * to be measured again, which a date alone had hidden.
+         */
+        public boolean isStale() {
+            return invalidatedBy != null;
+        }
+
+        /** The step that made it stale, by its name, or null. */
+        public String getInvalidatedBy() {
+            return invalidatedBy;
         }
     }
 
@@ -223,10 +239,10 @@ public class CalibrationPlan {
                 TestGroup group = issue instanceof MachineDiagnostics.Finding
                         ? ((MachineDiagnostics.Finding) issue).getMeasuredBy()
                         : null;
-                basis.add(new Basis(issue, group, when(results, group)));
+                basis.add(new Basis(issue, group, results));
             }
             for (TestGroup group : missing) {
-                basis.add(new Basis(null, group, when(results, group)));
+                basis.add(new Basis(null, group, results));
             }
             return basis;
         }
@@ -733,14 +749,6 @@ public class CalibrationPlan {
         }
     }
 
-    private static Date when(MachineDiagnosticsResults results, TestGroup group) {
-        if (results == null || group == null) {
-            return null;
-        }
-        MachineDiagnosticsResults.Run run = results.getRun(group);
-        return run == null ? null : run.getWhen();
-    }
-
     /** What an element of the machine is called where the calibration page names it. */
     public static String nameOf(Object subject) {
         if (subject instanceof Machine) {
@@ -752,7 +760,11 @@ public class CalibrationPlan {
         if (subject instanceof AbstractHead) {
             return ((AbstractHead) subject).getName();
         }
-        return String.valueOf(subject);
+        if (subject instanceof org.openpnp.spi.MotionPlanner) {
+            return Translations.getString("CalibrationPlan.MotionPlanner"); //$NON-NLS-1$
+        }
+        // Not its toString, which for an element without a name is its class and a hash code.
+        return subject == null ? "" : subject.getClass().getSimpleName(); //$NON-NLS-1$
     }
 
     static String idOf(Object subject) {

@@ -367,8 +367,9 @@ public class OperatorView extends JPanel {
             attention.add(line(Ui.muted(Translations.getString("OperatorView.Attention.None")), null, null)); //$NON-NLS-1$
         }
         for (OperatorSummary.Attention item : s.attention) {
-            Chip chip = new Chip(Translations.getString(item.empty ? "OperatorView.Attention.Empty" : "OperatorView.Attention.Low"), //$NON-NLS-1$ //$NON-NLS-2$
-                    item.empty ? Chip.Tone.Err : Chip.Tone.Warn, Chip.Shape.Status);
+            Chip chip = new Chip(Translations.getString(item.empty ? "OperatorView.Attention.Empty" //$NON-NLS-1$
+                    : item.fault ? "OperatorView.Attention.Fault" : "OperatorView.Attention.Low"), //$NON-NLS-1$ //$NON-NLS-2$
+                    item.empty || item.fault ? Chip.Tone.Err : Chip.Tone.Warn, Chip.Shape.Status);
             String detail = item.empty && !item.waiting.isEmpty()
                     ? String.format(Translations.getString("OperatorView.Attention.Waiting"), item.partId, item.waiting.get(0)) //$NON-NLS-1$
                     : item.left != null
@@ -378,7 +379,8 @@ public class OperatorView extends JPanel {
                     null, Ui.Size.Xs, item.empty ? Ui.Variant.Primary : Ui.Variant.Default);
             act.setFocusable(false);
             act.addActionListener(e -> refilled(item));
-            attention.add(line(chip, text(item.feeder.getName(), detail), act));
+            // A refill does not mend failed picks: those are for the feeders page.
+            attention.add(line(chip, text(item.feeder.getName(), detail), item.fault ? null : act));
         }
         attention.revalidate();
         attention.repaint();

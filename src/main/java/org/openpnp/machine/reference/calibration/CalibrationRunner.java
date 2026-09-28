@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -751,12 +750,13 @@ public class CalibrationRunner {
 
         @Override
         public File backup(String stamp) throws Exception {
-            configuration.save();
-            File directory = configuration.getConfigurationDirectory();
-            File backup = new File(directory, "machine.xml.before-calibration-" + stamp); //$NON-NLS-1$
-            Files.copy(new File(directory, "machine.xml").toPath(), backup.toPath(), //$NON-NLS-1$
-                    StandardCopyOption.COPY_ATTRIBUTES);
-            return backup;
+            return org.openpnp.model.Backups.backup(configuration, "calibration"); //$NON-NLS-1$
+        }
+
+        /** machine.xml as it is on disk, without saving first, among the backups. */
+        protected File copyMachineFile(String stamp) throws Exception {
+            return org.openpnp.model.Backups.copy(configuration.getConfigurationDirectory(), "calibration", //$NON-NLS-1$
+                    "machine.xml"); //$NON-NLS-1$
         }
 
         @Override

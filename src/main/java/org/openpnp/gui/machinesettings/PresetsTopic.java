@@ -60,6 +60,7 @@ import org.openpnp.machine.reference.ReferenceMachine;
 import org.openpnp.machine.reference.presets.MachinePreset;
 import org.openpnp.machine.reference.presets.MachinePresets;
 import org.openpnp.machine.reference.presets.PresetXml;
+import org.openpnp.model.Backups;
 import org.openpnp.util.UiUtils;
 import org.pmw.tinylog.Logger;
 

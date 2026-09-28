@@ -47,8 +47,8 @@ import org.openpnp.gui.components.reticle.OutlineReticle;
 import org.openpnp.gui.components.reticle.Reticle;
 import org.openpnp.gui.components.reticle.RulerReticle;
 import org.openpnp.gui.components.reticle.SceneReticle;
-import org.openpnp.gui.machinesettings.Backups;
 import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.model.Backups;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Footprint;
 import org.openpnp.spi.Actuator;
@@ -392,7 +392,8 @@ public class CameraToolsBar extends JPanel {
                         actuator.getName(), LightBrightness.format(conversion.on), conversion.command),
                 Translations.getString("CameraTools.Brightness.Convert.More"), //$NON-NLS-1$
                 Dialogs.Choice.primary(Translations.getString("CameraTools.Brightness.Convert.Action"))); //$NON-NLS-1$
-        if (chosen != 0) {
+        org.openpnp.gui.MainFrame frame = org.openpnp.gui.MainFrame.get();
+        if (chosen != 0 || (frame != null && !frame.settlePendingBeforeSave(this))) {
             return false;
         }
         try {

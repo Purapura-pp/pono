@@ -21,7 +21,6 @@ package org.openpnp.gui.operator;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -51,15 +50,18 @@ public final class OperatorSummary {
         public final Feeder feeder;
         /** Empty rather than just low. */
         public final boolean empty;
+        /** Its picks failed: neither empty nor low, and not something a refill mends. */
+        public final boolean fault;
         public final String partId;
         /** Parts left, or null when the feeder does not count them. */
         public final Integer left;
         /** The placements waiting for it, by their ids. */
         public final List<String> waiting;
 
-        Attention(Feeder feeder, boolean empty, String partId, Integer left, List<String> waiting) {
+        Attention(Feeder feeder, boolean empty, boolean fault, String partId, Integer left, List<String> waiting) {
             this.feeder = feeder;
             this.empty = empty;
+            this.fault = fault;
             this.partId = partId;
             this.left = left;
             this.waiting = waiting;
@@ -188,35 +190,30 @@ public final class OperatorSummary {
         return null;
     }
 
-    /** The feeders of the job's parts that are empty, then those that are low. */
+    /**
+     * The feeders the job needs that want a look, as the feeders page counts them: the empty ones,
+     * then those whose picks failed, then the low ones.
+     */
     private static List<Attention> attention(Job job, Machine machine) {
-        Set<String> parts = new HashSet<>();
-        for (BoardLocation board : job.getBoardLocations()) {
-            if (!board.isEnabled()) {
-                continue;
-            }
-            for (Placement placement : board.getPlacementsHolder().getPlacements()) {
-                if (placement.getType() == Placement.Type.Placement && placement.isEnabled()
-                        && placement.getSide() == board.getGlobalSide() && placement.getPart() != null) {
-                    parts.add(placement.getPart().getId());
-                }
-            }
-        }
+        Set<String> parts = FeederAttention.partsOf(job);
         List<Attention> empty = new ArrayList<>();
+        List<Attention> faults = new ArrayList<>();
         List<Attention> low = new ArrayList<>();
         for (Feeder feeder : machine.getFeeders()) {
-            if (feeder.getPart() == null || !parts.contains(feeder.getPart().getId())) {
+            if (!FeederAttention.isNeeded(feeder, parts)) {
                 continue;
             }
-            if (feeder.isEmpty()) {
-                empty.add(new Attention(feeder, true, feeder.getPart().getId(), feeder.getPartsLeft(),
-                        job.getRun().waitingFor(feeder.getName())));
+            FeederAttention.Trouble trouble = FeederAttention.troubleOf(feeder);
+            if (trouble == FeederAttention.Trouble.None) {
+                continue;
             }
-            else if (feeder.isLow()) {
-                low.add(new Attention(feeder, false, feeder.getPart().getId(), feeder.getPartsLeft(),
-                        job.getRun().waitingFor(feeder.getName())));
-            }
+            Attention attention = new Attention(feeder, trouble == FeederAttention.Trouble.Empty,
+                    trouble == FeederAttention.Trouble.Fault, feeder.getPart().getId(), feeder.getPartsLeft(),
+                    job.getRun().waitingFor(feeder.getName()));
+            (trouble == FeederAttention.Trouble.Empty ? empty : trouble == FeederAttention.Trouble.Fault ? faults : low)
+                    .add(attention);
         }
+        empty.addAll(faults);
         empty.addAll(low);
         return Collections.unmodifiableList(empty);
     }

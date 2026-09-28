@@ -63,7 +63,8 @@ public class FeedersTableModel extends AbstractObjectTableModel implements Table
 
     public static Status statusOf(Feeder feeder) {
         if (!feeder.isEnabled()) {
-            return Status.Disabled;
+            // Running out switches a feeder off: it is out, which is what it wants.
+            return feeder.getPart() != null && feeder.isEmpty() ? Status.Empty : Status.Disabled;
         }
         if (feeder.getPart() == null) {
             return Status.NoPart;
