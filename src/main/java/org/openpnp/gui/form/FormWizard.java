@@ -1175,6 +1175,17 @@ public class FormWizard extends AbstractConfigurationWizard {
         SwingUtilities.invokeLater(this::refresh);
     }
 
+    private final List<Runnable> editedListeners = new ArrayList<>();
+
+    /**
+     * Called once an edit is in the form, after the binding has taken the new value, and when the
+     * form is loaded again: what a page summing up several forms' edits follows. Apply's
+     * "enabled" changes earlier, while the binding still holds the value from before the edit.
+     */
+    public void onEdited(Runnable listener) {
+        editedListeners.add(listener);
+    }
+
     /** Shows and hides the conditional fields, and puts each failing check's message in place. */
     private void refresh() {
         boolean valid = true;
@@ -1233,6 +1244,9 @@ public class FormWizard extends AbstractConfigurationWizard {
         }
         contentPanel.revalidate();
         contentPanel.repaint();
+        for (Runnable listener : new ArrayList<>(editedListeners)) {
+            listener.run();
+        }
     }
 
     /** What the form is about is not the machine's configuration: a placement is the job's. */
