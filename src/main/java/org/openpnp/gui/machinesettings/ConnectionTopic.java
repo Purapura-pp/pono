@@ -61,12 +61,15 @@ final class ConnectionTopic extends Topic {
     private final List<DriverCard> cards = new ArrayList<>();
     private final JPanel driverHolder = new JPanel(new BorderLayout());
     private final List<FormWizard> driverForms = new ArrayList<>();
+    private final JPanel hints = new JPanel();
     private Driver selected;
 
     ConnectionTopic(MachineSettingsPanel page, ReferenceMachine machine) {
         super(MachineSettingsPanel.CONNECTION, "power"); //$NON-NLS-1$
         this.page = page;
         this.machine = machine;
+        hints.setOpaque(false);
+        hints.setLayout(new BoxLayout(hints, BoxLayout.Y_AXIS));
     }
 
     @Override
@@ -142,12 +145,8 @@ final class ConnectionTopic extends Topic {
         JPanel column = new JPanel();
         column.setOpaque(false);
         column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
-        for (String kind : new String[] { SetupChecks.PORT_MISSING, SetupChecks.NO_PORT }) {
-            SetupChecks.Check check = page.getChecks().about(kind, driver);
-            if (check != null) {
-                column.add(MachineSettingsPanel.capped(hint(check)));
-            }
-        }
+        column.add(MachineSettingsPanel.capped(hints));
+        showHints();
         if (driver instanceof AbstractReferenceDriver) {
             AbstractReferenceDriver reference = (AbstractReferenceDriver) driver;
             FormWizard communications = forms.add(DriverForms.communications(reference));
@@ -255,6 +254,27 @@ final class ConnectionTopic extends Topic {
         commandsRow.add(Box.createHorizontalGlue());
         grid.row(Translations.getString("MachineSettings.Connection.Commands.Label"), commandsRow); //$NON-NLS-1$
         return section.content(grid);
+    }
+
+    /** What the selected driver's port is missing, as the page last found it. */
+    private void showHints() {
+        hints.removeAll();
+        if (selected != null) {
+            for (String kind : new String[] { SetupChecks.PORT_MISSING, SetupChecks.NO_PORT }) {
+                SetupChecks.Check check = page.getChecks().about(kind, selected);
+                if (check != null) {
+                    hints.add(MachineSettingsPanel.capped(hint(check)));
+                }
+            }
+        }
+        hints.setVisible(hints.getComponentCount() > 0);
+        hints.revalidate();
+        hints.repaint();
+    }
+
+    @Override
+    void checksChanged() {
+        showHints();
     }
 
     private static JComponent hint(SetupChecks.Check check) {

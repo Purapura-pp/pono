@@ -387,6 +387,9 @@ public class MachineSettingsPanel extends JPanel {
         checks = SetupChecks.of(machine);
         for (Map.Entry<Topic, TopicItem> entry : items.entrySet()) {
             entry.getValue().setCount(checks.count(entry.getKey().key));
+            if (entry.getKey().isBuilt()) {
+                entry.getKey().checksChanged();
+            }
         }
         if (frame.getNavigation() != null) {
             frame.getNavigation().setBadge(this, checks.all().size(), NavigationRail.Badge.Warn);
