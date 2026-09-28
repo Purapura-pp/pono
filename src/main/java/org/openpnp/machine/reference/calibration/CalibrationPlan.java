@@ -78,7 +78,7 @@ public class CalibrationPlan {
         Waiting,
         /** What decides it has not been measured, or was measured before a step changed it. */
         NeedsMeasurement,
-        /** Dismissed on the issues page, which counts as a decision not to. */
+        /** Dismissed, on the calibration page or the machine settings page: a decision not to. */
         Dismissed;
 
         public String getName() {

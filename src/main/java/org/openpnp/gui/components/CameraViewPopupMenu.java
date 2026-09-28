@@ -29,7 +29,6 @@ import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
 
@@ -536,11 +535,21 @@ public class CameraViewPopupMenu extends JPopupMenu {
         inputMenuItem.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String result = JOptionPane.showInputDialog(cameraView,
+                String result = org.openpnp.gui.shell.Dialogs.input(cameraView,
+                        Translations.getString("CameraViewPopupMenu.Reticle.SizeTitle"), //$NON-NLS-1$
                         String.format(
                                 Translations.getString("CameraViewPopupMenu.Reticle.EnterSize"), //$NON-NLS-1$
                                 unitsLabel(reticle.getUnits())),
-                        reticle.getSize() + "");
+                        null, reticle.getSize() + "", Translations.getString("Dialogs.Input.Set"), //$NON-NLS-1$ //$NON-NLS-2$
+                        text -> {
+                            try {
+                                return Double.valueOf(text) > 0 ? null
+                                        : Translations.getString("Dialogs.Input.NotAPositiveNumber"); //$NON-NLS-1$
+                            }
+                            catch (NumberFormatException notANumber) {
+                                return Translations.getString("Dialogs.Input.NotAPositiveNumber"); //$NON-NLS-1$
+                            }
+                        });
                 if (result != null) {
                     reticle.setSize(Double.valueOf(result));
                     cameraView.setDefaultReticle(reticle);

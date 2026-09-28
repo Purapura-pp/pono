@@ -1324,9 +1324,10 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
     }
 
     /**
-     * Marks an issue as one of these checks, so that the diagnostics page can show what it found
-     * among everything else the machine reports. The page is the one place that needs to tell
-     * them apart; Issues and Solutions deliberately does not care where an issue came from.
+     * Marks an issue as one of these checks, so that the calibration page can tell what a
+     * measurement found from everything else the machine reports, and lead from the diagnostic to
+     * the steps it calls for. The page is the one place that needs to tell them apart; Issues and
+     * Solutions deliberately does not care where an issue came from.
      */
     public interface Finding {
         /**

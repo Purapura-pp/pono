@@ -1,40 +1,41 @@
 package org.openpnp.gui;
 
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.FlowLayout;
-import java.awt.Font;
+import java.awt.Component;
+import java.awt.Desktop;
+import java.awt.GridLayout;
 import java.awt.Robot;
-import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
-import java.io.FilenameFilter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import javax.imageio.ImageIO;
-import javax.swing.AbstractAction;
-import javax.swing.Action;
-import javax.swing.JButton;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JCheckBox;
-import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
-import javax.swing.JProgressBar;
+import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextPane;
-import javax.swing.UIManager;
-import javax.swing.border.BevelBorder;
-import javax.swing.border.EmptyBorder;
-import javax.swing.border.SoftBevelBorder;
+import javax.swing.SwingUtilities;
 
 import org.apache.commons.io.FileUtils;
 import org.openpnp.Main;
 import org.openpnp.Translations;
-import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.gui.shell.Dialogs;
+import org.openpnp.gui.shell.Forms;
+import org.openpnp.gui.shell.Ui;
 import org.openpnp.imgur.Imgur;
 import org.openpnp.imgur.Imgur.Album;
 import org.openpnp.imgur.Imgur.Image;
@@ -50,364 +51,301 @@ import com.github.kennedyoliveira.pastebin4j.Paste;
 import com.github.kennedyoliveira.pastebin4j.PasteBin;
 import com.github.kennedyoliveira.pastebin4j.PasteExpiration;
 import com.github.kennedyoliveira.pastebin4j.PasteVisibility;
-import com.jgoodies.forms.layout.ColumnSpec;
-import com.jgoodies.forms.layout.FormLayout;
-import com.jgoodies.forms.layout.FormSpecs;
-import com.jgoodies.forms.layout.RowSpec;
 
-public class SubmitDiagnosticsDialog extends JDialog {
+/**
+ * Help → Submit a help request: what went wrong in your words, and the files that show it - the
+ * configuration, the log, the job, a screenshot, the latest vision images. Uploaded, the text goes
+ * to an unlisted Pastebin paste and the pictures to an Imgur album, and the browser opens the paste
+ * to share. Packed, they are copied into a folder of their own under help in the configuration
+ * directory, which is opened, for whoever the user chooses to send it to; that is also what a
+ * failed upload offers.
+ */
+public final class SubmitDiagnosticsDialog {
+    /** The vision images taken along, newest first. */
+    private static final int VISION_IMAGES = 10;
+    private static final int WIDTH = 640;
 
-    private final JPanel contentPanel = new JPanel();
-    private JTextArea descriptionTa;
-    private JCheckBox includeMachineXmlChk;
-    private JCheckBox includePartsXmlChk;
-    private JCheckBox includePackagesXmlChk;
-    private JCheckBox includeLogChk;
-    private JCheckBox includeScreenShotChk;
-    private JCheckBox includeVisionChk;
-    private JCheckBox includeSystemInfoChk;
-    private JCheckBox includeJobChk;
-    private JLabel lblSubmitAHelp;
-    private JProgressBar progressBar;
-    private JButton okButton;
-    private JButton cancelButton;
-    private Thread thread;
-
-    private BufferedImage screenShot;
-
-    /**
-     * Create the dialog.
-     */
-    public SubmitDiagnosticsDialog() {
-        setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
-        getContentPane().setLayout(new BorderLayout());
-        contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
-        getContentPane().add(contentPanel, BorderLayout.CENTER);
-        FormLayout fl_contentPanel = new FormLayout(new ColumnSpec[] {
-                FormSpecs.RELATED_GAP_COLSPEC,
-                ColumnSpec.decode("default:grow"),
-                FormSpecs.RELATED_GAP_COLSPEC,
-                ColumnSpec.decode("default:grow"),},
-            new RowSpec[] {
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.UNRELATED_GAP_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.UNRELATED_GAP_ROWSPEC,
-                RowSpec.decode("default:grow"),
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.UNRELATED_GAP_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.PREF_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.UNRELATED_GAP_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.UNRELATED_GAP_ROWSPEC,
-                FormSpecs.RELATED_GAP_ROWSPEC,
-                FormSpecs.DEFAULT_ROWSPEC,});
-        fl_contentPanel.setColumnGroups(new int[][]{new int[]{4, 2}});
-        contentPanel.setLayout(fl_contentPanel);
-        {
-            lblSubmitAHelp = new JLabel(Translations.getString("SubmitDiagnosticsDialog.lblSubmitAHelp.text")); //$NON-NLS-1$
-            lblSubmitAHelp.setFont(new Font("Lucida Grande", Font.PLAIN, 24));
-            contentPanel.add(lblSubmitAHelp, "2, 2, 3, 1");
-        }
-        {
-            JTextPane txtpnToSubmitA = new JTextPane();
-            txtpnToSubmitA.setBackground(UIManager.getColor("Label.background"));
-            txtpnToSubmitA.setEditable(false);
-            txtpnToSubmitA.setText(
-                    "Describe the problem you are experiencing below, select the checkboxes to include content that will help the developers resolve your issue, then click send.\n\nWhen the upload finishes your browser will open to Pastebin. You may be prompted to enter a captcha to complete the process - this is normal. You can then copy the URL to share it.\n\nBe aware that the information you send may be visible to the OpenPnP community, so you should not include private or proprietary information.");
-            contentPanel.add(txtpnToSubmitA, "2, 6, 3, 1, fill, fill");
-        }
-        {
-            txtpnWarningIfYou = new JTextPane();
-            txtpnWarningIfYou.setText("Warning: If you include a screenshot or Vision Debug Images these images may include output from your machine's cameras. If these images contain content you don't want to share you should uncheck these options. You can review the images from the generated link before sharing it.");
-            txtpnWarningIfYou.setForeground(org.openpnp.gui.shell.Ui.err());
-            txtpnWarningIfYou.setBackground(UIManager.getColor("Label.background"));
-            txtpnWarningIfYou.setEditable(false);
-            contentPanel.add(txtpnWarningIfYou, "2, 8, 3, 1, fill, fill");
-        }
-        {
-            JLabel lblComments = new JLabel(Translations.getString("SubmitDiagnosticsDialog.lblComments.text")); //$NON-NLS-1$
-            lblComments.setFont(new Font("Lucida Grande", Font.BOLD, 14));
-            contentPanel.add(lblComments, "2, 12");
-        }
-        {
-            descriptionTa = new JTextArea();
-            descriptionTa.setBorder(new SoftBevelBorder(BevelBorder.LOWERED, null, null, null, null));
-            descriptionTa.setColumns(60);
-            descriptionTa.setRows(10);
-            contentPanel.add(descriptionTa, "2, 14, 3, 1, fill, fill");
-        }
-        {
-            JLabel lblInclude = new JLabel(Translations.getString("SubmitDiagnosticsDialog.lblInclude.text")); //$NON-NLS-1$
-            lblInclude.setFont(new Font("Lucida Grande", Font.BOLD, 14));
-            contentPanel.add(lblInclude, "2, 18");
-        }
-        {
-            includeMachineXmlChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.MachineXml")); //$NON-NLS-1$
-            includeMachineXmlChk.setSelected(true);
-            contentPanel.add(includeMachineXmlChk, "2, 20");
-        }
-        {
-            includePartsXmlChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.PartsXml")); //$NON-NLS-1$
-            includePartsXmlChk.setSelected(true);
-            contentPanel.add(includePartsXmlChk, "4, 20");
-        }
-        {
-            includePackagesXmlChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.PackagesXml")); //$NON-NLS-1$
-            includePackagesXmlChk.setSelected(true);
-            contentPanel.add(includePackagesXmlChk, "2, 22");
-        }
-        {
-            includeLogChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.includeLogChk.text")); //$NON-NLS-1$
-            includeLogChk.setSelected(true);
-            contentPanel.add(includeLogChk, "4, 22");
-        }
-        {
-            includeSystemInfoChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.includeSystemInfoChk.text")); //$NON-NLS-1$
-            includeSystemInfoChk.setSelected(true);
-            contentPanel.add(includeSystemInfoChk, "2, 24");
-        }
-        {
-            includeJobChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.includeJobChk.text")); //$NON-NLS-1$
-            includeJobChk.setSelected(true);
-            contentPanel.add(includeJobChk, "4, 24");
-        }
-        {
-            includeScreenShotChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.includeScreenShotChk.text")); //$NON-NLS-1$
-            includeScreenShotChk.setSelected(true);
-            contentPanel.add(includeScreenShotChk, "2, 26");
-        }
-        {
-            includeVisionChk = new JCheckBox(Translations.getString("SubmitDiagnosticsDialog.includeVisionChk.text")); //$NON-NLS-1$
-            includeVisionChk.setSelected(true);
-            contentPanel.add(includeVisionChk, "4, 26");
-        }
-        {
-            progressBar = new JProgressBar();
-            progressBar.setStringPainted(true);
-            contentPanel.add(progressBar, "2, 30, 3, 1");
-        }
-        {
-            JPanel buttonPane = new JPanel();
-            buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
-            getContentPane().add(buttonPane, BorderLayout.SOUTH);
-            {
-                cancelButton = new JButton(cancelAction);
-                buttonPane.add(cancelButton);
-            }
-            {
-                okButton = new JButton(sendAction);
-                buttonPane.add(okButton);
-                getRootPane().setDefaultButton(okButton);
-            }
-        }
-
-        // We have to grab a screenshot before the dialog is shown or the screenshot
-        // will include the dialog. So we grab it and if we don't need it it just gets
-        // ignored.
-        try {
-            screenShot = new Robot().createScreenCapture(MainFrame.get().getBounds());
-        }
-        catch (Exception e) {
-            Logger.warn(e, "Failed to grab a screenshot, diagnostics will be submitted without one.");
-        }
+    private SubmitDiagnosticsDialog() {
     }
 
-    @SuppressWarnings("serial")
-    public Action sendAction = new AbstractAction("Send") {
-        @Override
-        public void actionPerformed(ActionEvent e) {
-            /**
-             * Hide the dialog Grab screenshot Show the dialog Start send Disable Send Cancel
-             * cancels... Update progress bar
-             */
-            okButton.setEnabled(false);
+    /** What to take along, as ticked. */
+    private static final class Included {
+        String description;
+        boolean machine, parts, packages, log, systemInfo, job, screenshot, vision;
+    }
 
-            thread = new Thread(() -> {
-                try {
-                    Configuration.get().save();
-
-                    List<File> images = new ArrayList<>();
-                    File configDir = Configuration.get().getConfigurationDirectory();
-                    File logDir = new File(configDir, "log");
-                    File visionDir = new File(logDir, "vision");
-                    String content = "";
-                    if (includeMachineXmlChk.isSelected()) {
-                        content += createPasteStringFromFile(new File(configDir, "machine.xml"));
-                    }
-                    if (includePartsXmlChk.isSelected()) {
-                        content += createPasteStringFromFile(new File(configDir, "parts.xml"));
-                    }
-                    if (includePackagesXmlChk.isSelected()) {
-                        content += createPasteStringFromFile(new File(configDir, "packages.xml"));
-                    }
-                    if (includeLogChk.isSelected()) {
-                        content += createPasteStringFromFile(new File(logDir, "OpenPnP.log"));
-                    }
-                    if (includeSystemInfoChk.isSelected()) {
-                        content += String.format("**** %s ****\n\n%s\n\n", "SystemInfo.txt", getSystemInfo());
-                    }
-                    if (includeJobChk.isSelected()) {
-                        File file = File.createTempFile("OpenPnp-Diagnostics", ".job.xml");
-                        Job job = MainFrame.get().getJobTab().getJob();
-                        Configuration.get().saveJob(job, file);
-                        content += createPasteStringFromFile(file);
-                        HashSet<Board> boards = new HashSet<>();
-                        for (BoardLocation bl : job.getBoardLocations()) {
-                            boards.add(bl.getBoard());
-                        }
-                        for (Board board : boards) {
-                            content += createPasteStringFromFile(board.getFile());
-                        }
-                    }
-                    if (includeScreenShotChk.isSelected() && screenShot != null) {
-                        File file = File.createTempFile("OpenPnP-Screenshot", ".png");
-                        ImageIO.write(screenShot, "PNG", file);
-                        images.add(file);
-                    }
-                    if (includeVisionChk.isSelected()) {
-                        File[] visionFiles = visionDir.listFiles(new FilenameFilter() {
-                            @Override
-                            public boolean accept(File dir, String name) {
-                                return name.toLowerCase().endsWith(".png");
-                            }
-                        });
-
-                        if (visionFiles != null) {
-                            Arrays.sort(visionFiles, new Comparator<File>() {
-                                public int compare(File f1, File f2) {
-                                    return Long.valueOf(f2.lastModified()).compareTo(f1.lastModified());
-                                }
-                            });
-
-                            for (int i = 0; i < Math.min(visionFiles.length, 10); i++) {
-                                images.add(visionFiles[i]);
-                            }
-                        }
-                    }
-
-                    // Image count + the album + the paste
-                    progressBar.setMaximum(images.size() + (images.isEmpty() ? 0 : 1) + 1);
-                    progressBar.setValue(1);
-
-                    Album album = null;
-                    if (!images.isEmpty()) {
-                        Imgur imgur = new Imgur(Configuration.get().getImgurClientId());
-                        List<Image> albumImages = new ArrayList<>();
-                        for (File file : images) {
-                            if (Thread.interrupted()) {
-                                return;
-                            }
-                            Image image = imgur.uploadImage(file);
-                            albumImages.add(image);
-                            progressBar.setValue(progressBar.getValue() + 1);
-                        }
-
-                        if (Thread.interrupted()) {
-                            return;
-                        }
-                        album = imgur.createAlbum("OpenPnP Diagnostics Images",
-                                albumImages.toArray(new Image[] {}));
-                        progressBar.setValue(progressBar.getValue() + 1);
-                    }
-                    
-                    final PasteBin pasteBin =
-                            new PasteBin(new AccountCredentials("37ccaf49071a6226ad8f96efdfa9e936"));
-
-                    // Basic creation
-                    final Paste paste = new Paste();
-
-                    paste.setTitle("OpenPnP Diagnostics");
-                    paste.setExpiration(PasteExpiration.ONE_MONTH);
-                    paste.setVisibility(PasteVisibility.UNLISTED);
-                    paste.setContent(String.format("OpenPnP Diagnostics\n\nImages: %s\n\nDescription: %s\n\nFiles:\n\n%s",
-                            album == null ? "None" : "http://imgur.com/a/" + album.id,
-                            descriptionTa.getText(),
-                            content));
-
-                    final String url = pasteBin.createPaste(paste);
-
-                    progressBar.setValue(progressBar.getValue() + 1);
-
-                    if (Thread.interrupted()) {
-                        return;
-                    }
-                    Logger.info("Created diagnostics package at: " + url);
-                    UiUtils.browseUri(url);
-                    setVisible(false);
-                }
-                catch (Exception e1) {
-                    Logger.error(e1, "Failed to submit the diagnostics package.");
-                    MessageBoxes.errorBox(MainFrame.get(),
-                            Translations.getString("SubmitDiagnosticsDialog.Submit.ErrorBox.Title"), //$NON-NLS-1$
-                            e1);
-                    okButton.setEnabled(true);
-                }
-                thread = null;
-            });
-            thread.setDaemon(true);
-            thread.start();
+    public static void show(MainFrame frame) {
+        // Taken before the question is up, or the question is in it.
+        BufferedImage screenshot = null;
+        try {
+            screenshot = new Robot().createScreenCapture(frame.getBounds());
         }
-    };
-
-    @SuppressWarnings("serial")
-    public Action cancelAction = new AbstractAction("Cancel") {
-        @Override
-        public void actionPerformed(ActionEvent arg0) {
+        catch (Exception e) {
+            Logger.warn(e, "No screenshot could be taken; the help request goes without one."); //$NON-NLS-1$
+        }
+        JTextArea description = new JTextArea(6, 20);
+        description.setLineWrap(true);
+        description.setWrapStyleWord(true);
+        JScrollPane scroll = new JScrollPane(description);
+        scroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // As wide as the dialog's text, which a text area sized by its columns pushed off the edge.
+        scroll.setPreferredSize(new java.awt.Dimension(WIDTH - 110, 110));
+        JCheckBox machine = check("SubmitDiagnosticsDialog.MachineXml"); //$NON-NLS-1$
+        JCheckBox parts = check("SubmitDiagnosticsDialog.PartsXml"); //$NON-NLS-1$
+        JCheckBox packages = check("SubmitDiagnosticsDialog.PackagesXml"); //$NON-NLS-1$
+        JCheckBox log = check("SubmitDiagnosticsDialog.includeLogChk.text"); //$NON-NLS-1$
+        JCheckBox systemInfo = check("SubmitDiagnosticsDialog.includeSystemInfoChk.text"); //$NON-NLS-1$
+        JCheckBox job = check("SubmitDiagnosticsDialog.includeJobChk.text"); //$NON-NLS-1$
+        JCheckBox shot = check("SubmitDiagnosticsDialog.includeScreenShotChk.text"); //$NON-NLS-1$
+        shot.setEnabled(screenshot != null);
+        shot.setSelected(screenshot != null);
+        JCheckBox vision = check("SubmitDiagnosticsDialog.includeVisionChk.text"); //$NON-NLS-1$
+        JPanel boxes = new JPanel(new GridLayout(0, 2, 12, 2));
+        boxes.setOpaque(false);
+        boxes.setAlignmentX(Component.LEFT_ALIGNMENT);
+        for (JCheckBox box : new JCheckBox[] { machine, parts, packages, log, systemInfo, job, shot, vision }) {
+            boxes.add(box);
+        }
+        JPanel body = new JPanel();
+        body.setOpaque(false);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        body.add(heading("SubmitDiagnosticsDialog.lblComments.text")); //$NON-NLS-1$
+        body.add(Box.createVerticalStrut(4));
+        body.add(scroll);
+        body.add(Box.createVerticalStrut(10));
+        body.add(heading("SubmitDiagnosticsDialog.lblInclude.text")); //$NON-NLS-1$
+        body.add(Box.createVerticalStrut(4));
+        body.add(boxes);
+        String title = Translations.getString("SubmitDiagnosticsDialog.lblSubmitAHelp.text"); //$NON-NLS-1$
+        Dialogs.Content content = new Dialogs.Content().tone(Dialogs.Tone.Info, "upload").title(title) //$NON-NLS-1$
+                .what(Translations.getString("SubmitDiagnosticsDialog.What")) //$NON-NLS-1$
+                .more(Translations.getString("SubmitDiagnosticsDialog.More")) //$NON-NLS-1$
+                .body(body).focus(description).width(WIDTH);
+        int answer = Dialogs.show(frame, content, Arrays.asList(Dialogs.Choice.cancel(),
+                Dialogs.Choice.plain(Translations.getString("SubmitDiagnosticsDialog.Pack")), //$NON-NLS-1$
+                Dialogs.Choice.primary(Translations.getString("SubmitDiagnosticsDialog.Upload"))), 0, 2); //$NON-NLS-1$
+        if (answer == 0) {
+            return;
+        }
+        Included included = new Included();
+        included.description = description.getText();
+        included.machine = machine.isSelected();
+        included.parts = parts.isSelected();
+        included.packages = packages.isSelected();
+        included.log = log.isSelected();
+        included.systemInfo = systemInfo.isSelected();
+        included.job = job.isSelected();
+        included.screenshot = shot.isSelected();
+        included.vision = vision.isSelected();
+        BufferedImage taken = included.screenshot ? screenshot : null;
+        boolean upload = answer == 2;
+        frame.getStatusBar().setBusy(true);
+        frame.setStatus(Translations.getString(upload ? "SubmitDiagnosticsDialog.Uploading" //$NON-NLS-1$
+                : "SubmitDiagnosticsDialog.Packing")); //$NON-NLS-1$
+        Thread thread = new Thread(() -> {
             try {
-                if (thread != null) {
-                    thread.interrupt();
-                    thread.join();
+                Map<String, String> texts = texts(frame, included);
+                List<File> images = images(included, taken);
+                if (upload) {
+                    String url = upload(included.description, texts, images);
+                    Logger.info("Help request uploaded to {}", url); //$NON-NLS-1$
+                    SwingUtilities.invokeLater(() -> {
+                        frame.getStatusBar().setBusy(false);
+                        frame.setStatus(String.format(Translations.getString("SubmitDiagnosticsDialog.Uploaded"), url)); //$NON-NLS-1$
+                        UiUtils.browseUri(url);
+                    });
+                }
+                else {
+                    File folder = pack(included.description, texts, images);
+                    SwingUtilities.invokeLater(() -> packed(frame, folder));
                 }
             }
             catch (Exception e) {
-                Logger.debug(e, "Interrupted while waiting for the diagnostics submission to stop.");
+                Logger.error(e, "The help request could not be {}.", upload ? "uploaded" : "packed"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                SwingUtilities.invokeLater(() -> {
+                    frame.getStatusBar().setBusy(false);
+                    frame.setStatus(""); //$NON-NLS-1$
+                    if (upload && Dialogs.ask(frame, Dialogs.Tone.Warn, "alert", //$NON-NLS-1$
+                            Translations.getString("SubmitDiagnosticsDialog.Submit.ErrorBox.Title"), //$NON-NLS-1$
+                            e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(),
+                            Translations.getString("SubmitDiagnosticsDialog.PackInstead"), //$NON-NLS-1$
+                            Dialogs.Choice.primary(Translations.getString("SubmitDiagnosticsDialog.Pack"))) == 0) { //$NON-NLS-1$
+                        packAfterAll(frame, included, taken);
+                    }
+                    else if (!upload) {
+                        Dialogs.error(frame, Translations.getString("SubmitDiagnosticsDialog.Pack.Failed"), e, null, false); //$NON-NLS-1$
+                    }
+                });
             }
-            setVisible(false);
-        }
-    };
-    private JTextPane txtpnWarningIfYou;
+        }, "pono-help-request"); //$NON-NLS-1$
+        thread.setDaemon(true);
+        thread.start();
+    }
 
-    static String getSystemInfo() throws Exception {
-        StringBuffer sb = new StringBuffer();
-        String[] keys = new String[] {"os.name", "os.arch", "java.runtime.name", "java.vm.vendor",
-                "java.vm.name", "user.country", "java.runtime.version", "os.version",
-                "java.vm.info", "java.version",};
+    /** Packs what the upload could not send. */
+    private static void packAfterAll(MainFrame frame, Included included, BufferedImage screenshot) {
+        frame.getStatusBar().setBusy(true);
+        Thread thread = new Thread(() -> {
+            try {
+                File folder = pack(included.description, texts(frame, included), images(included, screenshot));
+                SwingUtilities.invokeLater(() -> packed(frame, folder));
+            }
+            catch (Exception e) {
+                SwingUtilities.invokeLater(() -> {
+                    frame.getStatusBar().setBusy(false);
+                    Dialogs.error(frame, Translations.getString("SubmitDiagnosticsDialog.Pack.Failed"), e, null, false); //$NON-NLS-1$
+                });
+            }
+        }, "pono-help-request"); //$NON-NLS-1$
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private static void packed(MainFrame frame, File folder) {
+        frame.getStatusBar().setBusy(false);
+        frame.setStatus(String.format(Translations.getString("SubmitDiagnosticsDialog.Packed"), folder)); //$NON-NLS-1$
+        try {
+            Desktop.getDesktop().open(folder);
+        }
+        catch (Exception e) {
+            Logger.warn(e, "The help request folder {} could not be opened.", folder); //$NON-NLS-1$
+        }
+    }
+
+    private static JCheckBox check(String key) {
+        JCheckBox box = Forms.check(Translations.getString(key));
+        box.setSelected(true);
+        return box;
+    }
+
+    private static JLabel heading(String key) {
+        JLabel label = new JLabel(Translations.getString(key));
+        label.setFont(Ui.weighted(Ui.BASE, 600));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return label;
+    }
+
+    /** The text files, by the name each goes under, the job's saved first. */
+    private static Map<String, String> texts(MainFrame frame, Included included) throws Exception {
+        Configuration configuration = Configuration.get();
+        configuration.save();
+        File configDir = configuration.getConfigurationDirectory();
+        File logDir = new File(configDir, "log"); //$NON-NLS-1$
+        Map<String, String> texts = new LinkedHashMap<>();
+        if (included.machine) {
+            add(texts, new File(configDir, "machine.xml")); //$NON-NLS-1$
+        }
+        if (included.parts) {
+            add(texts, new File(configDir, "parts.xml")); //$NON-NLS-1$
+        }
+        if (included.packages) {
+            add(texts, new File(configDir, "packages.xml")); //$NON-NLS-1$
+        }
+        if (included.log) {
+            add(texts, new File(logDir, "OpenPnP.log")); //$NON-NLS-1$
+        }
+        if (included.systemInfo) {
+            texts.put("SystemInfo.txt", systemInfo()); //$NON-NLS-1$
+        }
+        if (included.job && frame.getJobTab() != null && frame.getJobTab().getJob() != null) {
+            Job job = frame.getJobTab().getJob();
+            File file = File.createTempFile("OpenPnP-Diagnostics", ".job.xml"); //$NON-NLS-1$ //$NON-NLS-2$
+            configuration.saveJob(job, file);
+            add(texts, file);
+            Set<Board> boards = new LinkedHashSet<>();
+            for (BoardLocation location : job.getBoardLocations()) {
+                boards.add(location.getBoard());
+            }
+            for (Board board : boards) {
+                if (board.getFile() != null) {
+                    add(texts, board.getFile());
+                }
+            }
+        }
+        return texts;
+    }
+
+    private static void add(Map<String, String> texts, File file) throws Exception {
+        if (file.isFile()) {
+            texts.put(file.getName(), FileUtils.readFileToString(file, StandardCharsets.UTF_8));
+        }
+    }
+
+    private static List<File> images(Included included, BufferedImage screenshot) throws Exception {
+        List<File> images = new ArrayList<>();
+        if (screenshot != null) {
+            File file = File.createTempFile("OpenPnP-Screenshot", ".png"); //$NON-NLS-1$ //$NON-NLS-2$
+            ImageIO.write(screenshot, "PNG", file); //$NON-NLS-1$
+            images.add(file);
+        }
+        if (included.vision) {
+            File visionDir = new File(new File(Configuration.get().getConfigurationDirectory(), "log"), "vision"); //$NON-NLS-1$ //$NON-NLS-2$
+            File[] files = visionDir.listFiles((dir, name) -> name.toLowerCase().endsWith(".png")); //$NON-NLS-1$
+            if (files != null) {
+                Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
+                images.addAll(Arrays.asList(files).subList(0, Math.min(files.length, VISION_IMAGES)));
+            }
+        }
+        return images;
+    }
+
+    /** @return The paste's address. */
+    private static String upload(String description, Map<String, String> texts, List<File> images) throws Exception {
+        Album album = null;
+        if (!images.isEmpty()) {
+            Imgur imgur = new Imgur(Configuration.get().getImgurClientId());
+            List<Image> uploaded = new ArrayList<>();
+            for (File file : images) {
+                uploaded.add(imgur.uploadImage(file));
+            }
+            album = imgur.createAlbum("OpenPnP Diagnostics Images", uploaded.toArray(new Image[] {})); //$NON-NLS-1$
+        }
+        StringBuilder files = new StringBuilder();
+        for (Map.Entry<String, String> text : texts.entrySet()) {
+            files.append(String.format("**** %s ****\n\n%s\n\n", text.getKey(), text.getValue())); //$NON-NLS-1$
+        }
+        PasteBin pasteBin = new PasteBin(new AccountCredentials("37ccaf49071a6226ad8f96efdfa9e936")); //$NON-NLS-1$
+        Paste paste = new Paste();
+        paste.setTitle("OpenPnP Diagnostics"); //$NON-NLS-1$
+        paste.setExpiration(PasteExpiration.ONE_MONTH);
+        paste.setVisibility(PasteVisibility.UNLISTED);
+        paste.setContent(String.format("OpenPnP Diagnostics\n\nImages: %s\n\nDescription: %s\n\nFiles:\n\n%s", //$NON-NLS-1$
+                album == null ? "None" : "http://imgur.com/a/" + album.id, description, files)); //$NON-NLS-1$ //$NON-NLS-2$
+        return pasteBin.createPaste(paste);
+    }
+
+    /** @return The folder, help/yyyyMMdd-HHmmss under the configuration directory. */
+    private static File pack(String description, Map<String, String> texts, List<File> images) throws Exception {
+        File folder = new File(new File(Configuration.get().getConfigurationDirectory(), "help"), //$NON-NLS-1$
+                new SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date())); //$NON-NLS-1$
+        if (!folder.mkdirs()) {
+            throw new Exception("Cannot create " + folder); //$NON-NLS-1$
+        }
+        Files.write(new File(folder, "description.txt").toPath(), description.getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
+        for (Map.Entry<String, String> text : texts.entrySet()) {
+            Files.write(new File(folder, text.getKey()).toPath(), text.getValue().getBytes(StandardCharsets.UTF_8));
+        }
+        int n = 0;
+        for (File image : images) {
+            String name = image.getName().startsWith("OpenPnP-Screenshot") ? "screenshot.png" //$NON-NLS-1$ //$NON-NLS-2$
+                    : String.format("vision-%02d-%s", ++n, image.getName()); //$NON-NLS-1$
+            Files.copy(image.toPath(), new File(folder, name).toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
+        return folder;
+    }
+
+    static String systemInfo() {
+        StringBuilder sb = new StringBuilder();
+        String[] keys = new String[] { "os.name", "os.arch", "java.runtime.name", "java.vm.vendor", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                "java.vm.name", "user.country", "java.runtime.version", "os.version", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+                "java.vm.info", "java.version", }; //$NON-NLS-1$ //$NON-NLS-2$
         for (String key : keys) {
-            sb.append(String.format("%s: %s\n", key, System.getProperty(key)));
+            sb.append(String.format("%s: %s\n", key, System.getProperty(key))); //$NON-NLS-1$
         }
-        sb.append(String.format("Memory Total: %.2f\n",
-                Runtime.getRuntime().totalMemory() / 1024.0 / 1024.0));
-        sb.append(String.format("Memory Free: %.2f\n",
-                Runtime.getRuntime().freeMemory() / 1024.0 / 1024.0));
-        sb.append(String.format("Memory Max: %.2f\n",
-                Runtime.getRuntime().maxMemory() / 1024.0 / 1024.0));
-        sb.append(String.format("OpenPnp Version: %s", Main.getVersion()));
+        sb.append(String.format("Memory Total: %.2f\n", Runtime.getRuntime().totalMemory() / 1024.0 / 1024.0)); //$NON-NLS-1$
+        sb.append(String.format("Memory Free: %.2f\n", Runtime.getRuntime().freeMemory() / 1024.0 / 1024.0)); //$NON-NLS-1$
+        sb.append(String.format("Memory Max: %.2f\n", Runtime.getRuntime().maxMemory() / 1024.0 / 1024.0)); //$NON-NLS-1$
+        sb.append(String.format("OpenPnp Version: %s", Main.getVersion())); //$NON-NLS-1$
         return sb.toString();
-    }
-
-    static String createPasteStringFromFile(File file) throws Exception {
-        return String.format("**** %s ****\n\n%s\n\n", file.getName(), FileUtils.readFileToString(file));
-    }
-
-    public static interface ProgressCallback {
-        public void progress(int total, int current, String status);
     }
 }

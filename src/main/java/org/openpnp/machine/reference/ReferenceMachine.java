@@ -697,8 +697,8 @@ public class ReferenceMachine extends AbstractMachine {
 
     /**
      * The calibration page's own search: only what raises calibration issues, into an instance of
-     * its own (see {@link Solutions#forCalibration}), so that the issues page's milestone hides
-     * nothing and its list is left alone.
+     * its own (see {@link Solutions#forCalibration}), so that the machine's milestone hides
+     * nothing and the whole search's list is left alone.
      */
     public void findCalibrationIssues(Solutions solutions) {
         kinematicSolutions.setMachine(this).findIssues(solutions);

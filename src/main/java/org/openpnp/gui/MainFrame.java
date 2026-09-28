@@ -69,7 +69,6 @@ import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import javax.swing.JTextPane;
@@ -80,12 +79,10 @@ import javax.swing.border.BevelBorder;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
-import javax.swing.undo.UndoManager;
 
 import org.openpnp.Main;
 import org.openpnp.Translations;
 import org.openpnp.gui.components.CameraPanel;
-import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.importer.BoardImporter;
 import org.openpnp.gui.support.AbstractConfigurationWizard;
 import org.openpnp.gui.support.HeadCellValue;
@@ -189,7 +186,6 @@ public class MainFrame extends JFrame {
     /** The "/" that moved the focus to a filter, whose typed character is still to come. */
     private boolean slashTaken;
     private AbstractConfigurationWizard wizardWithActiveProcess = null;
-    private UndoManager undoManager = new UndoManager();
     private boolean windowStyleMultiple;
 
     public static MainFrame get() {
@@ -224,10 +220,6 @@ public class MainFrame extends JFrame {
         if (this.wizardWithActiveProcess == wizardWithActiveProcess) {
             this.wizardWithActiveProcess = null;
         }
-    }
-
-    public UndoManager getUndoManager() {
-        return undoManager;
     }
 
     public MachineControlsPanel getMachineControls() {
@@ -1341,8 +1333,7 @@ public class MainFrame extends JFrame {
         navigationRail.addGap();
         // The machine's own settings by topic, the element tree the last of them.
         addNavigation("MachineSettings", org.openpnp.gui.shell.Ui.icon("sliders", 20), machineSettingsPanel); //$NON-NLS-1$ //$NON-NLS-2$
-        // Collects what the machine needs and carries it out; the issues page and the
-        // diagnostics page before it are in it.
+        // Collects what the machine needs and carries it out, the measurements with it.
         calibrationPanel = new CalibrationPanel(configuration, this);
         // While results wait to be applied nothing is saved: the top bar and status bar say so.
         calibrationPanel.addPropertyChangeListener(CalibrationPanel.PROPERTY_PENDING, e -> {
@@ -2160,8 +2151,11 @@ public class MainFrame extends JFrame {
             scroll.setBorder(null);
             scroll.setPreferredSize(new Dimension(460, Math.min(560,
                     label.getPreferredSize().height + 8)));
-            JOptionPane.showMessageDialog(MainFrame.this, scroll,
-                    Translations.getString("Menu.Help.Hotkeys"), JOptionPane.PLAIN_MESSAGE); //$NON-NLS-1$
+            org.openpnp.gui.shell.Dialogs.show(MainFrame.this, new org.openpnp.gui.shell.Dialogs.Content()
+                    .tone(org.openpnp.gui.shell.Dialogs.Tone.Info, "keyboard") //$NON-NLS-1$
+                    .title(Translations.getString("Menu.Help.Hotkeys")).body(scroll), //$NON-NLS-1$
+                    java.util.List.of(org.openpnp.gui.shell.Dialogs.Choice.primary(
+                            Translations.getString("Dialogs.Close"))), 0, 0); //$NON-NLS-1$
         }
     };
 
@@ -2186,15 +2180,9 @@ public class MainFrame extends JFrame {
             return false;
         }
         catch (Exception e) {
-			String message = String.format(
-					Translations.getString("MainFrame.SaveConfig.Error.Message"), e.getMessage()); //$NON-NLS-1$
-			message = message.replaceAll("\n", "<br/>"); //$NON-NLS-1$ //$NON-NLS-2$
-			message = message.replaceAll("\r", ""); //$NON-NLS-1$ //$NON-NLS-2$
-			message = "<html><body width=\"400\">" + message + "</body></html>"; //$NON-NLS-1$ //$NON-NLS-2$
-			JOptionPane.showMessageDialog(this, message,
-					Translations.getString("MainFrame.SaveConfig.Error.Title"), //$NON-NLS-1$
-					JOptionPane.ERROR_MESSAGE);
-			return false;
+            org.openpnp.gui.shell.Dialogs.error(this, Translations.getString("MainFrame.SaveConfig.Error.Title"), //$NON-NLS-1$
+                    e, e.getMessage(), false);
+            return false;
         }
 
         Logger.debug("Config saved successfully!"); //$NON-NLS-1$
@@ -2593,49 +2581,10 @@ public class MainFrame extends JFrame {
     private Action submitDiagnosticsAction = new AbstractAction(Translations.getString("Menu.Help.SubmitDiagnostics")) { //$NON-NLS-1$
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            SubmitDiagnosticsDialog dialog = new SubmitDiagnosticsDialog();
-            dialog.setModal(true);
-            dialog.setSize(620, 720);
-            dialog.setLocationRelativeTo(MainFrame.get());
-            dialog.setVisible(true);
+            SubmitDiagnosticsDialog.show(MainFrame.this);
         }
     };
     
-    public final Action undoAction = new AbstractAction(Translations.getString("Menu.Edit.Undo")) { //$NON-NLS-1$
-        {
-            putValue(MNEMONIC_KEY, KeyEvent.VK_Z);
-            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke('Z',
-                    Toolkit.getDefaultToolkit().getMenuShortcutKeyMask()));
-        }
-
-        @Override
-        public void actionPerformed(ActionEvent arg0) {
-            try {
-                undoManager.undo();
-            }
-            catch (Exception e) {
-                Logger.debug(e, "Nothing was undone."); //$NON-NLS-1$
-            }
-        }
-    };
-    
-    public final Action redoAction = new AbstractAction(Translations.getString("Menu.Edit.Redo")) { //$NON-NLS-1$
-        {
-//            putValue(MNEMONIC_KEY, KeyEvent.VK_Y);
-            putValue(ACCELERATOR_KEY, KeyStroke.getKeyStroke('Z',
-                    Toolkit.getDefaultToolkit().getMenuShortcutKeyMask() | KeyEvent.SHIFT_MASK));
-        }
-
-        @Override
-        public void actionPerformed(ActionEvent arg0) {
-            try {
-                undoManager.redo();
-            }
-            catch (Exception e) {
-                Logger.debug(e, "Nothing was redone."); //$NON-NLS-1$
-            }
-        }
-    };
     
     public class LanguageSelectionAction extends AbstractAction {
         private final Locale locale;

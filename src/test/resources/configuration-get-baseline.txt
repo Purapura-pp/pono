@@ -6,7 +6,7 @@
 # These are the calls that were left on purpose, not a list of work waiting to
 # be done. Read the test's own comment before adding to them.
 #
-# 164 calls in 101 files.
+# 152 calls in 93 files.
 org/openpnp/Main.java	2
 org/openpnp/gui/JobPlacementsPanel.java	1
 org/openpnp/gui/ScriptAction.java	1
@@ -15,8 +15,6 @@ org/openpnp/gui/components/CameraPanel.java	1
 org/openpnp/gui/components/CameraView.java	1
 org/openpnp/gui/components/ComponentDecorators.java	2
 org/openpnp/gui/components/LocationButtonsPanel.java	2
-org/openpnp/gui/components/ThemeDialog.java	3
-org/openpnp/gui/components/ThemeSettingsPanel.java	1
 org/openpnp/gui/importer/CsvImporter.java	1
 org/openpnp/gui/importer/DipTraceImporter.java	1
 org/openpnp/gui/importer/EagleBoardImporter.java	1

@@ -890,8 +890,8 @@ public class CalibrationRunner {
 
         @Override
         public void accept(CalibrationPlan.Step step, Solutions.Issue issue) throws Exception {
-            // The issues page chose the first choice for the user when none was made; here the
-            // step makes it, rather than leaving an issue that needs one to fail on a null.
+            // An issue that asks for a choice takes its first when none was made, as Issues and
+            // Solutions always did, rather than failing on a null.
             if (issue.getChoice() == null && issue.getChoices() != null) {
                 for (Solutions.Issue.Choice choice : issue.getChoices()) {
                     if (choice != null) {

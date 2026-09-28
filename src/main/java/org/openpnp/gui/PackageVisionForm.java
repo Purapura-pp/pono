@@ -25,7 +25,6 @@ import java.util.List;
 
 import javax.swing.JButton;
 import javax.swing.JComponent;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
@@ -248,13 +247,18 @@ public final class PackageVisionForm {
             delete.setEnabled(one);
         });
         add.addActionListener(e -> {
-            String name = JOptionPane.showInputDialog(table.getTopLevelAncestor(),
-                    Translations.getString("PackageVisionWizard.NewPad.EnterName")); //$NON-NLS-1$
-            if (name == null || name.trim().isEmpty()) {
+            String name = org.openpnp.gui.shell.Dialogs.input(table.getTopLevelAncestor(),
+                    Translations.getString("PackageVisionWizard.NewPad.Title"), //$NON-NLS-1$
+                    Translations.getString("PackageVisionWizard.NewPad.EnterName"), null, null, //$NON-NLS-1$
+                    Translations.getString("Dialogs.Input.Add"), //$NON-NLS-1$
+                    text -> footprint.getPads().stream().anyMatch(p -> text.equals(p.getName()))
+                            ? String.format(Translations.getString("PackageVisionWizard.NewPad.Exists"), text) //$NON-NLS-1$
+                            : null);
+            if (name == null) {
                 return;
             }
             Pad pad = new Pad();
-            pad.setName(name.trim());
+            pad.setName(name);
             footprint.addPad(pad);
             tableModel.fireTableDataChanged();
             pkg.fireFootprintChanged();

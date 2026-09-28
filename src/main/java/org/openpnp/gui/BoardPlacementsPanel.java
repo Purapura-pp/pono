@@ -39,7 +39,6 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
@@ -560,23 +559,13 @@ public class BoardPlacementsPanel extends JPanel {
                 return;
             }
 
-            String id = JOptionPane.showInputDialog(getTopLevelAncestor(),
-                    Translations.getString("BoardsPanel.BoardPlacements.NewPlacement.InputDialog.enterIdMessage")); //$NON-NLS-1$
+            String id = org.openpnp.gui.shell.Dialogs.input(getTopLevelAncestor(), Translations.getString("JobPlacementsPanel.NewPlacement.Name"),
+                    Translations.getString("BoardsPanel.BoardPlacements.NewPlacement.InputDialog.enterIdMessage"), null, null, //$NON-NLS-1$
+                    Translations.getString("Dialogs.Input.Create"), //$NON-NLS-1$
+                    text -> board.getPlacements().stream().anyMatch(p -> p.getId().equals(text))
+                            ? Translations.getString("BoardsPanel.BoardPlacements.NewPlacement.ErrorMessageBox.IdAlreadyExistsMessage") : null); //$NON-NLS-1$
             if (id == null) {
                 return;
-            }
-            id = id.trim();
-            if (id.isEmpty()) {
-                return;
-            }
-
-            // Check if the new placement ID is unique
-            for(Placement compareplacement : board.getPlacements()) {
-                if (compareplacement.getId().equals(id)) {
-                    MessageBoxes.errorBox(getTopLevelAncestor(), Translations.getString("General.Error"), //$NON-NLS-1$
-                            Translations.getString("BoardsPanel.BoardPlacements.NewPlacement.ErrorMessageBox.IdAlreadyExistsMessage")); //$NON-NLS-1$
-                    return;
-                }
             }
             
             Placement placement = new Placement(id);

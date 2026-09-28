@@ -58,9 +58,10 @@ import com.formdev.flatlaf.FlatClientProperties;
  * and it says what it is showing - which the panels never did, because the answer was always
  * "whatever is selected in the table above".
  * <p>
- * The sheets are tabs in this first version, one per property sheet, each keeping its own Apply and
- * Reset. Grouping them into an accordion with one Apply for the lot would change what those
- * buttons mean, and that is a decision about the wizards rather than about the layout.
+ * The sheets are tabs, one per property sheet, and one Reset and Apply at the foot stand for all of
+ * them: the sheets' own buttons are hidden. A page with a foot of its own - the machine settings
+ * page over its element tree - takes the edits there instead ({@link #lendFooter}), so that the
+ * page does not show two feet.
  */
 @SuppressWarnings("serial")
 public class InspectorPanel extends RoundedPanel {
@@ -291,11 +292,72 @@ public class InspectorPanel extends RoundedPanel {
             }
             any = true;
         }
-        footer.setVisible(any && !collapsed);
+        footer.setVisible(any && !collapsed && !isFooterLent());
         followDirty();
     }
 
+    private Component footerPage;
+    private Runnable footerFollower;
+
+    /**
+     * While the page is on screen, its own foot stands in for this one's: this one is hidden, and
+     * the follower is told whenever the edits on show change, to say what they are and to apply
+     * or reset them through {@link #applyEdits} and {@link #resetEdits}. A null follower gives the
+     * foot back.
+     */
+    public void lendFooter(Component page, Runnable follower) {
+        footerPage = follower == null ? null : page;
+        footerFollower = follower;
+        footer.setVisible(!collapsed && hasContent() && !wizards().isEmpty() && !isFooterLent());
+    }
+
+    private boolean isFooterLent() {
+        return footerPage != null && footerPage == activePage;
+    }
+
+    /** What Apply would write, of the forms on show that list their edits. */
+    public List<org.openpnp.gui.form.FormWizard.Change> pendingChanges() {
+        List<org.openpnp.gui.form.FormWizard.Change> changes = new java.util.ArrayList<>();
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            if (wizard instanceof org.openpnp.gui.form.FormWizard) {
+                changes.addAll(((org.openpnp.gui.form.FormWizard) wizard).changes());
+            }
+        }
+        return changes;
+    }
+
+    /** Whether Apply has something to write. */
+    public boolean hasApplicableEdits() {
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            if (Boolean.TRUE.equals(wizard.isDirty())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether Reset has something to take back, edits failing their checks included. */
+    public boolean hasEdits() {
+        for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
+            if (edited(wizard)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void applyEdits() {
+        applyButton.doClick(0);
+    }
+
+    public void resetEdits() {
+        resetButton.doClick(0);
+    }
+
     private void followDirty() {
+        if (isFooterLent()) {
+            footerFollower.run();
+        }
         boolean dirty = false;
         boolean resettable = false;
         for (org.openpnp.gui.support.AbstractConfigurationWizard wizard : wizards()) {
@@ -370,7 +432,7 @@ public class InspectorPanel extends RoundedPanel {
      * Show what a page has selected, if that page is the one on screen.
      * <p>
      * Every table used to write straight into this column, whichever page the user was looking
-     * at - so the issues page's background scan replaced whatever the parts page had put here,
+     * at - so a page's search in the background replaced whatever the parts page had put here,
      * and switching pages left the previous page's sheets behind. A request from a page that is
      * not active is remembered and presented when the page is.
      * 
@@ -470,7 +532,7 @@ public class InspectorPanel extends RoundedPanel {
 
     /**
      * The "..." menu of a thing that reports actions of its own - a machine element, a feeder -
-     * which were only on the machine setup page's toolbar; null for one that has none.
+     * which were only on the element tree's toolbar; null for one that has none.
      */
     private static javax.swing.JPopupMenu actionsMenu(Object subject) {
         if (!(subject instanceof PropertySheetHolder)) {
@@ -498,6 +560,9 @@ public class InspectorPanel extends RoundedPanel {
         footer.setVisible(false);
         setMoreMenu(null);
         setBody(nothingSelected);
+        if (isFooterLent()) {
+            footerFollower.run();
+        }
     }
 
     public boolean isCollapsed() {
@@ -509,7 +574,7 @@ public class InspectorPanel extends RoundedPanel {
         this.collapsed = collapsed;
         header.setVisible(!collapsed);
         body.setVisible(!collapsed);
-        footer.setVisible(!collapsed && !wizards().isEmpty());
+        footer.setVisible(!collapsed && !wizards().isEmpty() && !isFooterLent());
         strip.setVisible(collapsed);
         revalidate();
         repaint();

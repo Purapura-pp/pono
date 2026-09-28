@@ -64,9 +64,9 @@ import org.openpnp.spi.Nozzle;
 import org.openpnp.spi.PropertySheetHolder;
 
 /**
- * The issues page's Machine overview tab, as mockup 15 has it: the axes, cameras, drivers and
- * nozzles as four cards of four columns, read only, a row taking the user to the machine page
- * where it is set. It was the top of the diagnostics page, in seven and eight columns a table.
+ * The machine settings page's overview, as mockup 15 has it: the axes, cameras, drivers and
+ * nozzles as four cards of four columns, read only, a row taking the user to the element tree
+ * where it is set.
  */
 @SuppressWarnings("serial")
 public class MachineOverviewPanel extends JPanel {
@@ -296,7 +296,7 @@ public class MachineOverviewPanel extends JPanel {
             note.setText(text);
         }
 
-        /** Opens the element the row is about in the machine page's tree. */
+        /** Opens the element the row is about in the element tree. */
         private void open() {
             int row = table.getSelectedRow();
             PropertySheetHolder element = row < 0 ? null : model.elements.get(table.convertRowIndexToModel(row));

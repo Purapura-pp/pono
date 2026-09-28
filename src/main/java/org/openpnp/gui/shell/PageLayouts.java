@@ -68,7 +68,7 @@ public final class PageLayouts {
 
     /**
      * Pages with no use for the camera at all. The machine settings page's topics are forms; its
-     * tree keeps the machine page's layout, the camera large.
+     * element tree has a layout of its own, the camera large.
      */
     private static final Set<String> NO_CAMERA = Set.of("Settings", "MachineSettings"); //$NON-NLS-1$ //$NON-NLS-2$
 

@@ -26,10 +26,9 @@ import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Configuration;
 
 /**
- * What the calibration page took over from the diagnostics page: the overview describes the
- * default machine in every cell without being shown, every measurement group has a parameter
- * form whose fields name real properties of the diagnostics, and every group is either one of a
- * step's phases or one of the page's diagnostics.
+ * The machine overview describes the default machine in every cell without being shown, every
+ * measurement group has a parameter form whose fields name real properties of the diagnostics,
+ * and every group is either one of a calibration step's phases or one of the page's diagnostics.
  */
 public class CalibrationPageTabsTest {
     @TempDir

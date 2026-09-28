@@ -42,7 +42,6 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JTable;
@@ -655,23 +654,13 @@ public class PanelDefinitionPanel extends JPanel implements PropertyChangeListen
                 return;
             }
 
-            String id = JOptionPane.showInputDialog(getTopLevelAncestor(),
-                    Translations.getString("PanelDefinition.PanelAlignment.Add.EnterIdMessage")); //$NON-NLS-1$
+            String id = org.openpnp.gui.shell.Dialogs.input(getTopLevelAncestor(), org.openpnp.gui.shell.Dialogs.titleOf(Translations.getString("PanelDefinition.PanelAlignment.Add")),
+                    Translations.getString("PanelDefinition.PanelAlignment.Add.EnterIdMessage"), null, null, //$NON-NLS-1$
+                    Translations.getString("Dialogs.Input.Add"), //$NON-NLS-1$
+                    text -> rootPanelLocation.getPanel().getPlacements().stream().anyMatch(p -> p.getId().equals(text))
+                            ? Translations.getString("PanelDefinition.PanelAlignment.Add.Error.IdExists") : null); //$NON-NLS-1$
             if (id == null) {
                 return;
-            }
-            id = id.trim();
-            if (id.isEmpty()) {
-                return;
-            }
-
-            // Check if the new placement ID is unique
-            for(Placement comparePlacement : rootPanelLocation.getPanel().getPlacements()) {
-                if (comparePlacement.getId().equals(id)) {
-                    MessageBoxes.errorBox(getTopLevelAncestor(), Translations.getString("General.Error"), //$NON-NLS-1$
-                            Translations.getString("PanelDefinition.PanelAlignment.Add.Error.IdExists")); //$NON-NLS-1$
-                    return;
-                }
             }
             
             Placement placement = new Placement(id);

@@ -16,7 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.openpnp.Translations.ProsePattern;
 
 /**
- * The measurement log on the issues page is translated line by line: every line the diagnostics
+ * What the measurements log is translated line by line where the calibration page shows it as a
+ * step's progress: every line the diagnostics
  * write with values in it has a template that recognises it as the source formats it. Exercised at
  * the templates, as TranslationPatternsTest does, so that it says the same on any machine.
  */

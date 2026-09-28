@@ -32,8 +32,8 @@ import org.openpnp.Translations;
  * <p>
  * Each step is one thing to calibrate, expanded over the elements it applies to: XY backlash for
  * each X and Y axis, the advanced calibration for each camera. An issue that one of these steps
- * resolves says which, through {@link Solutions.Issue#getCalibrationStep()}; the calibration page
- * gathers them, and the issues page leaves them to it.
+ * resolves says which, through {@link Solutions.Issue#getCalibrationStep()}, and the calibration
+ * page gathers them under the step.
  * <p>
  * The order is the order of the catalogue, and a step's prerequisites come before it.
  */

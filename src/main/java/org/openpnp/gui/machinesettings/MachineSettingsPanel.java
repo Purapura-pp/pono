@@ -136,12 +136,19 @@ public class MachineSettingsPanel extends JPanel {
         reset.setToolTipText(Translations.getString("MachineSettings.Foot.Reset.ToolTip")); //$NON-NLS-1$
         apply.setToolTipText(Translations.getString("MachineSettings.Foot.Apply.ToolTip")); //$NON-NLS-1$
         reset.addActionListener(e -> {
-            if (current != null) {
+            if (isAdvanced()) {
+                frame.getInspector().resetEdits();
+            }
+            else if (current != null) {
                 current.forms.reset();
             }
         });
         apply.addActionListener(e -> {
-            if (current != null) {
+            if (isAdvanced()) {
+                frame.getInspector().applyEdits();
+                refreshChecks();
+            }
+            else if (current != null) {
                 current.forms.apply();
                 refreshChecks();
             }
@@ -320,6 +327,8 @@ public class MachineSettingsPanel extends JPanel {
                 topic.forms.reloadUnedited();
             }
             topic.shown();
+            // Over the element tree the forms are the properties column's, and this foot is theirs.
+            frame.getInspector().lendFooter(this, ADVANCED.equals(topic.key) ? this::describeFoot : null);
             if (ADVANCED.equals(topic.key)) {
                 tree.selectCurrentTreePath();
             }
@@ -411,16 +420,22 @@ public class MachineSettingsPanel extends JPanel {
                 Dialogs.Choice.primary(Translations.getString("MachineSettings.Blocked.Stay"))); //$NON-NLS-1$
     }
 
-    /** The foot says what Apply would write, and is there only for a topic with forms. */
+    /**
+     * The foot says what Apply would write, and is there only for a topic with forms; over the
+     * element tree, for the forms of the element selected in the properties column.
+     */
     private void describeFoot() {
-        boolean forms = current != null && !current.forms.isEmpty();
+        boolean onTree = isAdvanced();
+        org.openpnp.gui.shell.InspectorPanel inspector = frame.getInspector();
+        boolean forms = onTree ? inspector != null && inspector.hasContent()
+                : current != null && !current.forms.isEmpty();
         foot.setVisible(forms);
         if (!forms) {
             return;
         }
-        List<FormWizard.Change> changes = current.forms.changes();
-        boolean dirty = current.forms.isDirty();
-        boolean blocked = current.forms.isBlocked();
+        List<FormWizard.Change> changes = onTree ? inspector.pendingChanges() : current.forms.changes();
+        boolean dirty = onTree ? inspector.hasApplicableEdits() : current.forms.isDirty();
+        boolean blocked = onTree ? inspector.hasEdits() && !dirty : current.forms.isBlocked();
         pending.setForeground(blocked ? Ui.errText() : Ui.text2());
         if (changes.isEmpty()) {
             pending.setText(Translations.getString(blocked ? "MachineSettings.Foot.Blocked" //$NON-NLS-1$

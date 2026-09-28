@@ -43,7 +43,6 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -530,9 +529,6 @@ public class JobPlacementsPanel extends JPanel {
     }
 
     /**
-     * @return the jobPanel
-     */
-    /**
      * The selected placement's properties go to the window's properties column, as a form with
      * sections rather than the table's one-cell-at-a-time editing. The job page owns the request,
      * since this panel is a tab inside it.
@@ -618,25 +614,13 @@ public class JobPlacementsPanel extends JPanel {
                 return;
             }
 
-            String id = JOptionPane.showInputDialog(getTopLevelAncestor(),
-                    Translations.getString("JobPlacementsPanel.NewPlacement.InputDialog.enterIdMessage")); //$NON-NLS-1$
+            String id = org.openpnp.gui.shell.Dialogs.input(getTopLevelAncestor(), Translations.getString("JobPlacementsPanel.NewPlacement.Name"),
+                    Translations.getString("JobPlacementsPanel.NewPlacement.InputDialog.enterIdMessage"), null, null, //$NON-NLS-1$
+                    Translations.getString("Dialogs.Input.Create"), //$NON-NLS-1$
+                    text -> boardOrPanelLocation.getPlacementsHolder().getPlacements().stream().anyMatch(p -> p.getId().equals(text))
+                            ? Translations.getString("JobPlacementsPanel.NewPlacement.ErrorMessageBox.IdAlreadyExistsMessage") : null); //$NON-NLS-1$
             if (id == null) {
                 return;
-            }
-            id = id.trim();
-            if (id.isEmpty()) {
-                return;
-            }
-
-            // Check if the new placement ID is unique
-            for(Placement compareplacement : boardOrPanelLocation.getPlacementsHolder().getPlacements()) {
-            	if (compareplacement.getId().equals(id)) {
-            		MessageBoxes.errorBox(getTopLevelAncestor(), Translations.getString(
-                                    "General.Error"), //$NON-NLS-1$
-                            Translations.getString(
-                                    "JobPlacementsPanel.NewPlacement.ErrorMessageBox.IdAlreadyExistsMessage")); //$NON-NLS-1$
-                    return;
-            	}
             }
             
             Placement placement = new Placement(id);
