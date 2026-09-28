@@ -27,6 +27,7 @@ import java.awt.Frame;
 import java.awt.GradientPaint;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -40,6 +41,8 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicHTML;
+import javax.swing.text.View;
 
 import org.openpnp.Main;
 import org.openpnp.Translations;
@@ -62,6 +65,8 @@ import com.formdev.flatlaf.FlatClientProperties;
  */
 @SuppressWarnings("serial")
 public class Welcome2_0Dialog extends JDialog {
+    private static final int WIDTH = 760;
+
     /** Whether the user asked not to see it again. */
     private final JCheckBox dontShow = Forms.check(Translations.getString("WelcomeDialog.DontShowAgain")); //$NON-NLS-1$
 
@@ -129,9 +134,11 @@ public class Welcome2_0Dialog extends JDialog {
         });
         // A configuration made elsewhere names that computer's port and cameras: the machine is
         // set up for this one before it is switched on.
-        steps.add(step(1, "WelcomeDialog.StepMachine", true, machine)); //$NON-NLS-1$
-        steps.add(step(2, "WelcomeDialog.Step1", false, enable)); //$NON-NLS-1$
-        steps.add(step(3, "WelcomeDialog.Step3", false, calibrate)); //$NON-NLS-1$
+        Insets around = body.getInsets(), inside = steps.getInsets();
+        int rowWidth = WIDTH - around.left - around.right - inside.left - inside.right;
+        steps.add(step(1, "WelcomeDialog.StepMachine", true, machine, rowWidth)); //$NON-NLS-1$
+        steps.add(step(2, "WelcomeDialog.Step1", false, enable, rowWidth)); //$NON-NLS-1$
+        steps.add(step(3, "WelcomeDialog.Step3", false, calibrate, rowWidth)); //$NON-NLS-1$
         steps.setAlignmentX(Component.LEFT_ALIGNMENT);
         body.add(steps);
         body.add(Box.createVerticalStrut(14));
@@ -187,7 +194,7 @@ public class Welcome2_0Dialog extends JDialog {
                 && com.formdev.flatlaf.ui.FlatNativeWindowBorder.isSupported()) {
             getRootPane().putClientProperty(FlatClientProperties.FULL_WINDOW_CONTENT, true);
         }
-        root.setPreferredSize(new Dimension(760, root.getPreferredSize().height));
+        root.setPreferredSize(new Dimension(WIDTH, root.getPreferredSize().height));
         pack();
     }
 
@@ -215,9 +222,14 @@ public class Welcome2_0Dialog extends JDialog {
         }, org.openpnp.util.UiUtils::showError, true);
     }
 
-    /** One step: its number, what it is, where it stands, and the button that takes it. */
-    private static JComponent step(int n, String key, boolean next, JButton action) {
-        JPanel row = new JPanel(new BorderLayout(12, 0)) {
+    /**
+     * One step: its number, what it is, where it stands, and the button that takes it. What it is
+     * wraps in what the row leaves between the number and the button: a width fixed in the HTML
+     * came out wider than written, and ran under the badge.
+     */
+    private static JComponent step(int n, String key, boolean next, JButton action, int rowWidth) {
+        final int gap = 12;
+        JPanel row = new JPanel(new BorderLayout(gap, 0)) {
             @Override
             protected void paintComponent(Graphics g) {
                 if (next) {
@@ -259,8 +271,7 @@ public class Welcome2_0Dialog extends JDialog {
         title.setFont(Ui.weighted(Tokens.FS_BODY, Tokens.FW_SECTION));
         text.add(title);
         text.add(Box.createVerticalStrut(2));
-        JLabel detail = new JLabel("<html><div style='width:360px'>" //$NON-NLS-1$
-                + Translations.getString(key + ".Text") + "</div></html>"); //$NON-NLS-1$ //$NON-NLS-2$
+        JLabel detail = new JLabel("<html>" + Translations.getString(key + ".Text") + "</html>"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
         detail.setFont(Ui.font(Tokens.FS_SMALL));
         detail.setForeground(Ui.text2());
         text.add(detail);
@@ -280,6 +291,14 @@ public class Welcome2_0Dialog extends JDialog {
         rightHolder.add(right);
         row.add(rightHolder, BorderLayout.EAST);
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        Insets in = row.getInsets();
+        int textWidth = rowWidth - in.left - in.right - numberHolder.getPreferredSize().width
+                - rightHolder.getPreferredSize().width - 2 * gap;
+        View html = (View) detail.getClientProperty(BasicHTML.propertyKey);
+        if (html != null && textWidth > 0) {
+            html.setSize(textWidth, 0);
+            detail.setPreferredSize(new Dimension(textWidth, (int) Math.ceil(html.getPreferredSpan(View.Y_AXIS))));
+        }
         return row;
     }
 
