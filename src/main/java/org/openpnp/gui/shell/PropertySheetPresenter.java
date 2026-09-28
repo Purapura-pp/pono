@@ -214,6 +214,8 @@ public class PropertySheetPresenter {
                     }
                 }
             }
+            // What failed its checks was not applied: it stays on screen to be corrected.
+            return !isDirty();
         }
         return true;
     }
@@ -229,12 +231,14 @@ public class PropertySheetPresenter {
     }
 
     /**
-     * A form has edits when Apply would write something: a camera whose device is not on this
-     * computer marks its form changed as it loads, with nothing to write.
+     * A form has edits when Apply would write something, or would once a value failing its
+     * checks is corrected. A camera whose device is not on this computer marks its form changed
+     * as it loads, with nothing to write.
      */
     private static boolean hasEdits(Component component) {
         if (component instanceof org.openpnp.gui.form.FormWizard) {
-            return ((org.openpnp.gui.form.FormWizard) component).hasEdits();
+            org.openpnp.gui.form.FormWizard form = (org.openpnp.gui.form.FormWizard) component;
+            return form.hasEdits() || !form.changes().isEmpty();
         }
         return component instanceof AbstractConfigurationWizard
                 && Boolean.TRUE.equals(((AbstractConfigurationWizard) component).isDirty());

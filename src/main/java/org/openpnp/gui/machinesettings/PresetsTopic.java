@@ -538,8 +538,12 @@ final class PresetsTopic extends Topic {
 
         JButton[] asked = new JButton[1];
         File[] chosen = new File[1];
+        // The folder read last, what was found in it and why it could not be read: the name is
+        // checked as it is typed, and the folder's machine.xml was read again with each letter.
+        Object[] read = new Object[3];
         Runnable validate = () -> {
             boolean current = "current".equals(source.getSelectedItem()); //$NON-NLS-1$
+            boolean readable = true;
             folder.setEnabled(!current);
             browse.setEnabled(!current);
             if (current) {
@@ -559,19 +563,28 @@ final class PresetsTopic extends Topic {
             }
             else {
                 folder.setText(chosen[0].getPath());
-                String what = ""; //$NON-NLS-1$
-                try {
-                    what = nozzles(MachinePresets.summary(chosen[0]));
+                if (!chosen[0].equals(read[0])) {
+                    read[0] = chosen[0];
+                    read[1] = null;
+                    read[2] = null;
+                    try {
+                        read[1] = nozzles(MachinePresets.summary(chosen[0]));
+                    }
+                    catch (Exception e) {
+                        Logger.warn(e, "The configuration in {} could not be read.", chosen[0]); //$NON-NLS-1$
+                        String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                        read[2] = org.openpnp.gui.shell.ErrorMessages.explain(null, message).what;
+                    }
                 }
-                catch (Exception e) {
-                    Logger.warn(e, "The configuration in {} could not be read.", chosen[0]); //$NON-NLS-1$
-                }
-                found.setText(String.format(Translations.getString("MachineSettings.Presets.New.Found"), what)); //$NON-NLS-1$
-                found.setForeground(Ui.okText());
+                readable = read[2] == null;
+                found.setText(readable
+                        ? String.format(Translations.getString("MachineSettings.Presets.New.Found"), read[1]) //$NON-NLS-1$
+                        : String.format(Translations.getString("MachineSettings.Presets.New.Unreadable"), read[2])); //$NON-NLS-1$
+                found.setForeground(readable ? Ui.okText() : Ui.errText());
             }
             if (asked[0] != null) {
                 asked[0].setEnabled(!name.getText().trim().isEmpty()
-                        && (current || MachinePresets.isConfiguration(chosen[0])));
+                        && (current || MachinePresets.isConfiguration(chosen[0]) && readable));
             }
         };
         source.onChange(validate);
@@ -764,8 +777,19 @@ final class PresetsTopic extends Topic {
         }
         catch (Exception e) {
             // What was written is taken back, so that the program and the files still agree.
-            Backups.restore(directory, backups);
-            UiUtils.showError(e);
+            List<File> left = Backups.restore(directory, backups);
+            if (left.isEmpty()) {
+                UiUtils.showError(e);
+            }
+            else {
+                List<String> names = new ArrayList<>();
+                for (File backup : left) {
+                    names.add(backup.getPath());
+                }
+                UiUtils.showError(new Exception(String.format(
+                        Translations.getString("MachineSettings.Presets.RestoreFailed"), //$NON-NLS-1$
+                        e.getMessage(), String.join("\n", names)), e)); //$NON-NLS-1$
+            }
             return;
         }
         page.getFrame().restart();

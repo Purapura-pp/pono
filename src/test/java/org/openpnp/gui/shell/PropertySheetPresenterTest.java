@@ -213,6 +213,28 @@ public class PropertySheetPresenterTest {
     }
 
     @Test
+    public void anEditApplyRefusedStaysOnScreenToBeCorrected() {
+        StubWizard refusing = new StubWizard("A") {
+            @Override
+            public void apply() {
+                // A value failed its check: nothing is written and the edit is still there.
+                applied = true;
+            }
+        };
+        refusing.dirty = true;
+        StubHolder first = new StubHolder("N1", refusing);
+        presenter.show(first, container, "N1");
+        prompt.answer = Choice.Apply;
+
+        assertEquals(Result.Cancelled, presenter.show(new StubHolder("N2", new StubWizard("A")),
+                container, "N2"));
+
+        assertTrue(refusing.applied);
+        assertSame(first, presenter.getShown());
+        assertFalse(refusing.disposed, "thrown away with the sheet, the edit would be lost unsaid");
+    }
+
+    @Test
     public void aCallArrivingWhileTheQuestionIsUpIsIgnored() {
         StubWizard dirty = new StubWizard("A");
         dirty.dirty = true;
