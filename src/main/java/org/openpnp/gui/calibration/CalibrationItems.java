@@ -35,6 +35,7 @@ import org.openpnp.gui.machinesettings.SetupChecks;
 import org.openpnp.gui.machinesettings.SetupIssues;
 import org.openpnp.machine.reference.calibration.CalibrationPlan;
 import org.openpnp.machine.reference.calibration.SettingChange;
+import org.openpnp.machine.reference.solutions.MachineDiagnostics.TestGroup;
 import org.openpnp.model.Solutions;
 
 /**
@@ -43,7 +44,8 @@ import org.openpnp.model.Solutions;
  * An issue that says what it writes, and writes nothing else, is a suggestion however it was
  * found; the same suggestion about several elements is one row. A step that has to measure, move
  * the machine or have someone at it is a measurement, one row for the elements of a kind. What was
- * measured and not yet applied or discarded stands for its step. The machine settings checks and
+ * measured and not yet applied or discarded stands for its step. The measurement groups no step
+ * measures as one of its phases are the diagnostics, one row each. The machine settings checks and
  * the issues of the setup are not calibration: the machine settings page shows them where they are
  * fixed.
  */
@@ -82,6 +84,13 @@ public final class CalibrationItems {
                     }
                 }
                 steps(items, step);
+            }
+            String machine = plan.getSteps().isEmpty() ? "" : plan.getSteps().get(0).getSubjectName(); //$NON-NLS-1$
+            for (TestGroup group : CalibrationPlan.diagnosticGroups()) {
+                CalibrationItem diagnostic = item(items, Kind.Diagnostic, "G|" + group.name(), //$NON-NLS-1$
+                        MeasurementForms.name(group), null);
+                diagnostic.setGroup(group);
+                diagnostic.add(new Part(machine, null, null, null, null));
             }
         }
         // What is left of the whole search, once the setup issues are, is one value to write.

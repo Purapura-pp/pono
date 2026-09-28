@@ -27,6 +27,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.Locale;
 import java.util.TreeMap;
 import java.util.concurrent.ExecutionException;
 
@@ -1179,6 +1180,7 @@ public class VisionSolutions implements Solutions.Subject {
         camera.setSettleMethod(SettleMethod.FixedTime);
         camera.setSettleTimeMs(Math.max(oldSettleTime, zeroKnowledgeSettleTimeMs));
         try {
+            org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Detect"); //$NON-NLS-1$
             if (!secondary) {
                 // Reset camera transforms.
                 camera.setFlipX(false);
@@ -1196,6 +1198,10 @@ public class VisionSolutions implements Solutions.Subject {
                 // Detect the true diameter.
                 expectedOffsetsAndDiameter = getSubjectPixelLocation(camera, movable, expectedOffsetsAndDiameter, zeroKnowledgeDisplacementRatio, diagnostics, null, false);
             }
+            org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                    org.openpnp.Translations.getString("CalibrationProgress.Camera.Detected"), //$NON-NLS-1$
+                    Math.round(expectedOffsetsAndDiameter.getDiameter())));
+            org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Moves"); //$NON-NLS-1$
             // Center offset 0, 0 expected.
             expectedOffsetsAndDiameter.setX(0); 
             expectedOffsetsAndDiameter.setY(0); 
@@ -1215,6 +1221,8 @@ public class VisionSolutions implements Solutions.Subject {
                 // else: we are moving the camera subject and displacement is seen as is.
 
                 // X Axis 
+                org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                        org.openpnp.Translations.getString("CalibrationProgress.Camera.Pass"), pass + 1, 3, "X")); //$NON-NLS-1$ //$NON-NLS-2$
                 Location originLocationX = initialLocation.add(new Location(LengthUnit.Millimeters,
                         -displacementMm * 0.5, 0, 0, 0));
                 zeroKnowledgeMoveTo(movable, originLocationX, pass == 0);
@@ -1234,6 +1242,8 @@ public class VisionSolutions implements Solutions.Subject {
                 double dyX = -(displacedX.y - originX.y);
 
                 // Y Axis 
+                org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                        org.openpnp.Translations.getString("CalibrationProgress.Camera.Pass"), pass + 1, 3, "Y")); //$NON-NLS-1$ //$NON-NLS-2$
                 Location originLocationY = initialLocation.add(new Location(LengthUnit.Millimeters,
                         0, -displacementMm * 0.5, 0, 0));
                 zeroKnowledgeMoveTo(movable, originLocationY, false);
@@ -1354,6 +1364,12 @@ public class VisionSolutions implements Solutions.Subject {
                 displacementAbsMm = Math.min(camera.getWidth(), camera.getHeight())*(pass + 1)*0.25
                         *unitsPerPixel.convertToUnits(LengthUnit.Millimeters).getX(); 
             }
+            org.openpnp.machine.reference.calibration.CalibrationProgress.phase("Compute"); //$NON-NLS-1$
+            Location upp = unitsPerPixel.convertToUnits(LengthUnit.Millimeters);
+            org.openpnp.machine.reference.calibration.CalibrationProgress.detail(String.format(
+                    org.openpnp.Translations.getString("CalibrationProgress.Camera.Result"), //$NON-NLS-1$
+                    String.format(Locale.ROOT, "%.5f", upp.getX()), String.format(Locale.ROOT, "%.5f", upp.getY()), //$NON-NLS-1$ //$NON-NLS-2$
+                    String.format(Locale.ROOT, "%.2f", camera.getRotation()))); //$NON-NLS-1$
             return featureDiameter;
         }
         finally {

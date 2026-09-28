@@ -65,7 +65,11 @@ public class CalibrationRunnerTest {
         final List<Set<TestGroup>> measured = new ArrayList<>();
         final List<String> invalidated = new ArrayList<>();
         int saves;
+        int aborted;
         File backup;
+        /** Run in the middle of each measurement. */
+        Runnable whileMeasuring = () -> {
+        };
 
         @Override
         public CalibrationPlan plan() {
@@ -73,11 +77,20 @@ public class CalibrationRunnerTest {
         }
 
         @Override
-        public void measure(Set<TestGroup> groups) {
+        public File measure(Set<TestGroup> groups) {
             measured.add(EnumSet.copyOf(groups));
             for (TestGroup group : groups) {
+                CalibrationProgress.group(group.name());
+                CalibrationProgress.detail("measured " + group);
+                whileMeasuring.run();
                 results.setRun(group, System.currentTimeMillis(), "report");
             }
+            return tempDir.resolve("diagnostics").resolve("measured").toFile();
+        }
+
+        @Override
+        public void abortMeasuring() {
+            aborted++;
         }
 
         @Override
@@ -87,6 +100,7 @@ public class CalibrationRunnerTest {
             if (fakeStep.fails) {
                 throw new Exception("it did not work");
             }
+            CalibrationProgress.decision("because it had to");
             issue.setState(Solutions.State.Solved);
         }
 
@@ -178,6 +192,82 @@ public class CalibrationRunnerTest {
         assertTrue(report.contains(fake.backup.toString()), report);
         assertTrue(report.indexOf(CalibrationStep.ControllerLimits.getName()) < report.indexOf(CalibrationStep.SubPixel.getName()),
                 report);
+    }
+
+    /** What the listener heard, as "key phase 1", "key detail text" and so on. */
+    private static final class Heard implements CalibrationRunner.Listener {
+        final List<String> lines = new ArrayList<>();
+
+        @Override
+        public void phase(String key, int index) {
+            lines.add(key + " phase " + index);
+        }
+
+        @Override
+        public void detail(String key, String text) {
+            lines.add(key + " detail " + text);
+        }
+
+        @Override
+        public void decision(String key, String text) {
+            lines.add(key + " decision " + text);
+        }
+
+        @Override
+        public void measuring(String key, TestGroup group) {
+            lines.add(key + " measuring");
+        }
+
+        @Override
+        public void measured(String key, CalibrationRunner.Outcome outcome, String message) {
+            lines.add(key + " measured " + outcome);
+        }
+    }
+
+    @Test
+    public void whatAStepTellsReachesTheListenerUnderItsKeyPhaseByPhase() throws Exception {
+        add(CalibrationStep.ControllerLimits, machine, "Controller limits.");
+        Heard heard = new Heard();
+        String key = key(CalibrationStep.ControllerLimits);
+
+        new CalibrationRunner(fake, heard).run(List.of(key), Set.of());
+
+        assertEquals(List.of(key + " phase 0", key + " detail measured Firmware", key + " phase 1",
+                key + " decision because it had to"), heard.lines,
+                "the firmware group is its first phase, comparing its second, and why it chose comes last");
+        assertFalse(CalibrationProgress.isAttached(), "nothing listens once the step is done");
+    }
+
+    @Test
+    public void aMeasurementOnItsOwnReportsUnderItsOwnKey() throws Exception {
+        Heard heard = new Heard();
+        String key = CalibrationRunner.measurementKey(TestGroup.VisionNoise);
+
+        CalibrationRunner.Session session = new CalibrationRunner(fake, heard).measure(TestGroup.VisionNoise);
+
+        assertEquals(List.of(EnumSet.of(TestGroup.VisionNoise)), fake.measured);
+        assertEquals(List.of(key + " measuring", key + " phase 0", key + " detail measured VisionNoise",
+                key + " measured Done"), heard.lines);
+        assertEquals(tempDir.resolve("diagnostics").resolve("measured").toFile(), session.getReportDirectory(),
+                "its report is the measurement's own");
+        assertNull(session.getBackup(), "it changes no setting, so nothing is backed up");
+        assertEquals(CalibrationRunner.Outcome.Done, session.getResult(key).getOutcome());
+    }
+
+    @Test
+    public void stopAbortsTheMeasurementUnderWay() throws Exception {
+        add(CalibrationStep.ControllerLimits, machine, "Controller limits.");
+        CalibrationRunner runner = new CalibrationRunner(fake, null);
+        fake.whileMeasuring = runner::requestStop;
+
+        CalibrationRunner.Session session = runner.run(List.of(key(CalibrationStep.ControllerLimits)), Set.of());
+
+        assertEquals(1, fake.aborted);
+        assertTrue(session.isStopped());
+        assertEquals(CalibrationRunner.Outcome.Stopped,
+                session.getResult(key(CalibrationStep.ControllerLimits)).getOutcome(),
+                "a step whose measurement was stopped is not carried out on half of it");
+        assertEquals(0, fake.saves);
     }
 
     @Test
