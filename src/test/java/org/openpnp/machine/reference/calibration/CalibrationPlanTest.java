@@ -172,7 +172,7 @@ public class CalibrationPlanTest {
 
     /**
      * A step that writes a measured value applies it by accepting its issue and takes it back by
-     * reopening it, which is how the runner and the issues page both do it.
+     * reopening it, which is how the runner and the calibration page both do it.
      */
     @Test
     public void aMeasuredChangeIsAppliedAndTakenBack() throws Exception {

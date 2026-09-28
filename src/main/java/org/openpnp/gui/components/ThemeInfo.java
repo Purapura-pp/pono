@@ -20,6 +20,25 @@ public class ThemeInfo implements Serializable {
         this.lafClassName = lafClassName;
     }
 
+    public String getName() {
+        return name;
+    }
+
+    /** An IntelliJ theme among FlatLaf's resources, or null. */
+    public String getResourceName() {
+        return resourceName;
+    }
+
+    /** A theme file of the user's, or null. */
+    public File getThemeFile() {
+        return themeFile;
+    }
+
+    /** A look and feel by its class, or null. */
+    public String getLafClassName() {
+        return lafClassName;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

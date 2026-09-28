@@ -234,9 +234,8 @@ public class SettingsPanel extends JPanel {
     }
 
     private void applyTheme(ThemeInfo theme, ThemeSettingsPanel.FontSize fontSize) {
-        new ThemeSettingsPanel().setTheme(theme, fontSize, configuration.isAlternateRows());
+        org.openpnp.gui.theme.Themes.apply(theme, fontSize);
         configuration.setThemeInfo(theme);
-        org.openpnp.gui.components.ThemeDialog.getInstance().setOldTheme(theme);
     }
 
     /** The stylesheet's .theme-card: a small picture of the window in the theme, and its name. */

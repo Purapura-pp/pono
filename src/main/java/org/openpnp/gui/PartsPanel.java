@@ -45,7 +45,6 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -443,18 +442,8 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 return;
             }
 
-            String id;
-            while ((id = JOptionPane.showInputDialog(frame,
-                    Translations.getString("PartsPanel.NewPart.EnterId"))) != null) { //$NON-NLS-1$
-                id = id.trim();
-                if (id.isEmpty()) {
-                    break;
-                }
-                if (configuration.getPart(id) != null) {
-                    MessageBoxes.errorBox(frame, Translations.getString("General.Error"), //$NON-NLS-1$
-                            String.format(Translations.getString("PartsPanel.PartIdExists"), id)); //$NON-NLS-1$
-                    continue;
-                }
+            String id = newPartId("PartsPanel.Action.NewPart", "PartsPanel.NewPart.EnterId"); //$NON-NLS-1$ //$NON-NLS-2$
+            if (id != null) {
                 Part part = new Part(id);
                 // The package of the part selected before, and its height with it, rather than
                 // silently the first package there is.
@@ -470,10 +459,17 @@ public class PartsPanel extends JPanel implements WizardContainer {
                 tableModel.fireTableDataChanged();
                 Helpers.selectObjectTableRow(table, part);
                 showNewPartBanner(part, template != null);
-                break;
             }
         }
     };
+
+    /** Asks for the ID of a part to make, refusing one already taken as it is typed. */
+    private String newPartId(String titleKey, String whatKey) {
+        return org.openpnp.gui.shell.Dialogs.input(frame, org.openpnp.gui.shell.Dialogs.titleOf(Translations.getString(titleKey)),
+                Translations.getString(whatKey), null, null, Translations.getString("Dialogs.Input.Create"), //$NON-NLS-1$
+                id -> configuration.getPart(id) != null
+                        ? String.format(Translations.getString("PartsPanel.PartIdExists"), id) : null); //$NON-NLS-1$
+    }
 
     public final Action deletePartAction = new AbstractAction() {
         {
@@ -554,20 +550,8 @@ public class PartsPanel extends JPanel implements WizardContainer {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            String id;
-            while ((id = JOptionPane.showInputDialog(frame,
-                    Translations.getString("PartsPanel.PastePart.EnterId"))) != null) { //$NON-NLS-1$
-                id = id.trim();
-                if (id.isEmpty()) {
-                    break;
-                }
-                if (configuration.getPart(id) == null) {
-                    break;
-                }
-                MessageBoxes.errorBox(frame, Translations.getString("General.Error"), //$NON-NLS-1$
-                        String.format(Translations.getString("PartsPanel.PartIdExists"), id)); //$NON-NLS-1$
-            }
-            if (id == null || id.isEmpty()) {
+            String id = newPartId("PartsPanel.Action.PastePartFromClipboard", "PartsPanel.PastePart.EnterId"); //$NON-NLS-1$ //$NON-NLS-2$
+            if (id == null) {
                 return;
             }
             try {

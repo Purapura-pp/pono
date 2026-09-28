@@ -25,8 +25,9 @@ import javax.swing.JPanel;
 import org.openpnp.gui.MachineSetupPanel;
 
 /**
- * Every element of the machine as the configuration holds it: the tree the machine page was, its
- * selection's forms in the properties column. What the other topics do not show is set here.
+ * Every element of the machine as the configuration holds it: the element tree, its selection's
+ * forms in the properties column, their edits applied from the page's foot. What the other topics
+ * do not show is set here.
  */
 final class AdvancedTopic extends Topic {
     private final MachineSetupPanel tree;

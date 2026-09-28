@@ -54,9 +54,7 @@ import org.openpnp.Main;
 import org.openpnp.gui.CalibrationPanel;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.calibration.CalibrationItem;
-import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.components.ThemeInfo;
-import org.openpnp.gui.components.ThemeSettingsPanel;
 import org.openpnp.gui.shell.CameraWorkspace;
 import org.openpnp.gui.shell.DockPanel;
 import org.openpnp.gui.shell.DroPanel;
@@ -510,10 +508,8 @@ public class UiRuler {
     private void applyTheme(String theme) throws Exception {
         ThemeInfo info = "dark".equals(theme) ? PonoThemes.dark() : PonoThemes.light();
         edt(() -> {
-            new ThemeSettingsPanel().setTheme(info, configuration.getFontSize(),
-                    configuration.isAlternateRows());
+            org.openpnp.gui.theme.Themes.apply(info, configuration.getFontSize());
             configuration.setThemeInfo(info);
-            ThemeDialog.getInstance().setOldTheme(info);
         });
         // The switch fades from a snapshot of the old look; it must be gone before a photograph.
         settle(2500);
@@ -596,8 +592,8 @@ public class UiRuler {
         return null;
     }
 
-    /** The machine page's elements photographed besides the camera: id, what, row, inspector tab. */
-    /** The NeoDen4's parts on the machine page, added only when their scenes are asked for. */
+    /** The element tree's elements photographed besides the camera: id, what, row, inspector tab. */
+    /** The NeoDen4's parts in the element tree, added only when their scenes are asked for. */
     private static final String NEODEN_DRIVER = "NeoDen4";
     private static final String NEODEN_ACTUATOR = "N4 \u9001\u6599";
     private static final String NEODEN_SIGNALER = "N4 \u8702\u9e23\u5668";
@@ -1254,7 +1250,7 @@ public class UiRuler {
     }
 
     /**
-     * A head, nozzle or nozzle tip of that name on the machine page, its group opened: the nozzle
+     * A head, nozzle or nozzle tip of that name in the element tree, its group opened: the nozzle
      * tips are under a group that starts closed.
      */
     private boolean selectHolder(Component page, String name) {

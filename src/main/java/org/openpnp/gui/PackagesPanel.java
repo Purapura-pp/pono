@@ -45,7 +45,6 @@ import javax.swing.Action;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -335,28 +334,24 @@ public class PackagesPanel extends JPanel implements WizardContainer {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            String id;
-            while ((id = JOptionPane.showInputDialog(frame,
-                    Translations.getString("PackagesPanel.NewPackage.EnterId"))) != null) { //$NON-NLS-1$
-                id = id.trim();
-                if (id.isEmpty()) {
-                    break;
-                }
-                if (configuration.getPackage(id) != null) {
-                    MessageBoxes.errorBox(frame, Translations.getString("General.Error"), //$NON-NLS-1$
-                            String.format(
-                                    Translations.getString("PackagesPanel.PackageIdExists"), id)); //$NON-NLS-1$
-                    continue;
-                }
+            String id = newPackageId("PackagesPanel.Action.NewPackage", "PackagesPanel.NewPackage.EnterId"); //$NON-NLS-1$ //$NON-NLS-2$
+            if (id != null) {
                 Package this_package = new Package(id);
 
                 configuration.addPackage(this_package);
                 tableModel.fireTableDataChanged();
                 Helpers.selectObjectTableRow(table, this_package);
-                break;
             }
         }
     };
+
+    /** Asks for the ID of a package to make, refusing one already taken as it is typed. */
+    private String newPackageId(String titleKey, String whatKey) {
+        return org.openpnp.gui.shell.Dialogs.input(frame, org.openpnp.gui.shell.Dialogs.titleOf(Translations.getString(titleKey)),
+                Translations.getString(whatKey), null, null, Translations.getString("Dialogs.Input.Create"), //$NON-NLS-1$
+                id -> configuration.getPackage(id) != null
+                        ? String.format(Translations.getString("PackagesPanel.PackageIdExists"), id) : null); //$NON-NLS-1$
+    }
 
     public final Action deletePackageAction = new AbstractAction() {
         {
@@ -429,21 +424,8 @@ public class PackagesPanel extends JPanel implements WizardContainer {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
-            String id;
-            while ((id = JOptionPane.showInputDialog(frame,
-                    Translations.getString("PackagesPanel.PastePackage.EnterId"))) != null) { //$NON-NLS-1$
-                id = id.trim();
-                if (id.isEmpty()) {
-                    break;
-                }
-                if (configuration.getPackage(id) == null) {
-                    break;
-                }
-                MessageBoxes.errorBox(frame, Translations.getString("General.Error"), //$NON-NLS-1$
-                        String.format(
-                                Translations.getString("PackagesPanel.PackageIdExists"), id)); //$NON-NLS-1$
-            }
-            if (id == null || id.isEmpty()) {
+            String id = newPackageId("PackagesPanel.Action.PastePackage", "PackagesPanel.PastePackage.EnterId"); //$NON-NLS-1$ //$NON-NLS-2$
+            if (id == null) {
                 return;
             }
             try {

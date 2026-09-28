@@ -91,7 +91,7 @@ import org.openpnp.spi.base.SimplePropertySheetHolder;
 import org.openpnp.util.BeanUtils;
 
 /**
- * The machine page, as mockup 12 draws it: the machine's structure as a tree in a table - the name
+ * The element tree of the machine settings page's Advanced topic, as mockup 12 draws it: the machine's structure as a tree in a table - the name
  * as the interface calls things, "Camera Top", its type, its state and a line about it - with
  * the toolbar in the order the tree reads: what can be made under the element selected, what else
  * it does, expanding and folding, the search, and deleting it, at the far end and in red. The

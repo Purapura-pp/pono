@@ -42,7 +42,7 @@ import org.openpnp.model.LengthUnit;
 /**
  * The properties column follows the page on screen.
  * <p>
- * It did not: every table wrote straight into it, so a background scan on the issues page replaced
+ * It did not: every table wrote straight into it, so a page's search in the background replaced
  * whatever the parts page had put there, and switching pages left the previous page's sheets
  * behind. Both were seen in screenshots of the running program before this existed.
  */
@@ -94,7 +94,7 @@ public class InspectorPanelTest {
         inspector.setActivePage(parts);
         inspector.show(parts, "R1", null, "R1", "0402", null, () -> sheets("Settings"));
 
-        // The issues page scans in the background and reports what it found.
+        // The calibration page collects in the background and reports what it found.
         assertEquals(Result.Shown,
                 inspector.show(issues, "an issue", null, "an issue", "Warning", null,
                         () -> sheets("Issue")));
@@ -113,7 +113,7 @@ public class InspectorPanelTest {
         inspector.setActivePage(parts);
         inspector.show(parts, "R1", null, "R1", "0402", null, () -> sheets("Settings"));
         inspector.setActivePage(issues);
-        assertNull(shownTabs(inspector), "nothing is selected on the issues page");
+        assertNull(shownTabs(inspector), "nothing is selected on the calibration page");
 
         inspector.setActivePage(parts);
 

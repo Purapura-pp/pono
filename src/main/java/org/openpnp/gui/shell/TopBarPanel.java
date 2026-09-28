@@ -46,9 +46,7 @@ import org.openpnp.Main;
 import org.openpnp.Translations;
 import org.openpnp.gui.JobPanel;
 import org.openpnp.gui.MachineControlsPanel;
-import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.components.ThemeInfo;
-import org.openpnp.gui.components.ThemeSettingsPanel;
 import org.openpnp.gui.theme.PonoThemes;
 import org.openpnp.model.Configuration;
 
@@ -801,14 +799,12 @@ public class TopBarPanel extends JPanel {
     /**
      * Switches between the two Pono themes and stores the choice, so the next start comes up the
      * same way. A user who picked a FlatLaf or system theme lands on a Pono one, which the tooltip
-     * says; the appearance dialog is still there for the full list.
+     * says.
      */
     private void toggleTheme() {
         ThemeInfo theme = FlatLaf.isLafDark() ? PonoThemes.light() : PonoThemes.dark();
-        new ThemeSettingsPanel().setTheme(theme, configuration.getFontSize(),
-                configuration.isAlternateRows());
+        org.openpnp.gui.theme.Themes.apply(theme, configuration.getFontSize());
         configuration.setThemeInfo(theme);
-        ThemeDialog.getInstance().setOldTheme(theme);
     }
 
     @Override

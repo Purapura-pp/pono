@@ -407,7 +407,7 @@ public class CalibrationRunnerTest {
 
     // ----- the machine's machinery ---------------------------------------------------------------
 
-    /** An issue that calibrates as the issues page's do: a machine task, then Solved from its callback. */
+    /** An issue that calibrates as Issues and Solutions' do: a machine task, then Solved from its callback. */
     private final class Calibrating extends Solutions.Issue {
         private final boolean fails;
 

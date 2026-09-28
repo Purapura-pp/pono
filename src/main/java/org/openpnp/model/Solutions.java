@@ -811,9 +811,9 @@ public class Solutions {
 
     /**
      * An instance for the calibration page's own search. It targets the last milestone, so that
-     * the issues page's milestone hides no step, keeps what was solved and dismissed, as Solved
+     * the machine's milestone hides no step, keeps what was solved and dismissed, as Solved
      * and Dismissed, because a step done once is still a step, and shares the machine's record
-     * of both, so that either page sees what the other did.
+     * of both, so that the calibration page and the machine settings page see what the other did.
      */
     public static Solutions forCalibration(Solutions shared) {
         Solutions scan = new Solutions();

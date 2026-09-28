@@ -134,6 +134,7 @@ public final class Dialogs {
         String list;
         String details;
         JComponent body;
+        JComponent focus;
         java.util.function.Consumer<JButton> asked;
         int width = 560;
 
@@ -189,6 +190,12 @@ public final class Dialogs {
          */
         public Content asked(java.util.function.Consumer<JButton> asked) {
             this.asked = asked;
+            return this;
+        }
+
+        /** Where the focus starts, a field of the body, rather than on a button. */
+        public Content focus(JComponent focus) {
+            this.focus = focus;
             return this;
         }
     }
@@ -395,7 +402,12 @@ public final class Dialogs {
             dialog.addWindowListener(new java.awt.event.WindowAdapter() {
                 @Override
                 public void windowOpened(java.awt.event.WindowEvent e) {
-                    start.requestFocusInWindow();
+                    if (content.focus != null) {
+                        content.focus.requestFocusInWindow();
+                    }
+                    else {
+                        start.requestFocusInWindow();
+                    }
                 }
             });
         }
@@ -457,10 +469,15 @@ public final class Dialogs {
         return box;
     }
 
+    /**
+     * The text wrapped at the width, in pixels. Swing's HTML counts a CSS px as 1.3 pixels and a pt
+     * as one, so the width is given in pt: in px a paragraph came out 30 % wider than the dialog
+     * and ran off its edge.
+     */
     static String html(String text, int width) {
         String escaped = text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
                 .replace(">", "&gt;").replace("\n", "<br>"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
-        return "<html><div style='width:" + width + "px'>" + escaped + "</div></html>"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+        return "<html><div style='width:" + width + "pt'>" + escaped + "</div></html>"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
     // ---- errors -------------------------------------------------------------------------------
@@ -532,6 +549,80 @@ public final class Dialogs {
     public static void info(Component parent, String title, String message) {
         Content content = new Content().tone(Tone.Info, "info").title(title).what(message); //$NON-NLS-1$
         show(parent, content, Arrays.asList(Choice.primary(Translations.getString("Dialogs.Close"))), 0, 0); //$NON-NLS-1$
+    }
+
+    /**
+     * Asks for a line of text: an ID, a name, a size. Why the text will not do is said under the
+     * field as it is typed, and the button stays off meanwhile; an ID already taken used to be an
+     * error box after the question, which then asked again from empty.
+     * 
+     * @param label   Over the field, or null for none.
+     * @param initial What the field starts with, selected, or null.
+     * @param ok      The button, named by what it does.
+     * @param check   Why the text, trimmed, will not do, or null when it will; empty never does.
+     * @return The text, trimmed, or null when cancelled.
+     */
+    public static String input(Component parent, String title, String what, String label, String initial,
+            String ok, java.util.function.Function<String, String> check) {
+        javax.swing.JTextField field = new javax.swing.JTextField(initial == null ? "" : initial); //$NON-NLS-1$
+        field.setAlignmentX(Component.LEFT_ALIGNMENT);
+        field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
+        field.selectAll();
+        JLabel why = new JLabel(" "); //$NON-NLS-1$
+        why.setFont(Ui.font(Tokens.FS_SMALL));
+        why.setForeground(Ui.err());
+        why.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel body = new JPanel();
+        body.setOpaque(false);
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        if (label != null) {
+            JLabel over = new JLabel(label);
+            over.setFont(Ui.weighted(Tokens.FS_SMALL, Tokens.FW_SECTION));
+            over.setForeground(Ui.text2());
+            over.setAlignmentX(Component.LEFT_ALIGNMENT);
+            body.add(over);
+            body.add(Box.createVerticalStrut(4));
+        }
+        body.add(field);
+        body.add(Box.createVerticalStrut(4));
+        body.add(why);
+        JButton[] asked = new JButton[1];
+        Runnable judge = () -> {
+            String text = field.getText().trim();
+            String reason = text.isEmpty() || check == null ? null : check.apply(text);
+            why.setText(reason == null ? " " : reason); //$NON-NLS-1$
+            if (asked[0] != null) {
+                asked[0].setEnabled(!text.isEmpty() && reason == null);
+            }
+        };
+        field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                judge.run();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                judge.run();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                judge.run();
+            }
+        });
+        Content content = new Content().tone(Tone.Info, "edit").title(title).what(what).body(body).focus(field) //$NON-NLS-1$
+                .asked(button -> {
+                    asked[0] = button;
+                    judge.run();
+                });
+        int answer = show(parent, content, Arrays.asList(Choice.cancel(), Choice.primary(ok)), 0, 1);
+        return answer == 1 ? field.getText().trim() : null;
+    }
+
+    /** A menu item's text as a dialog's title: "新建元件..." asks under "新建元件". */
+    public static String titleOf(String menuText) {
+        return menuText == null ? null : menuText.replaceAll("\\s*(\\.\\.\\.|\u2026)$", ""); //$NON-NLS-1$ //$NON-NLS-2$
     }
 
     // ---- questions ----------------------------------------------------------------------------

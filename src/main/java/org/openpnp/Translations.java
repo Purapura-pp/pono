@@ -48,7 +48,7 @@ public class Translations {
 
     private static final List<ProsePattern> PROSE_PATTERNS = loadProsePatterns();
 
-    /** Matching runs on every repaint of the issues table, so each answer is worked out once. */
+    /** Matching runs on every repaint of a table of issues, so each answer is worked out once. */
     private static final Map<String, String> PROSE_CACHE = new ConcurrentHashMap<>();
 
     private static List<Locale> availableLocales;

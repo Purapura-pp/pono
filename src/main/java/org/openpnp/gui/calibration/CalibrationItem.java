@@ -56,7 +56,7 @@ public final class CalibrationItem {
         Diagnostic,
         /** Nothing to do. */
         Done,
-        /** Decided against, on this page or the issues page. */
+        /** Decided against, on this page or the machine settings page. */
         Dismissed;
 
         public String getName() {

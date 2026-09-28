@@ -32,9 +32,7 @@ import javax.swing.ToolTipManager;
 import javax.swing.UIManager;
 
 import org.openpnp.gui.MainFrame;
-import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.components.ThemeInfo;
-import org.openpnp.gui.components.ThemeSettingsPanel;
 import org.openpnp.gui.theme.PonoThemes;
 import org.openpnp.logging.ConsoleWriter;
 import org.openpnp.logging.SystemLogger;
@@ -244,8 +242,7 @@ public class Main {
             // the user is left on the system look and feel installed further up.
             theme = PonoThemes.followSystem();
         }
-        new ThemeSettingsPanel().setTheme(theme, configuration.getFontSize(), configuration.isAlternateRows());
-        ThemeDialog.getInstance().setOldTheme(theme);
+        org.openpnp.gui.theme.Themes.apply(theme, configuration.getFontSize());
         ToolTipManager.sharedInstance().setDismissDelay(60000);
 
         EventQueue.invokeLater(new Runnable() {

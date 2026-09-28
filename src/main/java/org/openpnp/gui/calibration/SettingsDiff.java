@@ -83,7 +83,7 @@ public final class SettingsDiff {
         }
     }
 
-    /** What measuring writes besides settings: its results, and what was dealt with on the issues page. */
+    /** What measuring writes besides settings: its results, and the issues dealt with. */
     private static final Set<String> SKIPPED = Set.of("machine-diagnostics", "solutions", //$NON-NLS-1$ //$NON-NLS-2$
             "dismissed-solutions", "solved-solutions"); //$NON-NLS-1$ //$NON-NLS-2$
 
