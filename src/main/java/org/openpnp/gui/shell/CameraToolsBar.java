@@ -61,9 +61,10 @@ import org.pmw.tinylog.Logger;
 import com.formdev.flatlaf.FlatClientProperties;
 
 /**
- * The tools in the top right corner of the image, as two of the stylesheet's glass cards: the
- * crosshair, grid, ruler and package outline switches, which can be on together, and the light
- * with its brightness, the zoom, a screenshot and full screen.
+ * The view tools at the right of the camera card's tool row: the crosshair, grid, ruler and
+ * package outline switches, which can be on together, and the light with its brightness, the
+ * zoom, a screenshot and full screen. Where the row is narrow, the brightness slider and the zoom
+ * figure go and the light and zoom keep their buttons. They were two glass cards over the image.
  * <p>
  * The reticles were only reachable through the right-click menu, which also holds their colours
  * and units, and only one could be drawn at a time; the menu stays for those. The light switch
@@ -86,6 +87,12 @@ public class CameraToolsBar extends JPanel {
     private final JToggleButton outline = new Ui.ToggleButton(null, Ui.icon("footprint", 16)); //$NON-NLS-1$
     private final JToggleButton light = new Ui.ToggleButton(null, Ui.iconSm("zap")); //$NON-NLS-1$
     private final JButton zoom = new Ui.Button("100%", Ui.iconSm("search")); //$NON-NLS-1$ //$NON-NLS-2$
+    /**
+     * The zoom pill's twin, never shown, to measure the pill with its figure and without: a
+     * button with words gets wider margins than one with an icon only, so the figure's own width
+     * was not the difference, and the row planned for one form found the other did not fit.
+     */
+    private final JButton zoomMeasure = new Ui.Button("100%", Ui.iconSm("search")); //$NON-NLS-1$ //$NON-NLS-2$
     private final Reticle outlineReticle;
     private CameraView followed;
     private final PropertyChangeListener zoomListener = e -> showZoom();
@@ -109,10 +116,9 @@ public class CameraToolsBar extends JPanel {
         setOpaque(false);
         setLayout(new BoxLayout(this, BoxLayout.X_AXIS));
 
-        OverlayCard reticles = OverlayCard.strip();
         for (JToggleButton toggle : new JToggleButton[] { crosshair, grid, ruler, this.outline }) {
             Ui.iconPill(toggle);
-            reticles.add(toggle);
+            add(toggle);
         }
         crosshair.setToolTipText(Translations.getString("CameraTools.Crosshair")); //$NON-NLS-1$
         grid.setToolTipText(Translations.getString("CameraTools.Grid")); //$NON-NLS-1$
@@ -127,10 +133,11 @@ public class CameraToolsBar extends JPanel {
         grid.addActionListener(e -> set(GRID, grid.isSelected() ? new GridReticle() : null));
         ruler.addActionListener(e -> set(RULER, ruler.isSelected() ? new RulerReticle() : null));
         this.outline.addActionListener(e -> set(OUTLINE, this.outline.isSelected() ? outlineReticle : null));
-        add(reticles);
-        add(Box.createHorizontalStrut(OverlayAnchorLayout.GAP));
+        add(Box.createHorizontalStrut(6));
+        add(Ui.divider(18));
+        add(Box.createHorizontalStrut(6));
 
-        OverlayCard view = OverlayCard.strip();
+        JPanel view = this;
         Ui.iconPill(light);
         light.setToolTipText(Translations.getString("CameraTools.Light")); //$NON-NLS-1$
         light.addActionListener(e -> {
@@ -168,6 +175,7 @@ public class CameraToolsBar extends JPanel {
         view.add(brightness);
         view.add(brightnessValue);
         Ui.pill(zoom);
+        Ui.pill(zoomMeasure);
         zoom.setToolTipText(Translations.getString("CameraTools.Zoom")); //$NON-NLS-1$
         zoom.addActionListener(e -> {
             if (followed != null) {
@@ -185,10 +193,58 @@ public class CameraToolsBar extends JPanel {
         full.setToolTipText(Translations.getString("CameraTools.FullScreen")); //$NON-NLS-1$
         full.addActionListener(e -> toggleFullScreen.run());
         view.add(full);
-        add(view);
 
         cameraPanel.addSelectionListener(this::follow);
         follow();
+    }
+
+    /** Whether the row is narrow: the brightness slider and the zoom figure are left out. */
+    private boolean compact;
+    /** Whether the camera on show has a light whose brightness the slider sets. */
+    private boolean hasBrightness;
+
+    public void setCompact(boolean compact) {
+        if (this.compact != compact) {
+            this.compact = compact;
+            showBrightnessRoom();
+            showZoom();
+            revalidate();
+        }
+    }
+
+    public boolean isCompact() {
+        return compact;
+    }
+
+    /** The row's width in either form, for the tool row to plan with. */
+    public int widthFor(boolean compactForm) {
+        java.awt.Insets insets = getInsets();
+        int width = insets.left + insets.right;
+        for (java.awt.Component c : getComponents()) {
+            if (c == brightness || c == brightnessValue) {
+                if (hasBrightness && !compactForm) {
+                    width += c.getPreferredSize().width;
+                }
+            }
+            else if (c == zoom) {
+                zoomMeasure.setFont(zoom.getFont());
+                zoomMeasure.setText(compactForm ? null : zoomFigure());
+                width += zoomMeasure.getPreferredSize().width;
+            }
+            else if (c.isVisible()) {
+                width += c.getPreferredSize().width;
+            }
+        }
+        return width;
+    }
+
+    private void showBrightnessRoom() {
+        boolean shown = hasBrightness && !compact;
+        if (brightness.isVisible() != shown) {
+            brightness.setVisible(shown);
+            brightnessValue.setVisible(shown);
+            revalidate();
+        }
     }
 
     @Override
@@ -260,11 +316,8 @@ public class CameraToolsBar extends JPanel {
      */
     private void showBrightness(Actuator actuator) {
         boolean has = actuator != null;
-        if (brightness.isVisible() != has) {
-            brightness.setVisible(has);
-            brightnessValue.setVisible(has);
-            revalidate();
-        }
+        hasBrightness = has;
+        showBrightnessRoom();
         if (!has || brightness.getValueIsAdjusting() || brightnessSender.isRunning()) {
             return;
         }
@@ -354,9 +407,24 @@ public class CameraToolsBar extends JPanel {
         return true;
     }
 
-    private void showZoom() {
+    private String zoomFigure() {
         double factor = followed == null ? 1.0 : followed.getZoom();
-        zoom.setText(Math.round(factor * 100) + "%"); //$NON-NLS-1$
+        return Math.round(factor * 100) + "%"; //$NON-NLS-1$
+    }
+
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        // Called by the panel's constructor, before the twin is made.
+        if (zoomMeasure != null) {
+            zoomMeasure.updateUI();
+        }
+    }
+
+    private void showZoom() {
+        String figure = zoomFigure();
+        zoom.setText(compact ? null : figure);
+        zoom.setToolTipText(Translations.getString("CameraTools.Zoom") + (compact ? " \u00b7 " + figure : "")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
     }
 
     /**

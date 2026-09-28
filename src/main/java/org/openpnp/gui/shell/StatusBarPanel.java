@@ -269,6 +269,10 @@ public class StatusBarPanel extends JPanel {
         fit();
     }
 
+    public String getStatus() {
+        return statusLabel.getText();
+    }
+
     /** The version shown only while everything else fits beside it. */
     private void fit() {
         if (getWidth() <= 0) {

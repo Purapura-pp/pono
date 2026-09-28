@@ -57,7 +57,7 @@ import org.openpnp.gui.calibration.CalibrationItem;
 import org.openpnp.gui.components.ThemeDialog;
 import org.openpnp.gui.components.ThemeInfo;
 import org.openpnp.gui.components.ThemeSettingsPanel;
-import org.openpnp.gui.shell.CameraStage;
+import org.openpnp.gui.shell.CameraWorkspace;
 import org.openpnp.gui.shell.DockPanel;
 import org.openpnp.gui.shell.DroPanel;
 import org.openpnp.gui.shell.JogCard;
@@ -1387,7 +1387,7 @@ public class UiRuler {
         marks.put(rail, "\u5bfc\u822a\u680f");
         mark(marks, TopBarPanel.class, "\u9876\u680f");
         mark(marks, StatusBarPanel.class, "\u72b6\u6001\u680f");
-        mark(marks, CameraStage.class, "\u76f8\u673a");
+        mark(marks, CameraWorkspace.class, "\u76f8\u673a");
         mark(marks, DockPanel.class, "\u6570\u636e\u533a");
         mark(marks, JogCard.class, "\u624b\u52a8\u63a7\u5236\u5361\u7247");
         mark(marks, DroPanel.class, "DRO");

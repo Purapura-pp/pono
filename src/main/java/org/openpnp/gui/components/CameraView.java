@@ -349,15 +349,26 @@ public class CameraView extends JComponent implements CameraListener {
         this.showName = showName;
     }
 
-    /** Where the view's own text goes below the cards along the top of the image. */
-    public static final int STAGE_TOP = 56;
+    /** Fired on the event thread when the camera's pictures change shape. */
+    public static final String PROPERTY_IMAGE_ASPECT = "imageAspect"; //$NON-NLS-1$
+
+    private volatile double lastAspect = 4.0 / 3.0;
+
+    /**
+     * The width over the height of the pictures the camera sends, for a layout that fits the view
+     * to them; 4:3 until the first one arrives. The camera itself is not asked: it may open the
+     * device to find out.
+     */
+    public double getImageAspect() {
+        BufferedImage frame = lastFrame;
+        return frame != null && frame.getHeight() > 0 ? frame.getWidth() / (double) frame.getHeight() : lastAspect;
+    }
 
     private boolean stageMode;
 
     /**
-     * On the main window's image, whose corners carry cards of their own: the view's own text
-     * moves out from under them, and the light switch it draws gives way to the one among the
-     * view tools.
+     * On the main window, where the view's name is on the bar above it and the light switch it
+     * draws gives way to the one among the view tools.
      */
     public void setStageMode(boolean stageMode) {
         this.stageMode = stageMode;
@@ -637,6 +648,12 @@ public class CameraView extends JComponent implements CameraListener {
                         || !camera.getUnitsPerPixelAtZ().equals(lastUnitsPerPixel))) {
             calculateScalingData();
         }
+        double aspect = getImageAspect();
+        if (aspect != lastAspect) {
+            double was = lastAspect;
+            lastAspect = aspect;
+            SwingUtilities.invokeLater(() -> firePropertyChange(PROPERTY_IMAGE_ASPECT, was, aspect));
+        }
         fps = 1000.0 / fpsAverage.next(System.currentTimeMillis() - lastFrameReceivedTime);
         lastFrameReceivedTime = System.currentTimeMillis();
         repaint();
@@ -749,28 +766,16 @@ public class CameraView extends JComponent implements CameraListener {
             }
 
             if (text != null) {
-                if (stageMode) {
-                    // The corners belong to the cards on the image; the middle of the foot does not.
-                    Dimension dim = measureTextOverlay(g2d, text);
-                    drawTextOverlay(g2d, (width - dim.width) / 2, height - dim.height - 12, text);
-                }
-                else {
-                    drawTextOverlay(g2d, 10, 10, text);
-                }
+                drawTextOverlay(g2d, 10, 10, text);
             }
 
-            if (showName) {
+            if (showName && !stageMode) {
                 Dimension dim = measureTextOverlay(g2d, camera.getName());
-                if (stageMode) {
-                    drawTextOverlay(g2d, (width - dim.width) / 2, 12, camera.getName());
-                }
-                else {
-                    drawTextOverlay(g2d, 10, height - dim.height - 10, camera.getName());
-                }
+                drawTextOverlay(g2d, 10, height - dim.height - 10, camera.getName());
             }
 
             if (showImageInfo && text == null) {
-                drawImageInfo(g2d, stageMode ? 12 : 10, stageMode ? STAGE_TOP : 10, image);
+                drawImageInfo(g2d, 10, 10, image);
             }
 
             if (selectionEnabled && selection != null) {
@@ -791,13 +796,7 @@ public class CameraView extends JComponent implements CameraListener {
                     LengthConverter lengthConverter = new LengthConverter();
                     String text = "Z: " + lengthConverter.convertForward(camera.getLocation().getLengthZ());
                     Dimension dim = measureTextOverlay(g2d, text);
-                    if (stageMode) {
-                        // Under the view tools rather than under the machine controls' card.
-                        drawTextOverlay(g2d, width - dim.width - 12, STAGE_TOP, text);
-                    }
-                    else {
-                        drawTextOverlay(g2d, width - dim.width - 10, height - dim.height - 10, text);
-                    }
+                    drawTextOverlay(g2d, width - dim.width - 10, height - dim.height - 10, text);
                 }
             }
         }

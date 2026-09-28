@@ -110,8 +110,9 @@ import org.openpnp.gui.shell.Hotkeys;
 import org.openpnp.model.SaveCancelledException;
 import org.openpnp.spi.Machine;
 import org.openpnp.spi.MachineListener;
-import org.openpnp.gui.shell.CameraStage;
 import org.openpnp.gui.shell.CameraToolsBar;
+import org.openpnp.gui.shell.CameraWorkspace;
+import org.openpnp.gui.shell.CameraWorkspaceLayout;
 import org.openpnp.gui.shell.PillBar;
 import org.openpnp.gui.shell.Chip;
 import org.openpnp.gui.shell.CommandPalette;
@@ -120,7 +121,6 @@ import org.openpnp.gui.shell.InspectorPanel;
 import org.openpnp.gui.shell.JogCard;
 import org.openpnp.gui.shell.PropertySheetPresenter.Result;
 import org.openpnp.gui.shell.NavigationRail;
-import org.openpnp.gui.shell.OverlayAnchorLayout.Anchor;
 import org.openpnp.gui.shell.OverlayCard;
 import org.openpnp.gui.shell.StatusBarPanel;
 import org.openpnp.gui.shell.TopBarPanel;
@@ -298,7 +298,8 @@ public class MainFrame extends JFrame {
     private InspectorPanel inspectorPanel;
     private JogCard jogCard;
     private JSplitPane splitPaneInspector;
-    private CameraStage cameraStage;
+    private CameraWorkspace cameraWorkspace;
+    private org.openpnp.gui.shell.MachineInfoPanel machineInfoPanel;
     private OverlayCard instructionsCard;
     private DroPanel droPanel;
     private JSplitPane splitPaneMachineAndTabs;
@@ -328,25 +329,14 @@ public class MainFrame extends JFrame {
         return inspectorPanel;
     }
 
-    private JLabel unitsPerPixelChip;
-    private OverlayCard unitsStrip;
-
-    /** {@code 1 px = 0.0209 mm}, for the camera on show; blank while none or all are. */
-    private void showUnitsPerPixel() {
-        org.openpnp.gui.components.CameraView view = cameraPanel.getSelectedCameraView();
-        Camera camera = view == null ? null : view.getCamera();
-        if (camera == null || camera.getUnitsPerPixel() == null) {
-            unitsPerPixelChip.setText(""); //$NON-NLS-1$
-            unitsPerPixelChip.getParent().setVisible(false);
+    /** {@code 0.0209 mm/px}: a camera's scale in the window's units, for the bar over its picture. */
+    private String scaleText(Camera camera) {
+        if (camera.getUnitsPerPixel() == null) {
+            return ""; //$NON-NLS-1$
         }
-        else {
-            org.openpnp.model.Location upp = camera.getUnitsPerPixel()
-                    .convertToUnits(configuration.getSystemUnits());
-            unitsPerPixelChip.setText(String.format(java.util.Locale.US, "1 px = %.4f %s", //$NON-NLS-1$
-                    Math.abs(upp.getX()), configuration.getSystemUnits().getShortName()));
-            unitsPerPixelChip.getParent().setVisible(true);
-        }
-        cameraStage.revalidate();
+        org.openpnp.model.Location upp = camera.getUnitsPerPixel().convertToUnits(configuration.getSystemUnits());
+        return String.format(java.util.Locale.US, "%.4f %s/px", //$NON-NLS-1$
+                Math.abs(upp.getX()), configuration.getSystemUnits().getShortName());
     }
 
     /** The placement selected on the job page, whose package the outline switch draws. */
@@ -415,6 +405,69 @@ public class MainFrame extends JFrame {
             splitPaneMachineAndTabs.setDividerLocation(dividerBeforeMaximise);
         }
         dockMaximised = !dockMaximised;
+        updateCameraFit();
+    }
+
+    /**
+     * Whether the large camera gives the page below it what its pictures leave above and below
+     * them: in the window's split only, not in full screen, a window of its own or production mode.
+     */
+    private void updateCameraFit() {
+        if (cameraWorkspace != null) {
+            cameraWorkspace.setFit(!cameraFullScreen && !dockMaximised && !windowStyleMultiple && !operatorMode);
+            fitCameraHeight();
+        }
+    }
+
+    /** How far the split's divider is below the camera card's foot: the wrappers' insets. */
+    private int cameraOffset = -1;
+    private boolean clampingCamera;
+    /**
+     * What the page under a large camera keeps of the split's height: the camera is wanted as tall
+     * as the rest, so a taller window makes it taller. Set by the page's layout and by a drag of
+     * the divider, never by the fitting; -1 until one of them has.
+     */
+    private int cameraTables = -1;
+    /** A drag of the divider in progress, and where it last put the divider. */
+    private boolean draggingCamera;
+    private int cameraAsked = -1;
+
+    /**
+     * Gives the large camera the height wanted for it less what its pictures leave above and below
+     * them there, which goes to the page below instead of being black round the pictures. The
+     * height wanted is kept apart from the height given: when they were one, each fitting started
+     * from the last one's result, and the camera only ever got smaller - to a sliver, as the
+     * window was resized. Now a wider window gives the pictures more room and the camera grows
+     * back, up to what was wanted. A drag past where the pictures stop growing stops there.
+     */
+    private void fitCameraHeight() {
+        if (clampingCamera || cameraWorkspace == null || cameraOffset < 0
+                || cameraWorkspace.getMode() != CameraWorkspaceLayout.Mode.Large || cameraFullScreen
+                || dockMaximised || windowStyleMultiple || operatorMode) {
+            return;
+        }
+        int height = splitPaneMachineAndTabs.getHeight() - splitPaneMachineAndTabs.getDividerSize();
+        if (height <= 0) {
+            return;
+        }
+        if (cameraTables < 0) {
+            cameraTables = height - splitPaneMachineAndTabs.getDividerLocation();
+        }
+        int wanted = draggingCamera && cameraAsked >= 0 ? cameraAsked : height - cameraTables;
+        cameraWorkspace.setWantedHeight(wanted - cameraOffset);
+        // Worked out for the wanted height the last time the card was laid out; if that has just
+        // changed, the card tells again once it has been laid out for the new one.
+        int fitted = cameraWorkspace.getFittedHeight();
+        int target = fitted > 0 ? Math.min(wanted, fitted + cameraOffset) : wanted;
+        if (target != splitPaneMachineAndTabs.getDividerLocation()) {
+            clampingCamera = true;
+            try {
+                splitPaneMachineAndTabs.setDividerLocation(target);
+            }
+            finally {
+                clampingCamera = false;
+            }
+        }
     }
 
     private boolean cameraFullScreen;
@@ -435,6 +488,7 @@ public class MainFrame extends JFrame {
         else {
             splitPaneMachineAndTabs.setDividerLocation(dividerBeforeFullScreen);
         }
+        updateCameraFit();
         applyInspectorPolicy();
     }
 
@@ -487,8 +541,8 @@ public class MainFrame extends JFrame {
     /** Each page's name in the layouts, which is its navigation key. */
     private final Map<Component, String> pageKeys = new HashMap<>();
     private org.openpnp.gui.shell.CameraToolsBar cameraToolsBar;
-    private OverlayCard cameraModeCard;
-    private OverlayCard stripHandle;
+    private JPanel cameraModeCard;
+    private JPanel stripHandle;
     private final Map<org.openpnp.gui.shell.PageLayouts.Camera, javax.swing.JToggleButton> cameraModeButtons =
             new java.util.EnumMap<>(org.openpnp.gui.shell.PageLayouts.Camera.class);
     /** The camera was made large for a wizard's instructions and goes back when they are done. */
@@ -500,7 +554,19 @@ public class MainFrame extends JFrame {
      * looked for again then.
      */
     private static void onDividerReleased(JSplitPane split, Runnable released) {
+        onDividerDragged(split, null, released);
+    }
+
+    /** As {@link #onDividerReleased}, with a call as the divider is taken hold of too. */
+    private static void onDividerDragged(JSplitPane split, Runnable pressed, Runnable released) {
         java.awt.event.MouseAdapter listener = new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                if (pressed != null) {
+                    pressed.run();
+                }
+            }
+
             @Override
             public void mouseReleased(java.awt.event.MouseEvent e) {
                 SwingUtilities.invokeLater(released);
@@ -558,44 +624,31 @@ public class MainFrame extends JFrame {
         }
         // A large camera takes what the window gains; the strip stays a strip.
         splitPaneMachineAndTabs.setResizeWeight(camera == org.openpnp.gui.shell.PageLayouts.Camera.Large ? 1.0 : 0.0);
-        splitPaneMachineAndTabs.setDividerLocation(pageLayouts.dividerFor(key, camera, height));
+        int location = pageLayouts.dividerFor(key, camera, height);
+        if (camera == org.openpnp.gui.shell.PageLayouts.Camera.Large) {
+            cameraTables = height - location;
+        }
+        splitPaneMachineAndTabs.setDividerLocation(location);
         showCameraMode(camera);
     }
 
     /**
-     * What the image carries at a size: the strip has the camera choice, its readout in the
-     * compact size, the three sizes and the handle to drag it larger; the large camera has the
-     * view tools and the machine controls.
+     * What the camera card carries at a size: the strip has the camera choice and the readout at
+     * its left, the three sizes, Home and the handle to drag it larger at its right; the large
+     * camera has the tool row and the manual controls; hidden, it is a sliver with the pictures.
      */
     private void showCameraMode(org.openpnp.gui.shell.PageLayouts.Camera camera) {
-        // Production mode keeps the camera's own overlays hidden whatever page is switched to.
-        if (cameraStage == null || operatorMode) {
+        // Production mode keeps the camera card to its pictures whatever page is switched to.
+        if (cameraWorkspace == null || operatorMode) {
             return;
         }
-        boolean strip = camera == org.openpnp.gui.shell.PageLayouts.Camera.Small;
-        // Hidden, the stage is a sliver under the page: the large camera's cards would be cut there.
-        boolean large = camera == org.openpnp.gui.shell.PageLayouts.Camera.Large;
-        if (cameraToolsBar != null) {
-            cameraToolsBar.setVisible(large);
-        }
-        if (jogCard != null) {
-            jogCard.setVisible(large);
-        }
-        if (cameraModeCard != null) {
-            cameraModeCard.setVisible(strip);
-            stripHandle.setVisible(strip);
-        }
-        if (unitsStrip != null) {
-            unitsStrip.setVisible(large);
-        }
-        if (droPanel != null) {
-            droPanel.setForcedCompact(strip);
-        }
+        cameraWorkspace.setMode(camera == org.openpnp.gui.shell.PageLayouts.Camera.Large ? CameraWorkspaceLayout.Mode.Large
+                : camera == org.openpnp.gui.shell.PageLayouts.Camera.Small ? CameraWorkspaceLayout.Mode.Strip
+                        : CameraWorkspaceLayout.Mode.Hidden);
         for (Map.Entry<org.openpnp.gui.shell.PageLayouts.Camera, javax.swing.JToggleButton> entry : cameraModeButtons.entrySet()) {
             entry.getValue().setSelected(entry.getKey() == camera);
         }
-        cameraStage.revalidate();
-        cameraStage.repaint();
+        updateCameraFit();
     }
 
     /** The View menu's and the strip's choice of camera size for the page on show. */
@@ -609,9 +662,9 @@ public class MainFrame extends JFrame {
         }
     }
 
-    /** The strip's "large / small / hidden" pills and its handle, built once with the stage. */
+    /** The strip's "large / small / hidden" pills and its handle, built once with the camera card. */
     private void buildCameraModeControls() {
-        cameraModeCard = OverlayCard.strip();
+        cameraModeCard = segmented();
         javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
         for (org.openpnp.gui.shell.PageLayouts.Camera camera : org.openpnp.gui.shell.PageLayouts.Camera.values()) {
             javax.swing.JToggleButton pill = new org.openpnp.gui.shell.Ui.ToggleButton(
@@ -623,16 +676,13 @@ public class MainFrame extends JFrame {
             cameraModeButtons.put(camera, pill);
             cameraModeCard.add(pill);
         }
-        cameraModeCard.setVisible(false);
-        cameraStage.anchor(cameraModeCard, Anchor.NorthEast);
-        stripHandle = new OverlayCard();
-        stripHandle.setLayout(new BorderLayout());
-        stripHandle.setBorder(BorderFactory.createEmptyBorder(3, 10, 3, 10));
+        stripHandle = new JPanel(new BorderLayout());
+        stripHandle.setOpaque(false);
         JLabel handle = new JLabel(Translations.getString("MainFrame.Camera.DragToEnlarge"), //$NON-NLS-1$
-                org.openpnp.gui.shell.Ui.icon("grip", 12), SwingConstants.CENTER); //$NON-NLS-1$
+                org.openpnp.gui.shell.Ui.icon("grip", 12), SwingConstants.RIGHT); //$NON-NLS-1$
         handle.setFont(org.openpnp.gui.shell.Ui.font(11f));
-        handle.setForeground(org.openpnp.gui.shell.Ui.text2());
-        handle.setIconTextGap(6);
+        handle.setForeground(org.openpnp.gui.shell.Ui.muted());
+        handle.setIconTextGap(4);
         stripHandle.add(handle);
         stripHandle.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         stripHandle.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -641,8 +691,26 @@ public class MainFrame extends JFrame {
                 chooseCameraMode(org.openpnp.gui.shell.PageLayouts.Camera.Large);
             }
         });
-        stripHandle.setVisible(false);
-        cameraStage.anchor(stripHandle, Anchor.South);
+    }
+
+    /** A banner along the top of the camera card: a wizard's instructions, the production banner. */
+    private static OverlayCard banner(Component content) {
+        OverlayCard card = new OverlayCard();
+        card.setLayout(new BorderLayout(0, 0));
+        card.add(content, BorderLayout.CENTER);
+        if (content instanceof Container) {
+            OverlayCard.makeTransparent((Container) content);
+        }
+        return card;
+    }
+
+    /** A segmented control's frame: surface-2 on a hairline, its pills inside. */
+    private static JPanel segmented() {
+        org.openpnp.gui.shell.RoundedPanel frame = new org.openpnp.gui.shell.RoundedPanel(2 * org.openpnp.gui.shell.Tokens.R_SM + 4,
+                org.openpnp.gui.shell.Ui::surface2, org.openpnp.gui.shell.Ui::border);
+        frame.setLayout(new javax.swing.BoxLayout(frame, javax.swing.BoxLayout.X_AXIS));
+        frame.setBorder(new EmptyBorder(2, 2, 2, 2));
+        return frame;
     }
 
     /** The properties column as the page on show wants it, at a width the window allows. */
@@ -1049,17 +1117,16 @@ public class MainFrame extends JFrame {
         // the activity mark in a circle, the title over the text, and the buttons at the right.
         panelInstructions = new JPanel() {
             /**
-             * 640 wide, and as high as the text wraps to at that width. The banner floats over
-             * the image and is laid out at its preferred size, so the height has to come from
-             * the text: a fixed 640 x 0 left the card its 12 pixels of padding and nothing else,
-             * the instructions and the Next button clipped away.
+             * As wide as the camera card's row for it, and as high as the text wraps to at that
+             * width: the height has to come from the text, as a fixed height left the card its
+             * padding and nothing else, the instructions and the Next button clipped away.
              */
             @Override
             public Dimension getPreferredSize() {
                 int width = INSTRUCTIONS_WIDTH;
-                Container stage = SwingUtilities.getAncestorOfClass(CameraStage.class, this);
-                if (stage != null && stage.getWidth() > 0) {
-                    width = Math.min(width, stage.getWidth() - 40);
+                Container card = SwingUtilities.getAncestorOfClass(CameraWorkspace.class, this);
+                if (card != null && card.getWidth() > 0) {
+                    width = card.getWidth() - 2 * CameraWorkspaceLayout.MARGIN - 20;
                 }
                 Insets insets = getInsets();
                 int side = 0;
@@ -1239,12 +1306,27 @@ public class MainFrame extends JFrame {
                 }
             }
         });
-        onDividerReleased(splitPaneMachineAndTabs, () -> {
+        splitPaneMachineAndTabs.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
+            if (draggingCamera && !clampingCamera) {
+                cameraAsked = (Integer) e.getNewValue();
+            }
+        });
+        onDividerDragged(splitPaneMachineAndTabs, () -> {
+            draggingCamera = true;
+            cameraAsked = splitPaneMachineAndTabs.getDividerLocation();
+        }, () -> {
+            int location = cameraAsked >= 0 ? cameraAsked : splitPaneMachineAndTabs.getDividerLocation();
+            draggingCamera = false;
+            cameraAsked = -1;
             String key = pageKey(navigationRail.getSelectedComponent());
             if (key == null || cameraFullScreen || dockMaximised || windowStyleMultiple) {
                 return;
             }
-            showCameraMode(pageLayouts.dragged(key, splitPaneMachineAndTabs.getDividerLocation()));
+            org.openpnp.gui.shell.PageLayouts.Camera camera = pageLayouts.dragged(key, location);
+            if (camera == org.openpnp.gui.shell.PageLayouts.Camera.Large) {
+                cameraTables = splitPaneMachineAndTabs.getHeight() - splitPaneMachineAndTabs.getDividerSize() - location;
+            }
+            showCameraMode(camera);
         });
 
         // The rail's own label is short enough to sit under an icon; the tab title it replaces
@@ -1423,8 +1505,8 @@ public class MainFrame extends JFrame {
         // No title on the camera: the camera selector inside it already says which one this is,
         // and the etched box only cost the view a few pixels on every edge.
         cameraPanel.setBorder(null);
-        cameraStage = new CameraStage(cameraPanel);
-        // Top left: which camera, and how big a pixel is. Top right: the view tools.
+        cameraPanel.setScaleText(this::scaleText);
+        // The tool row: which camera at the left, the readout in the middle, the view tools at the right.
         PillBar cameraSelector = cameraPanel.getCameraSelector();
         cameraSelector.setLabeller(item -> {
             if (item instanceof CameraItem) {
@@ -1450,42 +1532,34 @@ public class MainFrame extends JFrame {
             }
             return org.openpnp.gui.shell.Ui.iconSm("panel"); //$NON-NLS-1$
         });
-        OverlayCard selectorStrip = OverlayCard.strip();
-        selectorStrip.add(cameraSelector);
-        cameraStage.anchor(selectorStrip, Anchor.NorthWest);
-        // The scale is one glass chip of its own, 32 high, in the monospaced figures.
-        unitsPerPixelChip = new JLabel();
-        unitsPerPixelChip.setFont(org.openpnp.gui.shell.Ui.mono(12f, java.awt.Font.PLAIN));
-        unitsPerPixelChip.setForeground(org.openpnp.gui.shell.Ui.text2());
-        unitsStrip = new OverlayCard() {
-            @Override
-            public Dimension getPreferredSize() {
-                Dimension size = super.getPreferredSize();
-                return new Dimension(size.width, 32 + OverlayCard.SHADOW_TOP + OverlayCard.SHADOW_BOTTOM);
-            }
-        };
-        unitsStrip.setLayout(new BorderLayout());
-        unitsStrip.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        unitsStrip.add(unitsPerPixelChip);
-        cameraStage.anchor(unitsStrip, Anchor.NorthWest);
-        cameraPanel.addSelectionListener(this::showUnitsPerPixel);
+        JPanel selectorFrame = segmented();
+        selectorFrame.add(cameraSelector);
         cameraToolsBar = new CameraToolsBar(configuration, cameraPanel, this::toggleCameraFullScreen,
                 this::selectedFootprint, this::selectedFootprintLabel);
-        cameraStage.anchor(cameraToolsBar, Anchor.NorthEast);
-        // The readout goes bottom left and the machine controls bottom right, as the mockups have
-        // them; the instructions arrive at the top, over the image they are talking about.
-        cameraStage.overlay(droPanel, Anchor.SouthWest);
         jogCard = new JogCard(configuration, machineControlsPanel);
-        cameraStage.anchor(jogCard, Anchor.SouthEast);
-        instructionsCard = cameraStage.overlay(panelInstructions, Anchor.North);
+        machineInfoPanel = new org.openpnp.gui.shell.MachineInfoPanel(configuration, machineControlsPanel);
+        // A wizard's instructions are a row of the card under the tool row, over nothing.
+        instructionsCard = banner(panelInstructions);
         instructionsCard.setAccentEdge(true);
         instructionsCard.setVisible(false);
         buildCameraModeControls();
-        panelCameraAndInstructions.add(cameraStage, BorderLayout.CENTER);
-
         operatorView = new org.openpnp.gui.operator.OperatorView(configuration, jobPanel);
-        operatorBanner = cameraStage.overlay(operatorView.getBanner(), Anchor.North);
+        operatorBanner = banner(operatorView.getBanner());
         operatorBanner.setVisible(false);
+        cameraWorkspace = new CameraWorkspace(cameraPanel, selectorFrame, droPanel, cameraToolsBar, jogCard,
+                machineInfoPanel, instructionsCard, operatorBanner, cameraModeCard, stripHandle);
+        cameraWorkspace.addPropertyChangeListener(CameraWorkspace.PROPERTY_FITTED_HEIGHT, e -> fitCameraHeight());
+        cameraWorkspace.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                // The card has just been sized from the divider: how far apart they are is now known.
+                if (!windowStyleMultiple && !operatorMode && cameraWorkspace.getHeight() > 0) {
+                    cameraOffset = splitPaneMachineAndTabs.getDividerLocation() - cameraWorkspace.getHeight();
+                    fitCameraHeight();
+                }
+            }
+        });
+        panelCameraAndInstructions.add(cameraWorkspace, BorderLayout.CENTER);
         operatorView.onRefresh(s -> {
             int empty = 0;
             for (org.openpnp.gui.operator.OperatorSummary.Attention a : s.attention) {
@@ -1590,6 +1664,7 @@ public class MainFrame extends JFrame {
             // The page on show decides the camera's size, once the window has one.
             SwingUtilities.invokeLater(() -> applyPageLayout(navigationRail.getSelectedComponent()));
         }
+        updateCameraFit();
     }
     
     public boolean isInstallerAvailable() {
@@ -1720,7 +1795,8 @@ public class MainFrame extends JFrame {
         }
         statusBarPanel.setWizardLink(this::showWizard);
         setStatusState(Translations.getString("StatusBar.State.Wizard"), Chip.Tone.Run); //$NON-NLS-1$
-        setStatus(counted ? title + " \u00b7 " + step + "/" + steps : title); //$NON-NLS-1$ //$NON-NLS-2$
+        wizardStatus = counted ? title + " \u00b7 " + step + "/" + steps : title; //$NON-NLS-1$ //$NON-NLS-2$
+        setStatus(wizardStatus);
         lblInstructionsTitle.setText(title);
         lblInstructions.setText(instructions);
         btnInstructionsCancel.setVisible(showCancelButton);
@@ -1729,9 +1805,9 @@ public class MainFrame extends JFrame {
         instructionsCancelActionListener = cancelActionListener;
         instructionsProceedActionListener = proceedActionListener;
         panelInstructions.setVisible(true);
-        // The card is what the overlay lays out, so it is the one that has to appear.
+        // The card is what the camera card lays out, so it is the one that has to appear.
         instructionsCard.setVisible(true);
-        cameraStage.revalidate();
+        cameraWorkspace.revalidate();
         instructionsCard.repaint();
         if (scheduledExecutor == null) {
             scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -1747,6 +1823,8 @@ public class MainFrame extends JFrame {
 
     /** Whether the banner's circle shows the step count rather than the busy mark. */
     private volatile boolean instructionsCounted;
+    /** What the wizard put in the status bar, taken out again when it is done. */
+    private String wizardStatus;
 
     public void hideInstructions() {
         boolean running = jobPanel != null && jobPanel.isJobRunning();
@@ -1759,12 +1837,20 @@ public class MainFrame extends JFrame {
         panelInstructions.setVisible(false);
         instructionsCard.setVisible(false);
         statusBarPanel.setWizardLink(null);
+        // Unless something has said something since: the wizard's step stayed there for good.
+        String shown = wizardStatus;
+        wizardStatus = null;
+        SwingUtilities.invokeLater(() -> {
+            if (shown != null && shown.equals(statusBarPanel.getStatus())) {
+                statusBarPanel.setStatus(null);
+            }
+        });
         if (wizardEnlargedCamera) {
             wizardEnlargedCamera = false;
             applyPageLayout(navigationRail.getSelectedComponent());
         }
-        cameraStage.revalidate();
-        cameraStage.repaint();
+        cameraWorkspace.revalidate();
+        cameraWorkspace.repaint();
     }
 
     /** Brings a wizard's instructions into view: the camera large, or its window to the front. */
@@ -1899,12 +1985,9 @@ public class MainFrame extends JFrame {
             navigationRail.setVisible(false);
             // The image and what is being placed over it; the controls that move the machine by
             // hand and the view tools are the workbench's.
-            for (Component c : new Component[] { jogCard, cameraToolsBar, cameraModeCard, stripHandle, unitsStrip }) {
-                if (c != null) {
-                    c.setVisible(false);
-                }
-            }
             instructionsCard.setVisible(false);
+            cameraWorkspace.setMode(CameraWorkspaceLayout.Mode.Operator);
+            updateCameraFit();
         }
         else {
             operatorBanner.setVisible(false);

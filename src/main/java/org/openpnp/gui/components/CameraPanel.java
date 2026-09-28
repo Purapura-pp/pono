@@ -104,14 +104,200 @@ public class CameraPanel extends JPanel {
 
     private boolean stageMode;
 
-    /** See {@link CameraView#setStageMode(boolean)}: for every view, those to come included. */
+    /**
+     * See {@link CameraView#setStageMode(boolean)}: for every view, those to come included. On the
+     * main window each picture is shown whole under a bar with its camera's name and scale, and
+     * the panel is only as large as the pictures: see {@link #fittedSize(int, int)}.
+     */
     public void setStageMode(boolean stageMode) {
         this.stageMode = stageMode;
+        setOpaque(!stageMode);
         for (CameraView view : cameraViews.values()) {
             view.setStageMode(stageMode);
             if (stageMode) {
                 view.setBackground(org.openpnp.gui.shell.Ui.cameraBg());
             }
+        }
+        if (camerasPanel != null) {
+            relayoutPanel();
+        }
+    }
+
+    /** Fired when the size the pictures want changes: another camera, or pictures of another shape. */
+    public static final String PROPERTY_FIT = "fit"; //$NON-NLS-1$
+    private int fitChanges;
+
+    private java.util.function.Function<Camera, String> scaleText = camera -> {
+        org.openpnp.model.Location upp = camera.getUnitsPerPixel();
+        return upp == null ? "" : String.format(java.util.Locale.US, "%.4f %s/px", //$NON-NLS-1$ //$NON-NLS-2$
+                Math.abs(upp.getX()), upp.getUnits().getShortName());
+    };
+
+    /** What the bar over a picture says of its scale, in the units the window shows. */
+    public void setScaleText(java.util.function.Function<Camera, String> scaleText) {
+        this.scaleText = scaleText;
+        repaint();
+    }
+
+    /** The views on show, in their order. */
+    private final java.util.List<CameraView> shown = new java.util.ArrayList<>();
+
+    private double[] shownAspects() {
+        double[] aspects = new double[shown.size()];
+        for (int i = 0; i < aspects.length; i++) {
+            aspects[i] = shown.get(i).getImageAspect();
+        }
+        return aspects;
+    }
+
+    /**
+     * The size the pictures on show take in a rectangle of the given size: each whole and as large
+     * as it fits, under its bar, and no black round it. With none on show, the whole rectangle.
+     */
+    public java.awt.Dimension fittedSize(int width, int height) {
+        if (!stageMode || shown.isEmpty()) {
+            return new java.awt.Dimension(width, height);
+        }
+        return CameraArrangement.arrange(width, height, shownAspects()).size;
+    }
+
+    /** Whether the pictures on show would be side by side in a rectangle of this size. */
+    public boolean sideBySide(int width, int height) {
+        return stageMode && CameraArrangement.arrange(width, height, shownAspects()).sideBySide;
+    }
+
+    private final PropertyChangeListener aspectListener = e -> fitChanged();
+
+    private void fitChanged() {
+        revalidate();
+        repaint();
+        firePropertyChange(PROPERTY_FIT, fitChanges, ++fitChanges);
+    }
+
+    /** The slots of the shown views, placed as CameraArrangement says, centred in what they get. */
+    private final java.awt.LayoutManager stageLayout = new java.awt.LayoutManager() {
+        @Override
+        public void layoutContainer(java.awt.Container parent) {
+            CameraArrangement.Result result = CameraArrangement.arrange(parent.getWidth(), parent.getHeight(), shownAspects());
+            int x = (parent.getWidth() - result.size.width) / 2;
+            int y = (parent.getHeight() - result.size.height) / 2;
+            for (int i = 0; i < parent.getComponentCount(); i++) {
+                java.awt.Component c = parent.getComponent(i);
+                if (i < result.slots.size()) {
+                    java.awt.Rectangle r = result.slots.get(i);
+                    c.setBounds(x + r.x, y + r.y, r.width, r.height);
+                }
+                else {
+                    c.setBounds(0, 0, 0, 0);
+                }
+            }
+        }
+
+        @Override
+        public java.awt.Dimension preferredLayoutSize(java.awt.Container parent) {
+            return new java.awt.Dimension(0, 0);
+        }
+
+        @Override
+        public java.awt.Dimension minimumLayoutSize(java.awt.Container parent) {
+            return new java.awt.Dimension(0, 0);
+        }
+
+        @Override
+        public void addLayoutComponent(String name, java.awt.Component comp) {
+        }
+
+        @Override
+        public void removeLayoutComponent(java.awt.Component comp) {
+        }
+    };
+
+    /** A view under the bar that names its camera, with rounded corners over both. */
+    private final class Slot extends JPanel {
+        private final CameraView view;
+        private final javax.swing.JComponent caption = new javax.swing.JComponent() {
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                            java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                    g2.setColor(org.openpnp.gui.shell.Ui.mix(Color.WHITE, org.openpnp.gui.shell.Ui.cameraBg(), 0.07));
+                    g2.fillRect(0, 0, getWidth(), getHeight());
+                    java.awt.Font nameFont = org.openpnp.gui.shell.Ui.font(12f, java.awt.Font.BOLD);
+                    java.awt.FontMetrics nm = g2.getFontMetrics(nameFont);
+                    int baseline = (getHeight() + nm.getAscent() - nm.getDescent()) / 2;
+                    g2.setFont(nameFont);
+                    g2.setColor(new Color(0xc9d1dc));
+                    String name = view.getCamera() == null ? "" : view.getCamera().getName(); //$NON-NLS-1$
+                    g2.drawString(name, 10, baseline);
+                    String scale = view.getCamera() == null ? "" : scaleText.apply(view.getCamera()); //$NON-NLS-1$
+                    java.awt.Font scaleFont = org.openpnp.gui.shell.Ui.mono(11f, java.awt.Font.PLAIN);
+                    int x = 10 + nm.stringWidth(name) + 8;
+                    // Left out where it would not fit, rather than cut.
+                    if (x + g2.getFontMetrics(scaleFont).stringWidth(scale) <= getWidth() - 8) {
+                        g2.setFont(scaleFont);
+                        g2.setColor(new Color(0x7f8a9c));
+                        g2.drawString(scale, x, baseline);
+                    }
+                }
+                finally {
+                    g2.dispose();
+                }
+            }
+        };
+        /**
+         * The corners in the card's colour, over the view: it repaints itself for every frame and
+         * would paint square ones. The slot does not draw optimised, so the mask is painted again
+         * with the view.
+         */
+        private final javax.swing.JComponent corners = new javax.swing.JComponent() {
+            @Override
+            public boolean contains(int x, int y) {
+                return false;
+            }
+
+            @Override
+            protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                try {
+                    g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                    float arc = 2 * org.openpnp.gui.shell.Tokens.R_MD;
+                    java.awt.geom.Area area = new java.awt.geom.Area(new java.awt.Rectangle(0, 0, getWidth(), getHeight()));
+                    area.subtract(new java.awt.geom.Area(new java.awt.geom.RoundRectangle2D.Float(0, 0, getWidth(), getHeight(), arc, arc)));
+                    java.awt.Container host = Slot.this.getParent();
+                    while (host != null && !host.isOpaque()) {
+                        host = host.getParent();
+                    }
+                    g2.setColor(host != null ? host.getBackground() : org.openpnp.gui.shell.Ui.surface());
+                    g2.fill(area);
+                }
+                finally {
+                    g2.dispose();
+                }
+            }
+        };
+
+        Slot(CameraView view) {
+            this.view = view;
+            setLayout(null);
+            setOpaque(false);
+            add(corners);
+            add(caption);
+            add(view);
+        }
+
+        @Override
+        public boolean isOptimizedDrawingEnabled() {
+            return false;
+        }
+
+        @Override
+        public void doLayout() {
+            int w = getWidth(), h = getHeight();
+            corners.setBounds(0, 0, w, h);
+            caption.setBounds(0, 0, w, CameraArrangement.CAPTION);
+            view.setBounds(0, CameraArrangement.CAPTION, w, Math.max(0, h - CameraArrangement.CAPTION));
         }
     }
 
@@ -245,7 +431,15 @@ public class CameraPanel extends JPanel {
 
     private void relayoutPanel() {
         selectedCameraView = null;
+        for (CameraView view : shown) {
+            view.removePropertyChangeListener(CameraView.PROPERTY_IMAGE_ASPECT, aspectListener);
+        }
+        shown.clear();
         camerasPanel.removeAll();
+        if (stageMode) {
+            relayoutStage();
+            return;
+        }
         if (camerasCombo.getSelectedItem().equals(SHOW_NONE_ITEM)) {
             camerasPanel.setLayout(new BorderLayout());
             JPanel panel = new JPanel();
@@ -299,6 +493,39 @@ public class CameraPanel extends JPanel {
         }
         revalidate();
         repaint();
+        for (Runnable listener : new java.util.ArrayList<>(selectionListeners)) {
+            listener.run();
+        }
+    }
+
+    /** The main window's arrangement: the pictures whole, each under its bar, and nothing else. */
+    private void relayoutStage() {
+        Object item = camerasCombo.getSelectedItem();
+        camerasPanel.setOpaque(false);
+        camerasPanel.setLayout(stageLayout);
+        if (SHOW_ALL_ITEM_H.equals(item) || SHOW_ALL_ITEM_V.equals(item)) {
+            for (Entry<Camera, CameraView> entry : cameraViews.entrySet()) {
+                if (entry.getKey().isShownInMultiCameraView()) {
+                    shown.add(entry.getValue());
+                }
+            }
+            if (shown.size() == 1) {
+                selectedCameraView = shown.get(0);
+            }
+        }
+        else if (item instanceof CameraItem) {
+            CameraView view = getCameraView(((CameraItem) item).getCamera());
+            if (view != null) {
+                shown.add(view);
+                selectedCameraView = view;
+            }
+        }
+        for (CameraView view : shown) {
+            view.setShowName(false);
+            view.addPropertyChangeListener(CameraView.PROPERTY_IMAGE_ASPECT, aspectListener);
+            camerasPanel.add(new Slot(view));
+        }
+        fitChanged();
         for (Runnable listener : new java.util.ArrayList<>(selectionListeners)) {
             listener.run();
         }
