@@ -41,8 +41,6 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
-import javax.swing.plaf.basic.BasicHTML;
-import javax.swing.text.View;
 
 import org.openpnp.Main;
 import org.openpnp.Translations;
@@ -294,16 +292,7 @@ public class Welcome2_0Dialog extends JDialog {
         Insets in = row.getInsets();
         int textWidth = rowWidth - in.left - in.right - numberHolder.getPreferredSize().width
                 - rightHolder.getPreferredSize().width - 2 * gap;
-        View html = (View) detail.getClientProperty(BasicHTML.propertyKey);
-        if (html != null && textWidth > 0) {
-            html.setSize(textWidth, 0);
-            // All three: the column it is in never makes it larger than its maximum, which for a
-            // label is its text on one line.
-            Dimension size = new Dimension(textWidth, (int) Math.ceil(html.getPreferredSpan(View.Y_AXIS)));
-            detail.setPreferredSize(size);
-            detail.setMinimumSize(size);
-            detail.setMaximumSize(size);
-        }
+        Ui.wrapAt(detail, textWidth);
         return row;
     }
 

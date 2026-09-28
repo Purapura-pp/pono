@@ -996,6 +996,25 @@ public final class Ui {
         return label;
     }
 
+    /**
+     * Sizes an HTML label to wrap at a width: its minimum, preferred and maximum sizes are all the
+     * wrapped text's. A column never makes a component taller than its maximum, which for a label
+     * is its text on one line, so a wrapped size set as the preferred one alone was cut to a line.
+     */
+    public static <T extends JLabel> T wrapAt(T label, int width) {
+        javax.swing.text.View html = (javax.swing.text.View) label
+                .getClientProperty(javax.swing.plaf.basic.BasicHTML.propertyKey);
+        if (html != null && width > 0) {
+            html.setSize(width, 0);
+            Dimension size = new Dimension(width,
+                    (int) Math.ceil(html.getPreferredSpan(javax.swing.text.View.Y_AXIS)));
+            label.setPreferredSize(size);
+            label.setMinimumSize(size);
+            label.setMaximumSize(size);
+        }
+        return label;
+    }
+
     /** A monospaced label with tabular figures, for numbers. */
     public static JLabel mono(String text, float size) {
         JLabel label = new JLabel(text);
