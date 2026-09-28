@@ -52,8 +52,9 @@ public class GstreamerCamera extends ReferenceCamera {
         Gst.init();
     }
 
+    /** Required in machine.xml: empty rather than null for a camera not given its pipeline yet. */
     @Attribute(name = "gstPipeline", required = true)
-    private String gstPipeString;
+    private String gstPipeString = "";
 
     private BufferedImage currentImage;
     private AppSink videosink;
@@ -87,7 +88,7 @@ public class GstreamerCamera extends ReferenceCamera {
         close();
         clearCalibrationCache();
 
-        if (gstPipeString == null) {
+        if (gstPipeString == null || gstPipeString.isEmpty()) {
             return;
         }
 

@@ -574,7 +574,6 @@ public class UiRuler {
     /** The calibration page besides its first suggestion: scene id, what. */
     private static final String[][] CALIBRATION_SCENES = {
             { "calibration-measure", "\u8981\u5148\u6d4b\u91cf" },
-            { "calibration-hints", "\u5176\u4ed6\u63d0\u793a" },
             { "calibration-confirm", "\u6d4b\u5b8c\u5f85\u786e\u8ba4" },
     };
 
@@ -756,11 +755,6 @@ public class UiRuler {
                 frame.getCalibrationTab().refresh();
                 expect(missed, frame.getCalibrationTab().revealFirst(CalibrationItem.Kind.Measure),
                         "\u7b2c\u4e00\u9879\u6d4b\u91cf");
-                break;
-            case "calibration-hints":
-                frame.getCalibrationTab().refresh();
-                expect(missed, frame.getCalibrationTab().revealFirst(CalibrationItem.Kind.Hint),
-                        "\u7b2c\u4e00\u6761\u5176\u4ed6\u63d0\u793a");
                 break;
             case "calibration-confirm": {
                 CalibrationPanel calibration = frame.getCalibrationTab();

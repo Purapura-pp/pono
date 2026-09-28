@@ -57,7 +57,9 @@ import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.shell.WidthTracking;
 import org.openpnp.machine.reference.ReferenceMachine;
 import org.openpnp.model.Configuration;
+import org.openpnp.model.Solutions;
 import org.openpnp.spi.Machine;
+import org.openpnp.util.UiUtils;
 
 /**
  * The machine settings page, the mockups' 24 to 28: what the machine is, topic by topic - its
@@ -97,6 +99,9 @@ public class MachineSettingsPanel extends JPanel {
     private final JButton apply;
     private ReferenceMachine machine;
     private SetupChecks checks = SetupChecks.none();
+    /** The issues the last whole search found, of which the setup issues are shown here. */
+    private List<Solutions.Issue> issues = new ArrayList<>();
+    private final SetupIssueStrip issueStrip = new SetupIssueStrip(this);
     private Topic current;
     private boolean selecting;
 
@@ -148,10 +153,14 @@ public class MachineSettingsPanel extends JPanel {
         foot.add(Box.createHorizontalStrut(8));
         foot.add(apply);
 
+        JPanel body = new JPanel(new BorderLayout());
+        body.setOpaque(false);
+        body.add(issueStrip, BorderLayout.NORTH);
+        body.add(cards, BorderLayout.CENTER);
         JPanel main = new JPanel(new BorderLayout());
         main.setOpaque(false);
         main.add(header, BorderLayout.NORTH);
-        main.add(cards, BorderLayout.CENTER);
+        main.add(body, BorderLayout.CENTER);
         main.add(foot, BorderLayout.SOUTH);
         add(nav, BorderLayout.WEST);
         add(main, BorderLayout.CENTER);
@@ -169,6 +178,12 @@ public class MachineSettingsPanel extends JPanel {
 
     private void load(ReferenceMachine machine) {
         this.machine = machine;
+        // A search published, an issue accepted or dismissed on the calibration page or here.
+        machine.getSolutions().addPropertyChangeListener(e -> {
+            if ("issues".equals(e.getPropertyName()) || "issue".equals(e.getPropertyName())) { //$NON-NLS-1$ //$NON-NLS-2$
+                SwingUtilities.invokeLater(this::refreshChecks);
+            }
+        });
         add(new OverviewTopic(machine));
         add(new PresetsTopic(this, machine));
         add(new MotionTopic(this, machine));
@@ -297,6 +312,7 @@ public class MachineSettingsPanel extends JPanel {
             if (ADVANCED.equals(topic.key)) {
                 tree.selectCurrentTreePath();
             }
+            describeIssues();
             describeFoot();
             cards.revalidate();
             cards.repaint();
@@ -387,16 +403,51 @@ public class MachineSettingsPanel extends JPanel {
             return;
         }
         checks = SetupChecks.of(machine);
+        issues = new ArrayList<>(machine.getSolutions().getIssues());
         for (Map.Entry<Topic, TopicItem> entry : items.entrySet()) {
-            entry.getValue().setCount(checks.count(entry.getKey().key));
+            String key = entry.getKey().key;
+            entry.getValue().setCount(checks.count(key) + SetupIssues.open(issues, key).size());
             if (entry.getKey().isBuilt()) {
                 entry.getKey().checksChanged();
             }
         }
         if (frame.getNavigation() != null) {
-            frame.getNavigation().setBadge(this, checks.all().size(), NavigationRail.Badge.Warn);
+            frame.getNavigation().setBadge(this, checks.all().size() + SetupIssues.open(issues, null).size(),
+                    NavigationRail.Badge.Warn);
         }
         header.show(machine, units());
+        describeIssues();
+    }
+
+    /** The setup issues of the topic on show, over it; none over the element tree. */
+    private void describeIssues() {
+        if (current == null || ADVANCED.equals(current.key)) {
+            issueStrip.show(List.of(), List.of());
+            return;
+        }
+        issueStrip.show(SetupIssues.open(issues, current.key), SetupIssues.dismissed(issues, current.key));
+    }
+
+    /**
+     * Accepts a setup issue: it makes its change, after a copy of machine.xml, and the machine is
+     * saved. The topics are built again, as the change may have added to the machine or taken away.
+     */
+    void acceptIssue(Solutions.Issue issue) {
+        UiUtils.messageBoxOnException(() -> {
+            Backups.backup(configuration, "settings"); //$NON-NLS-1$
+            issue.setStateCall(Solutions.State.Solved);
+            configuration.save();
+        });
+        rebuild();
+    }
+
+    void setIssueState(List<Solutions.Issue> of, Solutions.State state) {
+        UiUtils.messageBoxOnException(() -> {
+            for (Solutions.Issue issue : of) {
+                issue.setStateCall(state);
+            }
+        });
+        refreshChecks();
     }
 
     public SetupChecks getChecks() {
