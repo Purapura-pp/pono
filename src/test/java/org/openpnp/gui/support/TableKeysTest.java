@@ -79,6 +79,38 @@ public class TableKeysTest {
     }
 
     @Test
+    public void aSwitchInARowNotSelectedIsSwitchedWithTheFirstClick() {
+        DefaultTableModel model = new DefaultTableModel(new Object[][] { { true, "a" }, { false, "b" } },
+                new Object[] { "on", "name" }) {
+            @Override
+            public Class<?> getColumnClass(int column) {
+                return column == 0 ? Boolean.class : String.class;
+            }
+        };
+        JTable table = new AutoSelectTextTable(model);
+        // The table asks to edit before it selects the row clicked in.
+        assertTrue(table.editCellAt(1, 0), "a switch");
+        table.getCellEditor().cancelCellEditing();
+        assertFalse(table.editCellAt(1, 1), "a text cell is selected first");
+    }
+
+    @Test
+    public void aTableToldEverythingChangedWithoutAnEventTakesIt() throws Exception {
+        java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userRoot()
+                .node("pono-test-table-" + System.nanoTime());
+        try {
+            DefaultTableModel model = new DefaultTableModel(new Object[][] { { "a" } }, new Object[] { "x" });
+            JTable table = new JTable(model);
+            TableUtils.installColumnWidthSavers(table, prefs, "t");
+            // As the feeders page did once a job was opened, which then failed to open.
+            model.fireTableChanged(null);
+        }
+        finally {
+            prefs.removeNode();
+        }
+    }
+
+    @Test
     public void aRefusedNumberSaysSoAndOtherRefusalsGiveTheirReason() {
         assertEquals(String.format(Translations.getString("Table.InvalidValue.Number"), "abc"),
                 TableUtils.rejection("abc", new NumberFormatException("For input string: \"abc\"")));

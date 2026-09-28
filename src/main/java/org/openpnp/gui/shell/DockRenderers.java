@@ -67,7 +67,7 @@ public final class DockRenderers {
         };
     }
 
-    /** A Boolean as the stylesheet's 30 by 17 {@code .toggle}. */
+    /** A Boolean as the stylesheet's 30 by 17 {@code .toggle}, faded in a row it cannot be switched in. */
     public static TableCellRenderer toggle() {
         return new TableCellRenderer() {
             private final Mark mark = new Mark(true);
@@ -76,6 +76,7 @@ public final class DockRenderers {
             public Component getTableCellRendererComponent(JTable table, Object value,
                     boolean isSelected, boolean hasFocus, int row, int column) {
                 mark.on = Boolean.TRUE.equals(value);
+                mark.locked = !table.isCellEditable(row, column);
                 background(mark, table, isSelected);
                 return mark;
             }
@@ -289,6 +290,7 @@ public final class DockRenderers {
     private static final class Mark extends JComponent {
         private final boolean toggle;
         boolean on;
+        boolean locked;
 
         Mark(boolean toggle) {
             this.toggle = toggle;
@@ -302,6 +304,9 @@ public final class DockRenderers {
                 if (isOpaque()) {
                     g2.setColor(getBackground());
                     g2.fillRect(0, 0, getWidth(), getHeight());
+                }
+                if (locked) {
+                    g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.45f));
                 }
                 if (toggle) {
                     int w = 30, h = 17;

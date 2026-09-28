@@ -211,6 +211,8 @@ public class PlacementsHolderLocationsTableModel extends AbstractObjectTableMode
                 }
                 for (int idx = 1; idx < getRowCount(); idx++) {
                     if (idx != rowIndex && getPlacementsHolderLocation(idx).getUniqueId().equals(newUniqueId)) {
+                        org.openpnp.gui.support.TableUtils.explained(this, String.format(
+                                Translations.getString("PlacementsHolderLocationsTableModel.DuplicateId"), aValue)); //$NON-NLS-1$
                         return;
                     }
                 }
@@ -310,6 +312,10 @@ public class PlacementsHolderLocationsTableModel extends AbstractObjectTableMode
                         placementsHolderLocation.getParent().isEnabled()) {
                     placementsHolderLocation.setLocallyEnabled((Boolean) aValue);
                     fireTableCellDecendantsUpdated(rowIndex, columnIndex);
+                }
+                else {
+                    org.openpnp.gui.support.TableUtils.explained(this,
+                            Translations.getString("PlacementsHolderLocationsTableModel.ParentDisabled")); //$NON-NLS-1$
                 }
             }
             else if (columnIndex == 10) {

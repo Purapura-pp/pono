@@ -696,7 +696,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
     }
     
     public void updateView() {
-    	tableModel.fireTableChanged(null);
+        tableModel.fireTableDataChanged();
     }
 
     protected Location preliminaryPickLocation(Feeder feeder, Nozzle nozzle) throws Exception {
@@ -1028,10 +1028,24 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 
         @Override
         public void actionPerformed(ActionEvent arg0) {
+            Feeder refused = null;
             for (Feeder f : getSelections()) {
                 f.setEnabled(value);
+                if (value && !f.isEnabled() && refused == null) {
+                    refused = f;
+                }
             }
+            configuration.setDirty(true);
             table.repaint();
+            if (refused != null) {
+                int row = tableModel.indexOf(refused);
+                row = row < 0 ? -1 : table.convertRowIndexToView(row);
+                if (row >= 0) {
+                    org.openpnp.gui.support.TableUtils.explained(table, row,
+                            table.convertColumnIndexToView(FeedersTableModel.ENABLED),
+                            FeederDescriptions.notEnabled(refused));
+                }
+            }
         }
     };
 
@@ -1062,6 +1076,7 @@ public class FeedersPanel extends JPanel implements WizardContainer {
                     ((ReferenceFeeder)f).setFeedOptions(value);
                 }
             }
+            configuration.setDirty(true);
             table.repaint();
         }
     };
@@ -1084,5 +1099,8 @@ public class FeedersPanel extends JPanel implements WizardContainer {
 
     public void refresh(Feeder f) {
         tableModel.refresh(f);
+        if (mainFrame != null && mainFrame.getInspector() != null) {
+            mainFrame.getInspector().reloadLive(f);
+        }
     }
 }
