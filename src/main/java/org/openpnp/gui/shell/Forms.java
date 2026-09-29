@@ -61,14 +61,18 @@ public final class Forms {
 
     /**
      * The stylesheet's {@code .sec}: a heading row that folds its body away when clicked. While
-     * folded, the heading's icon is a chevron pointing right, as {@code .sec.collapsed} draws it.
+     * folded, the heading's icon is a chevron pointing right, as {@code .sec.collapsed} draws it,
+     * the row is raised like a button, and it says how much it hides: a folded row with only a
+     * chevron was read as the end of the form.
      */
     @SuppressWarnings("serial")
     public static final class Section extends JPanel {
         private final JPanel body = new JPanel(new BorderLayout());
+        private final JPanel head;
         private final JLabel iconLabel;
         private final String icon;
         private final JLabel right = Ui.muted(""); //$NON-NLS-1$
+        private final JLabel folded = Ui.muted(""); //$NON-NLS-1$
         private boolean collapsed;
 
         public Section(String icon, String title) {
@@ -79,7 +83,22 @@ public final class Forms {
                     BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
                     new EmptyBorder(10, Tokens.PAD_SECTION, 12, Tokens.PAD_SECTION)));
 
-            JPanel head = new JPanel();
+            head = new JPanel() {
+                @Override
+                protected void paintComponent(Graphics g) {
+                    if (collapsed) {
+                        // Raised like a button: it opens the section, and should look as if it does.
+                        Graphics2D g2 = (Graphics2D) g.create();
+                        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                        g2.setColor(Ui.surface2());
+                        g2.fillRoundRect(0, 0, getWidth(), getHeight(), Tokens.R_MD, Tokens.R_MD);
+                        g2.setColor(Ui.border());
+                        g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Tokens.R_MD, Tokens.R_MD);
+                        g2.dispose();
+                    }
+                    super.paintComponent(g);
+                }
+            };
             head.setOpaque(false);
             head.setLayout(new BoxLayout(head, BoxLayout.X_AXIS));
             head.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -89,6 +108,10 @@ public final class Forms {
             JLabel titleLabel = new JLabel(title);
             titleLabel.setFont(Ui.weighted(Tokens.FS_SECTION, Tokens.FW_SECTION));
             head.add(titleLabel);
+            head.add(Box.createHorizontalStrut(8));
+            folded.setFont(Ui.weighted(Tokens.FS_TAG, Tokens.FW_AUX));
+            folded.setVisible(false);
+            head.add(folded);
             head.add(Box.createHorizontalGlue());
             right.setFont(Ui.weighted(Tokens.FS_TAG, Tokens.FW_AUX));
             head.add(right);
@@ -115,10 +138,16 @@ public final class Forms {
 
         /** A control at the right of the heading instead of a note, such as a toggle. */
         public Section withRight(JComponent component) {
-            java.awt.Container head = (java.awt.Container) getComponent(0);
             head.remove(right);
             component.setAlignmentY(CENTER_ALIGNMENT);
             head.add(component);
+            return this;
+        }
+
+        /** What the folded row says it hides, after the title: "Folded · 5 fields". */
+        public Section withFoldedText(String text) {
+            folded.setText(text == null ? "" : text); //$NON-NLS-1$
+            folded.setVisible(collapsed && !folded.getText().isEmpty());
             return this;
         }
 
@@ -135,10 +164,14 @@ public final class Forms {
         public void setCollapsed(boolean collapsed) {
             this.collapsed = collapsed;
             body.setVisible(!collapsed);
+            folded.setVisible(collapsed && !folded.getText().isEmpty());
             iconLabel.setIcon(Ui.icon(collapsed ? "chevright" : icon, 14, Ui.muted())); //$NON-NLS-1$
+            // Room inside the raised row for its words while it is folded; flush otherwise.
+            head.setBorder(collapsed ? new EmptyBorder(0, 8, 0, 8) : null);
             setBorder(BorderFactory.createCompoundBorder(
                     BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
-                    new EmptyBorder(10, Tokens.PAD_SECTION, collapsed ? 10 : 12, Tokens.PAD_SECTION)));
+                    new EmptyBorder(10, Tokens.PAD_SECTION - (collapsed ? 8 : 0), collapsed ? 10 : 12,
+                            Tokens.PAD_SECTION - (collapsed ? 8 : 0))));
             revalidate();
             repaint();
         }

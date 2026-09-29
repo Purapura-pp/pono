@@ -527,14 +527,13 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         }
         PropertySheetHolder holder = node == null ? null : node.getPropertySheetHolder();
         PropertySheetPresenter.Result result = MainFrame.get().getInspector()
-                .show(inspectorPage, holder,
-                MachineSetupPanel.this,
-                holder == null ? null : name(node),
-                holder == null ? null : subtitle(node),
-                holder == null ? null : Ui.icon(icon(node), 16, Ui.accent()),
-                () -> {
+                .show(inspectorPage, holder == null ? null : () -> {
                     org.openpnp.spi.PropertySheetHolder.PropertySheet[] sheets = holder.getPropertySheets();
-                    return sheets == null ? List.of() : java.util.Arrays.asList(sheets);
+                    org.openpnp.gui.shell.InspectorPanel.Inspection inspection =
+                            new org.openpnp.gui.shell.InspectorPanel.Inspection(holder, MachineSetupPanel.this,
+                                    name(node), subtitle(node), Ui.icon(icon(node), 16, Ui.accent()),
+                                    sheets == null ? List.of() : java.util.Arrays.asList(sheets));
+                    return withTopicHint(inspection, holder);
                 });
         if (result == PropertySheetPresenter.Result.Cancelled) {
             // The user kept the unapplied edits: the element they belong to stays selected, with
@@ -554,6 +553,23 @@ public class MachineSetupPanel extends JPanel implements WizardContainer {
         if (result == PropertySheetPresenter.Result.Shown) {
             shown = node;
         }
+    }
+
+    /**
+     * The head's everyday settings - where it parks, how it homes, its fiducials - have a topic
+     * of the machine settings page; its sheet here says so, and the line goes there. Other
+     * elements have no topic of their own and get no line.
+     */
+    private static org.openpnp.gui.shell.InspectorPanel.Inspection withTopicHint(
+            org.openpnp.gui.shell.InspectorPanel.Inspection inspection, PropertySheetHolder holder) {
+        if (holder instanceof org.openpnp.machine.reference.ReferenceHead) {
+            String topic = Translations.getString("MachineSettings.Topic.Head"); //$NON-NLS-1$
+            return inspection.withHint(
+                    String.format(Translations.getString("MachineSetupPanel.Hint.Topic"), topic), //$NON-NLS-1$
+                    () -> MainFrame.get().showMachineSettings(
+                            org.openpnp.gui.machinesettings.MachineSettingsPanel.HEAD));
+        }
+        return inspection;
     }
 
     // ---- what a node is called and says about itself ------------------------------------------

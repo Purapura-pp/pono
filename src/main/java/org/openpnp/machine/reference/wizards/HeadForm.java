@@ -148,11 +148,23 @@ public final class HeadForm {
     }
 
     public static FormWizard build(ReferenceHead head) {
+        return build(head, true);
+    }
+
+    /**
+     * The head's form: where it parks, how it homes, the fiducials calibration measures against
+     * and its Z probe - and its pump, unless the page showing the form has the pump elsewhere.
+     * <p>
+     * Every section is open. The fiducials used to be folded away, leaving a row with a small
+     * chevron that was read as the end of the form, so that the properties column looked as if
+     * it could not be scrolled down to them.
+     */
+    public static FormWizard build(ReferenceHead head, boolean withPump) {
         List<Actuator> actuators = new ArrayList<>();
         actuators.add(null);
         actuators.addAll(head.getActuators());
         FormWizard[] form = new FormWizard[1];
-        form[0] = Form.of(new Bean(head)).named("HeadForm.Title") //$NON-NLS-1$
+        Form.Builder builder = Form.of(new Bean(head)).named("HeadForm.Title") //$NON-NLS-1$
                 .section("HeadForm.Park", "pin") //$NON-NLS-1$ //$NON-NLS-2$
                 .location("parkLocation", "ReferenceHeadConfigurationWizard.LocationsPanel.ParkLocationLabel.text", false) //$NON-NLS-1$ //$NON-NLS-2$
                 .locationButtons()
@@ -171,7 +183,7 @@ public final class HeadForm {
                         () -> visualHome(form[0], head, true))
                 .movesMachine()
                 .visibleWhen("visualHomingMethod", v -> v == VisualHomingMethod.ResetToFiducialLocation) //$NON-NLS-1$
-                .section("ReferenceHeadConfigurationWizard.CalibrationRigPanel.Border.title", "target").collapsed() //$NON-NLS-1$ //$NON-NLS-2$
+                .section("ReferenceHeadConfigurationWizard.CalibrationRigPanel.Border.title", "target") //$NON-NLS-1$ //$NON-NLS-2$
                 .measuredBy(CalibrationStep.PrimaryFiducial, head)
                 .custom("", org.openpnp.gui.shell.Forms.paragraph(Translations.getString("HeadForm.Rig.Note"))) //$NON-NLS-1$ //$NON-NLS-2$
                 .location("calibrationPrimaryFiducialLocation", //$NON-NLS-1$
@@ -188,18 +200,20 @@ public final class HeadForm {
                 .note("HeadForm.RigTestObject.Note") //$NON-NLS-1$
                 .section("ReferenceHeadConfigurationWizard.ZProbePanel.Border.title", "nozzle") //$NON-NLS-1$ //$NON-NLS-2$
                 .choice("probeActuator", "ReferenceHeadConfigurationWizard.ZProbePanel.ZProbeActuatorLabel.text", //$NON-NLS-1$ //$NON-NLS-2$
-                        actuators, null)
-                .section("ReferenceHeadConfigurationWizard.PumpPanel.Border.title", "circle") //$NON-NLS-1$ //$NON-NLS-2$
-                .choice("pumpActuator", "ReferenceHeadConfigurationWizard.PumpPanel.VacuumPumpActuatorLabel.text", //$NON-NLS-1$ //$NON-NLS-2$
-                        actuators, null)
-                .choice("vacuumPumpControl", "ReferenceHeadConfigurationWizard.PumpPanel.VacuumPumpControlLabel.text", //$NON-NLS-1$ //$NON-NLS-2$
-                        VacuumPumpControl.class)
-                .visibleWhen("pumpActuator", v -> v != null) //$NON-NLS-1$
-                .note("HeadForm.PumpControl.Note") //$NON-NLS-1$
-                .integer("pumpOnWaitMilliseconds", "HeadForm.PumpWait").unit("ms").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-                .visibleWhen("pumpActuator", v -> v != null) //$NON-NLS-1$
-                .note("ReferenceHeadConfigurationWizard.PumpPanel.VacuumPumpStartTimeLabel.toolTipText") //$NON-NLS-1$
-                .build();
+                        actuators, null);
+        if (withPump) {
+            builder.section("ReferenceHeadConfigurationWizard.PumpPanel.Border.title", "circle") //$NON-NLS-1$ //$NON-NLS-2$
+                    .choice("pumpActuator", "ReferenceHeadConfigurationWizard.PumpPanel.VacuumPumpActuatorLabel.text", //$NON-NLS-1$ //$NON-NLS-2$
+                            actuators, null)
+                    .choice("vacuumPumpControl", "ReferenceHeadConfigurationWizard.PumpPanel.VacuumPumpControlLabel.text", //$NON-NLS-1$ //$NON-NLS-2$
+                            VacuumPumpControl.class)
+                    .visibleWhen("pumpActuator", v -> v != null) //$NON-NLS-1$
+                    .note("HeadForm.PumpControl.Note") //$NON-NLS-1$
+                    .integer("pumpOnWaitMilliseconds", "HeadForm.PumpWait").unit("ms").width(120) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                    .visibleWhen("pumpActuator", v -> v != null) //$NON-NLS-1$
+                    .note("ReferenceHeadConfigurationWizard.PumpPanel.VacuumPumpStartTimeLabel.toolTipText"); //$NON-NLS-1$
+        }
+        form[0] = builder.build();
         return form[0];
     }
 

@@ -36,23 +36,21 @@ import org.openpnp.gui.shell.DockRenderers;
 import org.openpnp.gui.shell.Forms;
 import org.openpnp.gui.shell.Ui;
 import org.openpnp.gui.support.TableUtils;
-import org.openpnp.machine.reference.ReferenceHead;
 import org.openpnp.machine.reference.ReferenceMachine;
 import org.openpnp.machine.reference.axis.ReferenceControllerAxis;
 import org.openpnp.machine.reference.axis.ReferenceMappedAxis;
 import org.openpnp.machine.reference.axis.ReferenceVirtualAxis;
 import org.openpnp.machine.reference.axis.wizards.AxisForm;
-import org.openpnp.machine.reference.wizards.HeadForm;
 import org.openpnp.machine.reference.wizards.MachineForm;
 import org.openpnp.model.CalibrationStep;
 import org.openpnp.model.Length;
 import org.openpnp.spi.Axis;
-import org.openpnp.spi.Head;
 
 /**
  * The machine's axes, the mockups' 25: every axis in one table with its limits and speeds, the
- * selected one's settings under it, and where the head parks. What calibration measures - the
- * backlash - is shown with its source rather than edited here.
+ * selected one's settings under it, and what happens after homing. What calibration measures -
+ * the backlash - is shown with its source rather than edited here; where the head parks is set
+ * with the head.
  */
 final class MotionTopic extends Topic {
     private final MachineSettingsPanel page;
@@ -104,18 +102,14 @@ final class MotionTopic extends Topic {
         List<JComponent> sections = new ArrayList<>();
         sections.add(list);
         sections.add(axisHolder);
-        Head head = head();
-        if (head instanceof ReferenceHead) {
-            sections.add(forms.add(Form.of(new HeadForm.Bean((ReferenceHead) head)).named("HeadForm.Title") //$NON-NLS-1$
-                    .section("HeadForm.Park", "pin") //$NON-NLS-1$ //$NON-NLS-2$
-                    .location("parkLocation", "ReferenceHeadConfigurationWizard.LocationsPanel.ParkLocationLabel.text", false) //$NON-NLS-1$ //$NON-NLS-2$
-                    .locationButtons()
-                    .build()));
-        }
+        // The park location itself is set with the head, which these switches send there.
         sections.add(forms.add(Form.of(new MachineForm.Bean(machine)).named("MachineForm.Title") //$NON-NLS-1$
                 .section("MachineSettings.Motion.AfterHoming", "home") //$NON-NLS-1$ //$NON-NLS-2$
                 .toggle("parkAfterHomed", "MachineForm.ParkAfterHomed", "MachineForm.ParkAfterHomed.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
                 .toggle("safeZPark", "MachineForm.SafeZPark", "MachineForm.SafeZPark.Note") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+                .action(String.format(Translations.getString("MachineSettings.Motion.ParkInHead"), //$NON-NLS-1$
+                        Translations.getString("MachineSettings.Topic.Head")), "pin", //$NON-NLS-1$ //$NON-NLS-2$
+                        () -> page.showTopic(MachineSettingsPanel.HEAD))
                 .build()));
         forms.onChange(() -> {
             if (!axes.isEmpty()) {
@@ -130,15 +124,6 @@ final class MotionTopic extends Topic {
             table.setRowSelectionInterval(0, 0);
         }
         return view;
-    }
-
-    private Head head() {
-        try {
-            return machine.getDefaultHead();
-        }
-        catch (Exception e) {
-            return null;
-        }
     }
 
     /** The axis a row stands for comes under the table, once its predecessor's edits are settled. */

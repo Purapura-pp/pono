@@ -101,6 +101,13 @@ public class FormWizard extends AbstractConfigurationWizard {
                 row = addRow(grid, row, field);
             }
             section.content(grid);
+            int fields = 0;
+            for (Field field : s.fields) {
+                if (field.kind != Form.Kind.Custom) {
+                    fields++;
+                }
+            }
+            section.withFoldedText(String.format(org.openpnp.Translations.getString("Form.Section.Folded"), fields)); //$NON-NLS-1$
             section.setCollapsed(s.collapsed);
             section.setAlignmentX(Component.LEFT_ALIGNMENT);
             contentPanel.add(section);

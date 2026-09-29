@@ -78,6 +78,7 @@ public class MachineSettingsPanel extends JPanel {
     public static final String OVERVIEW = "Overview"; //$NON-NLS-1$
     public static final String PRESETS = "Presets"; //$NON-NLS-1$
     public static final String MOTION = "Motion"; //$NON-NLS-1$
+    public static final String HEAD = "Head"; //$NON-NLS-1$
     public static final String NOZZLES = "Nozzles"; //$NON-NLS-1$
     public static final String CAMERAS = "Cameras"; //$NON-NLS-1$
     public static final String CONNECTION = "Connection"; //$NON-NLS-1$
@@ -201,6 +202,7 @@ public class MachineSettingsPanel extends JPanel {
         add(new OverviewTopic(machine));
         add(new PresetsTopic(this, machine));
         add(new MotionTopic(this, machine));
+        add(new HeadTopic(this, machine));
         add(new NozzlesTopic(this, machine));
         add(new CamerasTopic(this, machine));
         add(new ConnectionTopic(this, machine));

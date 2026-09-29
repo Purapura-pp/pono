@@ -168,7 +168,26 @@ public class InspectorPanel extends RoundedPanel {
 
         body.setOpaque(false);
         body.add(nothingSelected, BorderLayout.CENTER);
-        add(body, BorderLayout.CENTER);
+        // The hint under the header, above whatever the body holds; shown only while there is one.
+        hintRow.setOpaque(true);
+        hintRow.setBackground(Ui.accentSoft());
+        hintRow.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, Ui.border()),
+                new EmptyBorder(4, 8, 4, 8)));
+        hintButton.setHorizontalAlignment(SwingConstants.LEFT);
+        hintButton.setForeground(Ui.accent());
+        hintButton.addActionListener(e -> {
+            if (hintAction != null) {
+                hintAction.run();
+            }
+        });
+        hintRow.add(hintButton, BorderLayout.CENTER);
+        hintRow.setVisible(false);
+        JPanel middle = new JPanel(new BorderLayout());
+        middle.setOpaque(false);
+        middle.add(hintRow, BorderLayout.NORTH);
+        middle.add(body, BorderLayout.CENTER);
+        add(middle, BorderLayout.CENTER);
 
         // The stylesheet's .side .foot: Reset and Apply sharing the width, on surface-2 under a
         // hairline.
@@ -397,6 +416,9 @@ public class InspectorPanel extends RoundedPanel {
         final String type;
         final Icon icon;
         final List<PropertySheet> sheets;
+        /** Where else this is edited, said under the header; null for nowhere. */
+        String hint;
+        Runnable hintAction;
 
         public Inspection(Object subject, WizardContainer container, String title, String type,
                 Icon icon, List<PropertySheet> sheets) {
@@ -406,6 +428,17 @@ public class InspectorPanel extends RoundedPanel {
             this.type = type;
             this.icon = icon;
             this.sheets = sheets;
+        }
+
+        /**
+         * A line under the header saying where else what is on show is edited, and going there
+         * when clicked: the head's everyday settings have a topic of the machine settings page,
+         * and its sheet in the element tree's column points to it.
+         */
+        public Inspection withHint(String text, Runnable go) {
+            this.hint = text;
+            this.hintAction = go;
+            return this;
         }
 
         /** A holder's own sheets, headed by its own title and icon unless told otherwise. */
@@ -525,9 +558,23 @@ public class InspectorPanel extends RoundedPanel {
                 : inspection.type);
         typeLabel.setToolTipText(inspection.type == null || inspection.type.isEmpty() ? null : inspection.type);
         setBody(sheets);
+        setHint(inspection.hint, inspection.hintAction);
         adoptWizards();
         setMoreMenu(actionsMenu(inspection.subject));
         return result;
+    }
+
+    /** The line under the header, the stylesheet's .side .hint: an accent-soft strip with a link. */
+    private final JPanel hintRow = new JPanel(new BorderLayout());
+    private final JButton hintButton = Ui.button("", Ui.iconSm("sliders"), Ui.Size.Sm, Ui.Variant.Ghost); //$NON-NLS-1$ //$NON-NLS-2$
+    private Runnable hintAction;
+
+    private void setHint(String text, Runnable go) {
+        hintAction = go;
+        hintButton.setText(text == null ? "" : text); //$NON-NLS-1$
+        hintButton.setToolTipText(text);
+        hintRow.setVisible(text != null && !text.isEmpty());
+        hintRow.revalidate();
     }
 
     /**
@@ -560,6 +607,7 @@ public class InspectorPanel extends RoundedPanel {
         footer.setVisible(false);
         setMoreMenu(null);
         setBody(nothingSelected);
+        setHint(null, null);
         if (isFooterLent()) {
             footerFollower.run();
         }
@@ -574,6 +622,7 @@ public class InspectorPanel extends RoundedPanel {
         this.collapsed = collapsed;
         header.setVisible(!collapsed);
         body.setVisible(!collapsed);
+        hintRow.setVisible(!collapsed && hintAction != null && !hintButton.getText().isEmpty());
         footer.setVisible(!collapsed && !wizards().isEmpty() && !isFooterLent());
         strip.setVisible(collapsed);
         revalidate();
