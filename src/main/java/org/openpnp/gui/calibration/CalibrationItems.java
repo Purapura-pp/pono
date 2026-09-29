@@ -117,6 +117,7 @@ public final class CalibrationItems {
         String kind = step.getKind().name();
         switch (step.getStatus()) {
             case Done:
+            case NotNeeded:
                 item(items, Kind.Done, "D|" + kind, step.getKind().getName(), step.getKind()) //$NON-NLS-1$
                         .add(part(step, null));
                 return;

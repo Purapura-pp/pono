@@ -271,6 +271,21 @@ public class CalibrationRunnerTest {
     }
 
     @Test
+    public void aStepDoneBeforeIsDoneAgainOnlyWhenAsked() throws Exception {
+        Step subPixel = add(CalibrationStep.SubPixel, machine, "Sub-pixel.");
+        subPixel.setState(Solutions.State.Solved);
+        String key = key(CalibrationStep.SubPixel);
+
+        CalibrationRunner.Session skipped = new CalibrationRunner(fake, null).run(List.of(key), Set.of());
+        assertEquals(CalibrationRunner.Outcome.Skipped, skipped.getResult(key).getOutcome());
+        assertEquals(0, subPixel.accepted);
+
+        CalibrationRunner.Session again = new CalibrationRunner(fake, null).run(List.of(key), Set.of(), Set.of(key));
+        assertEquals(CalibrationRunner.Outcome.Done, again.getResult(key).getOutcome());
+        assertEquals(1, subPixel.accepted, "the issue it was done with is accepted again");
+    }
+
+    @Test
     public void aStepThatFailsStopsTheSession() throws Exception {
         add(CalibrationStep.SubPixel, machine, "Sub-pixel.").failing();
         Step remeasure = add(CalibrationStep.Remeasure, machine, "Measure again.");

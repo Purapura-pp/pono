@@ -294,6 +294,8 @@ public class CalibrationRunner {
     private SettleMethod settleMethod = SettleMethod.Measured;
     private volatile boolean stopRequested;
     private volatile CompletableFuture<Decision> person;
+    /** The steps of the session under way that are done before and to be done again. */
+    private Set<String> again = Collections.emptySet();
     /** How to give up the step waiting part of the way through for someone, or null. */
     private volatile Runnable personCancel;
 
@@ -313,10 +315,15 @@ public class CalibrationRunner {
 
     /** Runs the session on a thread of its own. */
     public CompletableFuture<Session> start(List<String> keys, Set<String> skip) {
+        return start(keys, skip, Collections.emptySet());
+    }
+
+    /** @param again Steps done before that are to be done again, by their keys. */
+    public CompletableFuture<Session> start(List<String> keys, Set<String> skip, Set<String> again) {
         CompletableFuture<Session> future = new CompletableFuture<>();
         Thread thread = new Thread(() -> {
             try {
-                future.complete(run(keys, skip));
+                future.complete(run(keys, skip, again));
             }
             catch (Throwable t) {
                 future.completeExceptionally(t);
@@ -428,10 +435,19 @@ public class CalibrationRunner {
      * @param skip Steps that need someone and are to be left out this time.
      */
     public Session run(List<String> keys, Set<String> skip) throws Exception {
+        return run(keys, skip, Collections.emptySet());
+    }
+
+    /**
+     * @param again Steps done before that are to be done again: the issues they were done with
+     *              are accepted again, which measures anew.
+     */
+    public Session run(List<String> keys, Set<String> skip, Set<String> again) throws Exception {
         if (SwingUtilities.isEventDispatchThread()) {
             throw new IllegalStateException("A calibration session cannot run on the event thread."); //$NON-NLS-1$
         }
         stopRequested = false;
+        this.again = again == null ? Collections.emptySet() : again;
         Session session = new Session();
         String stamp = new SimpleDateFormat("yyyyMMdd-HHmmss").format(session.started); //$NON-NLS-1$
         session.backup = machinery.backup(stamp);
@@ -457,8 +473,10 @@ public class CalibrationRunner {
                         Collections.emptyList(), began);
                 continue;
             }
-            if (step.getStatus().isSettled()) {
-                record(session, step, Outcome.Skipped, Translations.getString("CalibrationRunner.AlreadyDone"), //$NON-NLS-1$
+            if (step.getStatus().isSettled() && !this.again.contains(key)) {
+                record(session, step, Outcome.Skipped, Translations.getString( //$NON-NLS-1$
+                        step.getStatus() == CalibrationPlan.Status.NotNeeded ? "CalibrationRunner.NothingToDo" //$NON-NLS-1$
+                                : "CalibrationRunner.AlreadyDone"), //$NON-NLS-1$
                         Collections.emptyList(), began);
                 continue;
             }
@@ -570,8 +588,8 @@ public class CalibrationRunner {
 
     /**
      * The issues that carry the step out. Its open ones that can be accepted; failing those, when
-     * a measurement says a step done before needs doing again, the ones it was done with. A
-     * camera's settling takes the method set here, where the step has both.
+     * a measurement says a step done before needs doing again, or the user asks for it again, the
+     * ones it was done with. A camera's settling takes the method set here, where the step has both.
      */
     List<Solutions.Issue> actionsFor(CalibrationPlan.Step step) {
         List<Solutions.Issue> actions = step.getActions();
@@ -593,7 +611,7 @@ public class CalibrationRunner {
                     evidence = true;
                 }
             }
-            if (evidence) {
+            if (evidence || again.contains(step.getKey())) {
                 for (Solutions.Issue issue : step.getIssues()) {
                     if (issue.getState() == Solutions.State.Solved && issue.canBeAccepted()) {
                         actions.add(issue);
