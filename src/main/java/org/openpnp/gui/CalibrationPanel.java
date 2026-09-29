@@ -904,7 +904,9 @@ public class CalibrationPanel extends JPanel {
                 suggestionsChecked));
         applySelected.setEnabled(!isRunning() && suggestionsChecked > 0);
         dismissSelected.setEnabled(!isRunning() && suggestionsChecked > 0);
-        oneClick.setText(String.format(Translations.getString("CalibrationPanel.OneClick"), toMeasure)); //$NON-NLS-1$
+        // Counted as the banner and the tab count them, by row: the backlash of x and y is one.
+        oneClick.setText(String.format(Translations.getString("CalibrationPanel.OneClick"), //$NON-NLS-1$
+                itemsOf(CalibrationItem.Kind.Measure).size()));
         oneClick.setEnabled(!isRunning() && toMeasure > 0);
         collect.setEnabled(!isRunning() && !collecting && machine != null);
         skip.setVisible(isRunning());
@@ -1364,14 +1366,19 @@ public class CalibrationPanel extends JPanel {
             return;
         }
         List<String> keys = new ArrayList<>();
+        Set<String> again = new HashSet<>();
         prepared.clear();
         for (CalibrationPlan.Step step : steps) {
             keys.add(step.getKey());
             if (ready) {
                 prepared.add(step.getKey());
             }
+            if (step.getStatus().isSettled()) {
+                // Done before: the user asks for it anew.
+                again.add(step.getKey());
+            }
         }
-        start(keys, leaveOut);
+        start(keys, leaveOut, again);
     }
 
     /** Measures a diagnostic on its own: it changes no setting, and what it finds points to steps. */
@@ -1561,7 +1568,7 @@ public class CalibrationPanel extends JPanel {
     /** Why machine.xml could not be written out for a comparison during the run, for its report. */
     private String snapshotFailure;
 
-    private void start(List<String> keys, Set<String> leaveOut) {
+    private void start(List<String> keys, Set<String> leaveOut, Set<String> again) {
         live.clear();
         log.setText(""); //$NON-NLS-1$
         before.clear();
@@ -1659,7 +1666,7 @@ public class CalibrationPanel extends JPanel {
         });
         liveTimer.start();
         describe();
-        runner.start(keys, leaveOut).whenComplete((session, t) -> SwingUtilities.invokeLater(() -> {
+        runner.start(keys, leaveOut, again).whenComplete((session, t) -> SwingUtilities.invokeLater(() -> {
             if (t != null) {
                 runner = null;
                 liveTimer.stop();
@@ -1836,7 +1843,8 @@ public class CalibrationPanel extends JPanel {
     private String subtitle(CalibrationItem item, CalibrationItem.Part part) {
         String subjects = part != null ? part.getSubject() : item.getSubjects();
         List<String> bits = new ArrayList<>();
-        bits.add(item.getKind().getName());
+        bits.add(item.getKind() == CalibrationItem.Kind.Done
+                ? Translations.getString(doneWord(item, part)) : item.getKind().getName());
         bits.add(subjects);
         switch (item.getKind()) {
             case Suggestion:
@@ -1893,10 +1901,7 @@ public class CalibrationPanel extends JPanel {
                 diagnosticPane(sections, buttons, item);
                 break;
             case Done:
-                if (item.getStep() != null) {
-                    sections.add(section("info", "CalibrationPanel.Section.What", //$NON-NLS-1$ //$NON-NLS-2$
-                            Forms.paragraph(item.getStep().getDescription())));
-                }
+                donePane(sections, buttons, item, parts);
                 break;
             case Dismissed: {
                 String what = !issues.isEmpty() ? issues.get(0).getIssue() + "\n" + issues.get(0).getSolution() //$NON-NLS-1$
@@ -2145,6 +2150,105 @@ public class CalibrationPanel extends JPanel {
         buttons.add(run);
     }
 
+    /**
+     * A step done, or with nothing to do: what it does, why it is here - the issue it was done
+     * with, the configuration that says so, the measurement that found nothing, or nothing found
+     * at all - what its setting holds now, and Measure again where it was done with an issue.
+     */
+    private void donePane(JPanel sections, List<JButton> buttons, CalibrationItem item,
+            List<CalibrationItem.Part> parts) {
+        if (item.getStep() != null) {
+            sections.add(section("info", "CalibrationPanel.Section.What", //$NON-NLS-1$ //$NON-NLS-2$
+                    Forms.paragraph(item.getStep().getDescription())));
+        }
+        List<CalibrationPlan.Step> steps = new ArrayList<>();
+        for (CalibrationItem.Part p : parts) {
+            if (p.getStep() != null) {
+                steps.add(p.getStep());
+            }
+        }
+        JPanel why = new JPanel();
+        why.setOpaque(false);
+        why.setLayout(new BoxLayout(why, BoxLayout.Y_AXIS));
+        List<Solutions.Issue> doneWith = new ArrayList<>();
+        List<String> nowLines = new ArrayList<>();
+        for (CalibrationPlan.Step step : steps) {
+            List<String> lines = new ArrayList<>();
+            for (Solutions.Issue issue : step.getIssues()) {
+                if (issue.getState() == Solutions.State.Solved) {
+                    lines.add(String.format(Translations.getString("CalibrationPanel.Done.Solved"), issue.getIssue())); //$NON-NLS-1$
+                    if (issue.canBeAccepted()) {
+                        doneWith.add(issue);
+                    }
+                }
+            }
+            if (step.getStatus() == CalibrationPlan.Status.NotNeeded) {
+                lines.add(Translations.getString(step.getKind() == CalibrationStep.Remeasure
+                        ? "CalibrationPanel.Done.NothingToRemeasure" : "CalibrationPanel.Done.Nothing")); //$NON-NLS-1$ //$NON-NLS-2$
+            }
+            else if (lines.isEmpty()) {
+                List<String> measured = new ArrayList<>();
+                for (CalibrationPlan.Basis b : measuredBasis(step)) {
+                    measured.add(String.format(Translations.getString("CalibrationPanel.Done.Measured"), //$NON-NLS-1$
+                            MeasurementForms.name(b.getGroup()), DAY.format(b.getWhen())));
+                }
+                lines.addAll(measured.isEmpty()
+                        ? List.of(Translations.getString("CalibrationPanel.Done.Configured")) : measured); //$NON-NLS-1$
+            }
+            String text = String.join("\n", lines); //$NON-NLS-1$
+            JTextArea note = Forms.paragraph(steps.size() > 1 ? step.getSubjectName() + "\n" + text : text); //$NON-NLS-1$
+            note.setAlignmentX(Component.LEFT_ALIGNMENT);
+            why.add(note);
+            why.add(Box.createVerticalStrut(4));
+            String now = now(step);
+            if (now != null) {
+                nowLines.add(steps.size() > 1 ? step.getSubjectName() + "  " + now : now); //$NON-NLS-1$
+            }
+        }
+        sections.add(section("check", "CalibrationPanel.Section.Basis", why)); //$NON-NLS-1$ //$NON-NLS-2$
+        if (!nowLines.isEmpty()) {
+            JTextArea now = Forms.paragraph(String.join("\n", nowLines)); //$NON-NLS-1$
+            now.setFont(Ui.mono(12f, Font.PLAIN));
+            sections.add(section("sliders", "CalibrationPanel.Section.Now", now)); //$NON-NLS-1$ //$NON-NLS-2$
+        }
+        if (!doneWith.isEmpty()) {
+            JButton again = Ui.button(Translations.getString("CalibrationPanel.Action.Again"), null, //$NON-NLS-1$
+                    Ui.Size.Md, Ui.Variant.Primary);
+            again.setToolTipText(Translations.getString("CalibrationPanel.Action.Again.toolTipText")); //$NON-NLS-1$
+            Ui.movesMachine(again);
+            Ui.whyDisabled(again, () -> Translations.getString("CalibrationPanel.Why.Running")); //$NON-NLS-1$
+            again.setEnabled(!isRunning());
+            CalibrationStep.Way way = item.getStep() == null ? null : item.getStep().getWay();
+            boolean ready = way == CalibrationStep.Way.Prepare || way == CalibrationStep.Way.Manual;
+            again.addActionListener(e -> measure(steps, ready));
+            buttons.add(again);
+        }
+    }
+
+    /** The measurement groups a done step is judged by, with when they ran. */
+    private List<CalibrationPlan.Basis> measuredBasis(CalibrationPlan.Step step) {
+        List<CalibrationPlan.Basis> basis = new ArrayList<>();
+        MachineDiagnosticsResults results = plan == null ? null : plan.getResults();
+        for (TestGroup group : CalibrationPlan.decidedBy(step.getKind())) {
+            CalibrationPlan.Basis b = new CalibrationPlan.Basis(null, group, results);
+            if (b.getWhen() != null) {
+                basis.add(b);
+            }
+        }
+        return basis;
+    }
+
+    /** "CalibrationPanel.Status.Done", or ".NotNeeded" when nothing was found to do for the row's steps. */
+    private static String doneWord(CalibrationItem item, CalibrationItem.Part part) {
+        List<CalibrationPlan.Step> steps = part != null
+                ? (part.getStep() == null ? List.of() : List.of(part.getStep())) : item.getSteps();
+        boolean nothing = !steps.isEmpty();
+        for (CalibrationPlan.Step step : steps) {
+            nothing &= step.getStatus() == CalibrationPlan.Status.NotNeeded;
+        }
+        return nothing ? "CalibrationPanel.Status.NotNeeded" : "CalibrationPanel.Status.Done"; //$NON-NLS-1$ //$NON-NLS-2$
+    }
+
     /** A step under way: its phases ticked off, someone's part if it waits for them, the phase's charts. */
     private void livePane(JPanel sections, List<JButton> buttons, StepProgress p, String key) {
         if (p.isWaitingForPerson()) {
@@ -2356,8 +2460,7 @@ public class CalibrationPanel extends JPanel {
             JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
             line.setOpaque(false);
             line.setAlignmentX(Component.LEFT_ALIGNMENT);
-            line.add(new Chip(settled ? Translations.getString("CalibrationPanel.Status.Done") //$NON-NLS-1$
-                    : p.getStatus().getName(), settled ? Chip.Tone.Ok : Chip.Tone.Warn, Chip.Shape.Status));
+            line.add(new Chip(p.getStatus().getName(), settled ? Chip.Tone.Ok : Chip.Tone.Warn, Chip.Shape.Status));
             line.add(Ui.t2(p.getTitle()));
             box.add(line);
         }
@@ -2755,9 +2858,11 @@ public class CalibrationPanel extends JPanel {
             case Pending:
                 chip.setTone(Chip.Tone.Warn);
                 return Translations.getString("CalibrationPanel.Status.Pending"); //$NON-NLS-1$
-            case Done:
-                chip.setTone(Chip.Tone.Ok);
-                return Translations.getString("CalibrationPanel.Status.Done"); //$NON-NLS-1$
+            case Done: {
+                String word = doneWord(item, part);
+                chip.setTone(word.endsWith("NotNeeded") ? Chip.Tone.Neutral : Chip.Tone.Ok); //$NON-NLS-1$
+                return Translations.getString(word);
+            }
             default:
                 chip.setTone(Chip.Tone.Skip);
                 return Translations.getString("CalibrationPanel.Status.Dismissed"); //$NON-NLS-1$
@@ -2794,6 +2899,24 @@ public class CalibrationPanel extends JPanel {
                     return subject instanceof org.openpnp.spi.Machine ? Translations.getString(
                             ((org.openpnp.spi.Machine) subject).isHomed() ? "CalibrationPanel.Now.Homed" //$NON-NLS-1$
                                     : "CalibrationPanel.Now.NotHomed") : null; //$NON-NLS-1$
+                case SafeZ: {
+                    if (!(subject instanceof org.openpnp.spi.base.AbstractHeadMountable)) {
+                        return null;
+                    }
+                    org.openpnp.spi.base.AbstractHeadMountable mountable = (org.openpnp.spi.base.AbstractHeadMountable) subject;
+                    Object rawZ = org.openpnp.machine.reference.solutions.HeadSolutions.getRawAxis(mountable.getMachine(),
+                            mountable.getAxisZ());
+                    if (!(rawZ instanceof org.openpnp.machine.reference.axis.ReferenceControllerAxis)) {
+                        return null;
+                    }
+                    org.openpnp.machine.reference.axis.ReferenceControllerAxis z =
+                            (org.openpnp.machine.reference.axis.ReferenceControllerAxis) rawZ;
+                    if (!z.isSafeZoneLowEnabled() && !z.isSafeZoneHighEnabled()) {
+                        return Translations.getString("CalibrationPanel.Now.NotSet"); //$NON-NLS-1$
+                    }
+                    return (z.isSafeZoneLowEnabled() ? value(z.getSafeZoneLow()) : "\u2014") + " \u2013 " //$NON-NLS-1$ //$NON-NLS-2$
+                            + (z.isSafeZoneHighEnabled() ? value(z.getSafeZoneHigh()) : "\u2014"); //$NON-NLS-1$
+                }
                 case PrimaryFiducial:
                     return subject instanceof org.openpnp.spi.base.AbstractHead
                             ? xy(((org.openpnp.spi.base.AbstractHead) subject).getCalibrationPrimaryFiducialLocation())

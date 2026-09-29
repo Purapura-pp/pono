@@ -167,7 +167,8 @@ public class CalibrationItemsTest {
             previous = item.getKind().ordinal();
             if (item.getKind() == CalibrationItem.Kind.Done) {
                 for (CalibrationPlan.Step step : item.getSteps()) {
-                    assertEquals(CalibrationPlan.Status.Done, step.getStatus());
+                    assertTrue(step.getStatus() == CalibrationPlan.Status.Done
+                            || step.getStatus() == CalibrationPlan.Status.NotNeeded, step.toString());
                 }
             }
         }

@@ -60,7 +60,9 @@ import org.pmw.tinylog.Logger;
  * needs doing again. The configuration says whether it was done, for steps whose issues only
  * appear once their prerequisites are - soft limits are not raised on a machine that is not
  * homed. And the measurements a step is judged by say whether they are there to judge by, and
- * current.
+ * current. A step none of the three says anything about is not done: it waits for the steps
+ * before it, whose doing is what makes its issues appear, and once they are done and nothing
+ * appears there is nothing to do.
  * <p>
  * Built from issues found by the calibration page's own search, {@link #scan}; nothing is
  * changed by building it.
@@ -68,8 +70,10 @@ import org.pmw.tinylog.Logger;
 public class CalibrationPlan {
     /** Where a step stands. */
     public enum Status {
-        /** Nothing to do. */
+        /** Done: an issue solved says so, the configuration does, or a measurement found nothing to change. */
         Done,
+        /** Nothing found to do: the search raised nothing for it, its prerequisites done. */
+        NotNeeded,
         /** It has to be done: an issue says so, or the configuration does. */
         Needed,
         /** It can be done, and is worth doing, but the machine works without it. */
@@ -87,7 +91,7 @@ public class CalibrationPlan {
 
         /** Whether a step after it may go ahead. */
         public boolean isSettled() {
-            return this == Done || this == Dismissed;
+            return this == Done || this == NotNeeded || this == Dismissed;
         }
     }
 
@@ -98,7 +102,7 @@ public class CalibrationPlan {
         private final Date when;
         private final String invalidatedBy;
 
-        Basis(Solutions.Issue issue, TestGroup group, MachineDiagnosticsResults results) {
+        public Basis(Solutions.Issue issue, TestGroup group, MachineDiagnosticsResults results) {
             this.issue = issue;
             this.group = group;
             MachineDiagnosticsResults.Run run = results == null || group == null ? null : results.getRun(group);
@@ -448,7 +452,8 @@ public class CalibrationPlan {
                 CalibrationStep.PrimaryFiducial, CalibrationStep.XyBacklash);
         define(CalibrationStep.AdvancedDownCamera, Scope.Camera, none(), of(TestGroup.XyPositioning,
                 TestGroup.DatumBoard, TestGroup.VisionNoise), CalibrationStep.SecondaryFiducial);
-        define(CalibrationStep.AdvancedUpCamera, Scope.Camera, none(), none(), CalibrationStep.BottomCamera);
+        define(CalibrationStep.AdvancedUpCamera, Scope.Camera, none(), none(), CalibrationStep.PrimaryFiducial,
+                CalibrationStep.NozzleTouchPrimary, CalibrationStep.BottomCamera);
         define(CalibrationStep.NozzleTipCalibration, Scope.NozzleTip, none(), none(), CalibrationStep.BottomCamera);
         define(CalibrationStep.PreciseNozzleOffsets, Scope.Nozzle, none(), none(),
                 CalibrationStep.NozzleTouchPrimary);
@@ -619,8 +624,8 @@ public class CalibrationPlan {
                 }
             }
             Status own = ownStatus(step);
-            if ((own == Status.Needed || own == Status.Suggested || own == Status.NeedsMeasurement)
-                    && !step.getUnsettledPrerequisites().isEmpty()) {
+            if ((own == Status.Needed || own == Status.Suggested || own == Status.NeedsMeasurement
+                    || own == Status.NotNeeded) && !step.getUnsettledPrerequisites().isEmpty()) {
                 own = Status.Waiting;
             }
             step.status = own;
@@ -669,7 +674,7 @@ public class CalibrationPlan {
             }
         }
         if (step.kind == CalibrationStep.Remeasure) {
-            return invalidated().isEmpty() ? Status.Done : Status.Needed;
+            return invalidated().isEmpty() ? Status.NotNeeded : Status.Needed;
         }
         if (openAction || openEvidence) {
             return openAction && suggestionOnly && !openEvidence ? Status.Suggested : Status.Needed;
@@ -680,10 +685,27 @@ public class CalibrationPlan {
         if (!step.missing.isEmpty()) {
             return Status.NeedsMeasurement;
         }
-        if (step.configured != null && !step.configured) {
-            return Status.Needed;
+        if (step.configured != null) {
+            return step.configured ? Status.Done : Status.Needed;
         }
-        return Status.Done;
+        if (solved > 0 || isJudgedByMeasurement(step)) {
+            // Done before, or measured and nothing found to change.
+            return Status.Done;
+        }
+        // Nothing says anything about it. Most producers raise a step's issue only once the steps
+        // before it are done, so this is not done: it waits for them, and once they are done and
+        // still nothing is raised, there is nothing to do.
+        return Status.NotNeeded;
+    }
+
+    /** Whether a measurement group that applies to the step decides it. */
+    private boolean isJudgedByMeasurement(Step step) {
+        for (TestGroup group : NEEDS.get(step.kind)) {
+            if (decides(step, group)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The groups whose measurements a calibration step has made out of date. */

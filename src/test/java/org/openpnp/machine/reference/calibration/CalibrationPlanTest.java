@@ -127,6 +127,38 @@ public class CalibrationPlanTest {
                 plan.getStep(CalibrationStep.PrimaryFiducial, head).getStatus());
     }
 
+    /**
+     * The backlash issue is raised only once the primary fiducial is set, the advanced up-looking
+     * camera calibration only once the primary fiducial and the nozzle's Z are, and a simulated
+     * camera never gets an exposure issue: none of them was done, and the page said so.
+     */
+    @Test
+    public void aStepNothingSaysAnythingAboutWaitsForTheStepsBeforeItAndHasNothingToDoAfter() throws Exception {
+        CalibrationPlan plan = plan();
+        CalibrationPlan.Step backlash = plan.getStep(CalibrationStep.XyBacklash, axis(Axis.Type.X));
+        assertEquals(CalibrationPlan.Status.Waiting, backlash.getStatus(), "no issue yet, and the fiducial is not set");
+        assertTrue(backlash.getUnsettledPrerequisites().contains(plan.getStep(CalibrationStep.PrimaryFiducial, head)));
+        Camera up = null;
+        for (Camera camera : machine.getCameras()) {
+            if (camera.getLooking() == Camera.Looking.Up) {
+                up = camera;
+            }
+        }
+        CalibrationPlan.Step advanced = plan.getStep(CalibrationStep.AdvancedUpCamera, up);
+        assertEquals(CalibrationPlan.Status.Waiting, advanced.getStatus());
+        assertTrue(advanced.getUnsettledPrerequisites().contains(
+                plan.getStep(CalibrationStep.NozzleTouchPrimary, head.getDefaultNozzle())),
+                "the issue needs the primary fiducial's Z, so the step waits for it");
+        CalibrationPlan.Step exposure = plan.getStep(CalibrationStep.Exposure, up);
+        assertEquals(CalibrationPlan.Status.NotNeeded, exposure.getStatus(),
+                "nothing before it, and a simulated camera raises no exposure issue");
+        assertTrue(exposure.getStatus().isSettled(), "nothing to do lets the steps after it go ahead");
+        assertEquals(CalibrationPlan.Status.NotNeeded, plan.getSteps(CalibrationStep.Remeasure).get(0).getStatus(),
+                "nothing measured is out of date");
+        assertFalse(plan.getStep(CalibrationStep.SafeZ, head.getDefaultNozzle()).getStatus() == CalibrationPlan.Status.NotNeeded,
+                "a safe zone set in the configuration is done, not nothing");
+    }
+
     @Test
     public void aStepDecidedByAMeasurementAsksForIt() throws Exception {
         CalibrationPlan.Step limits = plan().getSteps(CalibrationStep.ControllerLimits).get(0);
