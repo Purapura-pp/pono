@@ -31,8 +31,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -206,6 +208,50 @@ public class CalibrationRunner {
         }
     }
 
+    /** What a step did while it ran, phase by phase, kept for the report so a failure says where. */
+    public static final class StepTrace {
+        private final List<PhaseTrace> phases = new ArrayList<>();
+        private String decision;
+        private int failedPhase = -1;
+
+        public List<PhaseTrace> getPhases() {
+            return Collections.unmodifiableList(phases);
+        }
+
+        public String getDecision() {
+            return decision;
+        }
+
+        /** The index into {@link #getPhases()} of the phase the step failed in, or -1. */
+        public int getFailedPhase() {
+            return failedPhase;
+        }
+    }
+
+    /** One phase of a step: its number, its name, and every line it reported while it ran. */
+    public static final class PhaseTrace {
+        private final int index;
+        private final String name;
+        private final List<String> details = new ArrayList<>();
+
+        PhaseTrace(int index, String name) {
+            this.index = index;
+            this.name = name;
+        }
+
+        public int getIndex() {
+            return index;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public List<String> getDetails() {
+            return Collections.unmodifiableList(details);
+        }
+    }
+
     /** One session: its backup, its report and what happened to each step. */
     public static final class Session {
         private final Date started = new Date();
@@ -213,8 +259,10 @@ public class CalibrationRunner {
         private File reportDirectory;
         private final List<File> measurements = new ArrayList<>();
         private final List<Result> results = new ArrayList<>();
+        private final Map<String, StepTrace> traces = new LinkedHashMap<>();
         private boolean stopped;
         private String failure;
+        private Throwable failureCause;
 
         public Date getStarted() {
             return started;
@@ -245,6 +293,16 @@ public class CalibrationRunner {
         /** Why the session ended early, or null if it went through. */
         public String getFailure() {
             return failure;
+        }
+
+        /** The exception the failure came from, with its stack, or null. */
+        public Throwable getFailureCause() {
+            return failureCause;
+        }
+
+        /** What the step with this key did while it ran, or null if it did not get that far. */
+        public StepTrace getTrace(String key) {
+            return traces.get(key);
         }
 
         public Result getResult(String key) {
@@ -643,6 +701,11 @@ public class CalibrationRunner {
         private final String key;
         private final CalibrationStep kind;
         private volatile int phase = -1;
+        /** What the step did, kept for the report; a failure marks the phase it stopped in. */
+        private final StepTrace trace = new StepTrace();
+        private PhaseTrace current;
+        /** The real cause, when a calibration failed on its own machine task, or null. */
+        private volatile Throwable failure;
 
         /** @param kind The step, or null for a measurement on its own. */
         Progress(String key, CalibrationStep kind) {
@@ -654,6 +717,10 @@ public class CalibrationRunner {
         public void phase(int index) {
             if (index != phase) {
                 phase = index;
+                String name = kind != null && index >= 0 && index < kind.getPhases().size()
+                        ? kind.getPhases().get(index).getName() : null;
+                current = new PhaseTrace(index, name);
+                trace.phases.add(current);
                 listener.phase(key, index);
             }
         }
@@ -704,6 +771,11 @@ public class CalibrationRunner {
 
         @Override
         public void detail(String text) {
+            if (current == null) {
+                current = new PhaseTrace(phase, null);
+                trace.phases.add(current);
+            }
+            current.details.add(text);
             listener.detail(key, text);
         }
 
@@ -714,7 +786,18 @@ public class CalibrationRunner {
 
         @Override
         public void decision(String text) {
+            trace.decision = text;
             listener.decision(key, text);
+        }
+
+        @Override
+        public void failed(Throwable t) {
+            failure = t;
+        }
+
+        /** Marks, for the report, the phase the step was in when it failed. */
+        void markFailed() {
+            trace.failedPhase = phase;
         }
 
         @Override

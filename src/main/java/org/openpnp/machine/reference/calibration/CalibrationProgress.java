@@ -66,6 +66,15 @@ public final class CalibrationProgress {
         /** Nobody is waited for any more. */
         default void personDone() {
         }
+
+        /**
+         * The step's own procedure failed with this. The calibrations run their procedure on a
+         * machine task and hear the outcome in a callback of their own, so the exception never
+         * reaches whoever accepted the issue; this carries the real cause to the runner, which
+         * would otherwise have only "the issue did not end up solved".
+         */
+        default void failed(Throwable t) {
+        }
     }
 
     private static volatile Sink sink;
@@ -149,5 +158,19 @@ public final class CalibrationProgress {
         if (s != null) {
             s.personDone();
         }
+    }
+
+    /**
+     * @return Whether anyone was told: a calibration that fails while someone runs it lets the
+     *         runner report the real cause; run on its own, nobody listens and it shows the error
+     *         itself, as it always did.
+     */
+    public static boolean failed(Throwable t) {
+        Sink s = sink;
+        if (s == null || t == null) {
+            return false;
+        }
+        s.failed(t);
+        return true;
     }
 }
