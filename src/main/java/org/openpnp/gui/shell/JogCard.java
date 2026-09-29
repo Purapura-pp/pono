@@ -901,13 +901,30 @@ public class JogCard extends JPanel {
                     }
                 }
                 int spare = Math.max(0, w - fixed - Math.max(0, n - 1) * gap);
+                // A row short of its fixed children's widths takes the shortfall off those that
+                // can give it, the last first: the step segments narrow a little rather than
+                // running off the card.
+                int deficit = Math.max(0, fixed + Math.max(0, n - 1) * gap - w);
+                java.util.Map<Component, Integer> given = new java.util.HashMap<>();
+                Component[] children = parent.getComponents();
+                for (int i = children.length - 1; i >= 0 && deficit > 0; i--) {
+                    Component c = children[i];
+                    if (!c.isVisible() || grows(c)) {
+                        continue;
+                    }
+                    int give = Math.min(deficit, c.getPreferredSize().width - c.getMinimumSize().width);
+                    if (give > 0) {
+                        given.put(c, give);
+                        deficit -= give;
+                    }
+                }
                 int x = in.left;
                 for (Component c : parent.getComponents()) {
                     if (!c.isVisible()) {
                         continue;
                     }
                     Dimension p = c.getPreferredSize();
-                    int cw = grows(c) ? spare : p.width;
+                    int cw = grows(c) ? spare : p.width - given.getOrDefault(c, 0);
                     int ch = Math.min(h, p.height);
                     c.setBounds(x, in.top + (h - ch) / 2, cw, ch);
                     x += cw + gap;

@@ -192,7 +192,8 @@ public final class IssueInputs {
                 set(issue.getProperties()[index], value);
                 changed.run();
             });
-            editor.setPreferredSize(new java.awt.Dimension(84, editor.getPreferredSize().height));
+            // Wide enough for "200.000mm" whole: at 84 pixels the field showed its tail, "0.000mm".
+            editor.setPreferredSize(new java.awt.Dimension(124, editor.getPreferredSize().height));
             Runnable reload = () -> {
                 Solutions.Issue.CustomProperty now = issue.getProperties()[index];
                 if (editor instanceof JSpinner && now instanceof Solutions.Issue.IntegerProperty) {
@@ -204,6 +205,7 @@ public final class IssueInputs {
                 else if (editor instanceof JTextField && now instanceof Solutions.Issue.LengthProperty) {
                     Length length = ((Solutions.Issue.LengthProperty) now).get();
                     ((JTextField) editor).setText(length == null ? "" : length.toString()); //$NON-NLS-1$
+                    ((JTextField) editor).setCaretPosition(0);
                 }
             };
             return new Editor(editor, reload);
@@ -264,9 +266,11 @@ public final class IssueInputs {
             return box;
         }
         Solutions.Issue.LengthProperty p = (Solutions.Issue.LengthProperty) property;
-        JTextField field = Forms.input(new JTextField(8), true);
+        JTextField field = Forms.input(new JTextField(10), true);
         Length length = p.get();
         field.setText(length == null ? "" : length.toString()); //$NON-NLS-1$
+        // From the first digit: a field narrower than its text shows the end of it otherwise.
+        field.setCaretPosition(0);
         field.addActionListener(e -> commit(field, p, units, set));
         field.addFocusListener(new java.awt.event.FocusAdapter() {
             @Override
