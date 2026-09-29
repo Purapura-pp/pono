@@ -105,6 +105,14 @@ public class CalibrationSolutions implements Solutions.Subject {
     @Attribute(required = false)
     private double backlashDistanceFactor = Math.pow(2.0, 0.5); 
 
+    /** Extra search, as a fraction of the frame, to recover the small drift between approaches. */
+    @Attribute(required = false)
+    private double backlashRecoverySearch = 0.35;
+
+    /** The speed factor of the long full-range traverses, which are positioning, not measured. */
+    @Attribute(required = false)
+    private double backlashTraverseSpeed = 0.5;
+
     @Attribute(required = false)
     private int nozzleOffsetAngles = 6;
 
@@ -722,7 +730,7 @@ public class CalibrationSolutions implements Solutions.Subject {
         CalibrationProgress.phase("StepTest");
         CalibrationProgress.chart(Translations.getString("CalibrationProgress.Backlash.Chart.Step"), stepTestGraph);
         int steps = (int) Math.ceil(stepTestMm/stepMm);
-        MovableUtils.moveToLocationAtSafeZ(movable, displacedAxisLocation(movable, axis, location, -backlashTestMoveLargeMm*mmAxis, false));
+        MovableUtils.moveToLocationAtSafeZ(movable, displacedAxisLocation(movable, axis, location, -backlashTestMoveLargeMm*mmAxis, false), backlashTraverseSpeed);
         int step = 0;
         Location referenceLocation = location;
         Location stepLocation0 = null;
@@ -738,8 +746,8 @@ public class CalibrationSolutions implements Solutions.Subject {
             // Note: as we are moving the camera (and not the fiducial), the returned location should always be the same, i.e. 
             // the nominal camera location relative to it is already accounted for. 
             // If we'd ever use the bottom camera and a movable nozzle instead of the fiducial, we'd have to account for this ourselves.
-            Location stepLocation1 = machine.getVisionSolutions().getDetectedLocation(camera, movable, 
-                    location, fiducialDiameter, "Accuracy Test Step "+step, false);
+            Location stepLocation1 = detectBacklashFiducial(head, camera, movable, axis,
+                    location, fiducialDiameter, "Accuracy Test Step "+step);
             if (stepLocation0 != null) {
                 absoluteErr = stepLocation1.subtract(referenceLocation).dotProduct(unit);
                 double absoluteErrUnits = absoluteErr.convertToUnits(axis.getUnits()).getValue();
@@ -838,8 +846,8 @@ public class CalibrationSolutions implements Solutions.Subject {
                     }
                     String passTitle = pass == 0 ? "Backlash at Sneak-up Distance " : "Overshoot at Distance ";
                     String distanceOutput = lengthConverter.convertForward(effectiveDistance0);
-                    Location effective0 = machine.getVisionSolutions().getDetectedLocation(camera, movable, 
-                            location, fiducialDiameter, passTitle+distanceOutput+signPositive, false);
+                    Location effective0 = detectBacklashFiducial(head, camera, movable, axis,
+                            location, fiducialDiameter, passTitle+distanceOutput+signPositive);
 
                     // Approach from plus.
                     displacedAxisLocation = displacedAxisLocation(movable, axis, location, distance*mmAxis, distance > backlashTestMoveMm);
@@ -870,8 +878,8 @@ public class CalibrationSolutions implements Solutions.Subject {
                         }
                     }
                     distanceOutput = lengthConverter.convertForward(effectiveDistance1);
-                    Location effective1 = machine.getVisionSolutions().getDetectedLocation(camera, movable, 
-                            location, fiducialDiameter, passTitle+distanceOutput+signNegative, false);
+                    Location effective1 = detectBacklashFiducial(head, camera, movable, axis,
+                            location, fiducialDiameter, passTitle+distanceOutput+signNegative);
 
                     double mmError = effective1.subtract(effective0).dotProduct(unit).getValue();
                     if (movable == camera) {
@@ -950,16 +958,16 @@ public class CalibrationSolutions implements Solutions.Subject {
             double offsetMm = 0;
             for (int pass = 0; pass < backlashCalibrationPasses; pass++) {
                 // Approach from minus.
-                MovableUtils.moveToLocationAtSafeZ(movable, displacedAxisLocation(movable, axis, location, -backlashTestMoveLargeMm*mmAxis, false));
+                MovableUtils.moveToLocationAtSafeZ(movable, displacedAxisLocation(movable, axis, location, -backlashTestMoveLargeMm*mmAxis, false), backlashTraverseSpeed);
                 movable.moveTo(location);
-                Location effective0 = machine.getVisionSolutions().getDetectedLocation(camera, movable, 
-                        location, fiducialDiameter, "Backlash at Speed "+speed+"×"+signPositive, false);
+                Location effective0 = detectBacklashFiducial(head, camera, movable, axis,
+                        location, fiducialDiameter, "Backlash at Speed "+speed+"×"+signPositive);
 
                 // Approach from plus.
-                MovableUtils.moveToLocationAtSafeZ(movable, displacedAxisLocation(movable, axis, location, backlashTestMoveLargeMm*mmAxis, false));
+                MovableUtils.moveToLocationAtSafeZ(movable, displacedAxisLocation(movable, axis, location, backlashTestMoveLargeMm*mmAxis, false), backlashTraverseSpeed);
                 movable.moveTo(location);
-                Location effective1 = machine.getVisionSolutions().getDetectedLocation(camera, movable, 
-                        location, fiducialDiameter, "Backlash at Speed "+speed+"×"+signNegative, false);
+                Location effective1 = detectBacklashFiducial(head, camera, movable, axis,
+                        location, fiducialDiameter, "Backlash at Speed "+speed+"×"+signNegative);
 
                 double mmError = effective1.subtract(effective0).dotProduct(unit).getValue();
                 if (movable == camera) {
@@ -1088,8 +1096,8 @@ public class CalibrationSolutions implements Solutions.Subject {
             movable.moveTo(startMoveLocation);
             Location nominalStepLocation = displacedAxisLocation(movable, axis, location, stepPos*mmAxis, false);
             movable.moveTo(nominalStepLocation);
-            Location stepLocation1 = machine.getVisionSolutions().getDetectedLocation(camera, movable, 
-                    location, fiducialDiameter, "Random Move Accuracy Test Step "+step, false);
+            Location stepLocation1 = detectBacklashFiducial(head, camera, movable, axis,
+                    location, fiducialDiameter, "Random Move Accuracy Test Step "+step);
             absoluteErr = stepLocation1.subtract(referenceLocation).dotProduct(unit);
             largestMm = Math.max(largestMm, Math.abs(absoluteErr.convertToUnits(LengthUnit.Millimeters).getValue()));
             double absoluteErrUnits = absoluteErr.convertToUnits(axis.getUnits()).getValue();
@@ -1165,6 +1173,79 @@ public class CalibrationSolutions implements Solutions.Subject {
             }
         }
         return resolution.getValue();
+    }
+
+    /**
+     * Detect the primary fiducial during backlash calibration, tolerating the fraction of a
+     * millimetre a settling machine leaves between approaches, and turning the bare "Subject not
+     * found" of a machine that has lost its position into a finding that says how far off it was.
+     * <p>
+     * The search is widened first, which recovers the sub-millimetre drift a good machine leaves.
+     * If that still fails the fiducial has left the camera's view, which on the long calibration
+     * traverse can only mean the axis lost steps: {@link #diagnoseLostFiducial} takes the camera to
+     * where the fiducial should be, homing if need be, only to measure how far it had gone, and the
+     * step fails with that distance. A recovered position is never returned into the measurement,
+     * because a reading taken after a lost step is not the backlash of anything.
+     */
+    private Location detectBacklashFiducial(ReferenceHead head, ReferenceCamera camera, HeadMountable movable,
+            ReferenceControllerAxis axis, Location location, Length fiducialDiameter, String diagnostics)
+                    throws Exception {
+        VisionSolutions vision = machine.getVisionSolutions();
+        try {
+            return vision.getDetectedLocation(camera, movable, location, fiducialDiameter, diagnostics, false);
+        }
+        catch (Exception narrow) {
+            try {
+                Circle expected = vision.getExpectedOffsetsAndDiameter(camera, movable, location,
+                        fiducialDiameter, false);
+                Circle wide = vision.getSubjectPixelLocation(camera, movable, expected,
+                        backlashRecoverySearch, diagnostics, null, false);
+                return VisionUtils.getPixelLocation(camera, movable, wide.x, wide.y)
+                        .convertToUnits(location.getUnits());
+            }
+            catch (Exception wider) {
+                throw diagnoseLostFiducial(head, camera, movable, axis, location, fiducialDiameter, diagnostics);
+            }
+        }
+    }
+
+    /**
+     * How far the fiducial went, homing if it takes that to find it at all, as the exception the
+     * backlash step fails with. Best effort: it swallows its own errors so that it always returns
+     * something to throw, and never masks the loss with an error of its own.
+     */
+    private Exception diagnoseLostFiducial(ReferenceHead head, ReferenceCamera camera, HeadMountable movable,
+            ReferenceControllerAxis axis, Location location, Length fiducialDiameter, String diagnostics) {
+        VisionSolutions vision = machine.getVisionSolutions();
+        for (int pass = 0; pass < 2; pass++) {
+            try {
+                if (pass == 1) {
+                    machine.home();
+                }
+                MovableUtils.moveToLocationAtSafeZ(movable, location, backlashTraverseSpeed);
+                Circle expected = vision.getExpectedOffsetsAndDiameter(camera, movable, location,
+                        fiducialDiameter, false);
+                Circle wide = vision.getSubjectPixelLocation(camera, movable, expected,
+                        Math.max(backlashRecoverySearch, 0.5), diagnostics, null, false);
+                Location found = VisionUtils.getPixelLocation(camera, movable, wide.x, wide.y)
+                        .convertToUnits(LengthUnit.Millimeters);
+                Location config = location.convertToUnits(LengthUnit.Millimeters);
+                double driftMm = Math.hypot(found.getX() - config.getX(), found.getY() - config.getY());
+                String msg = String.format(Locale.ROOT,
+                        "The primary fiducial had moved %.3f mm from where it is configured%s during \"%s\": "
+                        + "the axis %s lost its position over the long calibration traverse. Run the Lost steps "
+                        + "diagnostic; backlash cannot be measured until the axis stops losing steps.",
+                        driftMm, pass == 1 ? " (found only after homing)" : "", diagnostics, axis.getName());
+                CalibrationProgress.detail(msg);
+                return new Exception(msg);
+            }
+            catch (Exception stillLost) {
+                Logger.debug(stillLost, "Backlash calibration: fiducial not found on recovery pass {}.", pass);
+            }
+        }
+        return new Exception("The primary fiducial could not be found even after homing the machine, during \""
+                + diagnostics + "\". Check that the primary fiducial location is correct and that the fiducial "
+                + "is in the camera's view after homing.");
     }
 
     private Location displacedAxisLocation(HeadMountable movable, ReferenceControllerAxis axis,

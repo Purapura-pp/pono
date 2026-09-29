@@ -21,6 +21,7 @@ import org.apache.commons.lang3.SystemUtils;
 import org.openpnp.Translations;
 import org.openpnp.gui.MainFrame;
 import org.openpnp.gui.support.MessageBoxes;
+import org.openpnp.machine.reference.calibration.CalibrationProgress;
 import org.openpnp.model.Configuration;
 import org.openpnp.model.Location;
 import org.openpnp.spi.HeadMountable;
@@ -143,8 +144,17 @@ public class UiUtils {
     /**
      * Show an error using a message box. This version provides the simplified interface where the
      * title is fixed to "Error" and the parent is the main frame.
+     * <p>
+     * While a calibration run carries a step out, the real cause of a failure goes to that run -
+     * its live view and its report - instead of a modal dialog that interrupts it; the calibrations
+     * report the outcome to themselves on a machine task, so this is where their exception surfaces.
+     * It is still logged, so nothing is lost. With no run under way it behaves exactly as before.
      */
     public static void showError(Throwable t) {
+        if (CalibrationProgress.failed(t)) {
+            Logger.error(t, "Error during calibration; reported to the run instead of a dialog."); //$NON-NLS-1$
+            return;
+        }
         showError(MainFrame.get(), "Error", t);
     }
     

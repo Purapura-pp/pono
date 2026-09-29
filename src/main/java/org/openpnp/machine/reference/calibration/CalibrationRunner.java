@@ -596,15 +596,25 @@ public class CalibrationRunner {
                 record(session, step, Outcome.Done, "", changes, began); //$NON-NLS-1$
             }
             catch (Exception e) {
-                String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                Logger.warn(e, "Calibration step {} failed.", step.getTitle()); //$NON-NLS-1$
+                // The calibrations run on a machine task and hear the outcome themselves, so the
+                // exception that reaches here is often only "the issue did not end up solved"; the
+                // real cause came through CalibrationProgress.failed while the task ran.
+                Throwable cause = progress.failure != null ? progress.failure : e;
+                String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+                Logger.warn(cause, "Calibration step {} failed.", step.getTitle()); //$NON-NLS-1$
+                progress.markFailed();
                 record(session, step, Outcome.Failed, message, Collections.emptyList(), began);
                 session.failure = step.getTitle() + ": " + message; //$NON-NLS-1$
+                session.failureCause = cause;
                 break;
             }
             finally {
+                session.traces.put(key, progress.trace);
                 CalibrationProgress.detach(progress);
                 personCancel = null;
+                // Keep the report on disk up with the run, so a step that hangs or crashes the
+                // program still leaves what came before it.
+                writeReport(session);
             }
         }
         writeReport(session);
@@ -924,10 +934,57 @@ public class CalibrationRunner {
                 for (String change : result.getChanges()) {
                     out.println("         " + change); //$NON-NLS-1$
                 }
+                writeTrace(out, session.traces.get(result.getKey()));
             }
         }
         catch (IOException e) {
             Logger.warn(e, "The calibration report could not be written to {}.", file); //$NON-NLS-1$
+        }
+        writeFailure(session);
+    }
+
+    /** How many of a phase's lines to keep in the report; a step test alone has a hundred. */
+    private static final int TRACE_LINES = 8;
+
+    /** The phases a step went through, the one it stopped in marked, and why it chose what it chose. */
+    private static void writeTrace(PrintWriter out, StepTrace trace) {
+        if (trace == null || trace.getPhases().isEmpty()) {
+            return;
+        }
+        int total = trace.getPhases().size();
+        for (PhaseTrace phase : trace.getPhases()) {
+            boolean stopped = trace.getFailedPhase() == phase.getIndex();
+            out.println(String.format("         phase %d/%d %s%s", phase.getIndex() + 1, total, //$NON-NLS-1$
+                    phase.getName() == null ? "" : phase.getName(), stopped ? "  <- stopped here" : "")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            List<String> details = phase.getDetails();
+            int from = Math.max(0, details.size() - TRACE_LINES);
+            if (from > 0) {
+                out.println(String.format("             ... %d earlier lines", from)); //$NON-NLS-1$
+            }
+            for (int i = from; i < details.size(); i++) {
+                out.println("             " + details.get(i)); //$NON-NLS-1$
+            }
+        }
+        if (trace.getDecision() != null) {
+            out.println("         decision: " + trace.getDecision()); //$NON-NLS-1$
+        }
+    }
+
+    /** The stack of what failed, beside the report, so the cause is not lost to a one-line message. */
+    private void writeFailure(Session session) {
+        if (session.reportDirectory == null || session.failureCause == null) {
+            return;
+        }
+        File file = new File(session.reportDirectory, "failure.txt"); //$NON-NLS-1$
+        try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8))) {
+            if (session.failure != null) {
+                out.println(session.failure);
+                out.println();
+            }
+            session.failureCause.printStackTrace(out);
+        }
+        catch (IOException e) {
+            Logger.warn(e, "The calibration failure could not be written to {}.", file); //$NON-NLS-1$
         }
     }
 
