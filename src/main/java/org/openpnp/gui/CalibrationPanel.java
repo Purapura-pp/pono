@@ -1167,6 +1167,39 @@ public class CalibrationPanel extends JPanel {
             configuration.save();
         });
         refresh();
+        stillRaised(issues);
+    }
+
+    /**
+     * Says which of the suggestions just applied the search raised again: the value applied did
+     * not change what the check found, and the row would otherwise come back without a word.
+     */
+    private void stillRaised(List<Solutions.Issue> applied) {
+        Set<String> fingerprints = new HashSet<>();
+        for (Solutions.Issue issue : applied) {
+            fingerprints.add(issue.getFingerprint());
+        }
+        List<String> raised = new ArrayList<>();
+        List<Solutions.Issue> found = new ArrayList<>(others);
+        if (plan != null) {
+            for (CalibrationPlan.Step step : plan.getSteps()) {
+                found.addAll(step.getIssues());
+            }
+        }
+        for (Solutions.Issue issue : found) {
+            if (issue.getState() == Solutions.State.Open && fingerprints.remove(issue.getFingerprint())) {
+                raised.add(issue.getIssue() + " \u00b7 " + CalibrationPlan.nameOf(issue.getSubject())); //$NON-NLS-1$
+            }
+        }
+        if (raised.isEmpty()) {
+            return;
+        }
+        Dialogs.show(SwingUtilities.getWindowAncestor(this), new Dialogs.Content().tone(Dialogs.Tone.Warn, "alert") //$NON-NLS-1$
+                .title(Translations.getString("CalibrationPanel.StillRaised.Title")) //$NON-NLS-1$
+                .what(Translations.getString("CalibrationPanel.StillRaised.What")) //$NON-NLS-1$
+                .list(String.join("\n", raised)) //$NON-NLS-1$
+                .more(Translations.getString("CalibrationPanel.StillRaised.More")), //$NON-NLS-1$
+                List.of(Dialogs.Choice.primary(Translations.getString("Dialogs.Close"))), 0, 0); //$NON-NLS-1$
     }
 
     private void dismiss(List<Solutions.Issue> issues) {

@@ -26,6 +26,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -894,7 +895,8 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     .measuredBy(TestGroup.CameraSettle)
                     .withCalibrationStep(CalibrationStep.CameraSettle));
         }
-        else if (measured > 0 && configured > measured * 1000 * SETTLE_EXCESS) {
+        else if (measured > 0 && configured > measured * 1000 * SETTLE_EXCESS
+                && settleMilliseconds(wait * SETTLE_MARGIN) < configured) {
             solutions.add(new SettleTimeIssue(camera,
                     "The camera waits considerably longer than the image takes to settle.",
                     "Shorten the wait to what the image was measured needing.",
@@ -1024,8 +1026,12 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
 
     /**
      * An axis that lost steps at some speed factor. The offered fix is the feed rate scaled to
-     * the highest factor that came back clean, which is the one thing that is known to be safe;
-     * acceleration is the other suspect and the description says so.
+     * the highest factor below the one that lost that came back clean, which is the one thing
+     * that is known to be safe; acceleration is the other suspect and the description says so.
+     * A loss at one speed with clean runs above it is not a speed limit - a stepper's mid-band
+     * resonance, or the measurement itself - and lowering the feed rate would not help, so that
+     * is reported as such, with nothing to apply. A speed at which the fiducial was lost
+     * altogether counts as lost.
      */
     private void findLostStepsIssues(Solutions solutions, MachineDiagnosticsResults results) {
         Map<String, List<MachineDiagnosticsResults.LostSteps>> byAxis = new LinkedHashMap<>();
@@ -1038,35 +1044,85 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
             if (axis == null) {
                 continue;
             }
+            List<MachineDiagnosticsResults.LostSteps> runs = new ArrayList<>(entry.getValue());
+            runs.sort(Comparator.comparingDouble(MachineDiagnosticsResults.LostSteps::getSpeedFactor));
             double lowestLosingFactor = Double.NaN;
-            double highestCleanFactor = 0;
+            double highestCleanBelow = 0;
+            List<String> cleanAbove = new ArrayList<>();
             double worstDrift = 0;
             double travel = 0;
             double feedRateAtTest = 0;
-            for (MachineDiagnosticsResults.LostSteps loss : entry.getValue()) {
-                boolean lost = Math.abs(loss.getDriftMm()) > LOST_STEPS_TOLERANCE_MM;
+            for (MachineDiagnosticsResults.LostSteps loss : runs) {
+                boolean lost = Double.isNaN(loss.getDriftMm())
+                        || Math.abs(loss.getDriftMm()) > LOST_STEPS_TOLERANCE_MM;
                 if (lost) {
-                    if (Double.isNaN(lowestLosingFactor) || loss.getSpeedFactor() < lowestLosingFactor) {
+                    if (Double.isNaN(lowestLosingFactor)) {
                         lowestLosingFactor = loss.getSpeedFactor();
                         worstDrift = loss.getDriftMm();
                         travel = loss.getTravelMm();
                     }
                 }
-                else if (loss.getSpeedFactor() > highestCleanFactor) {
-                    highestCleanFactor = loss.getSpeedFactor();
+                else if (Double.isNaN(lowestLosingFactor)) {
+                    highestCleanBelow = loss.getSpeedFactor();
+                }
+                else {
+                    cleanAbove.add(String.format("%.2f", loss.getSpeedFactor()));
                 }
                 feedRateAtTest = loss.getFeedRateAtTest();
             }
             if (Double.isNaN(lowestLosingFactor)) {
                 continue;
             }
+            if (!cleanAbove.isEmpty()) {
+                solutions.add(new PointerIssue(axis,
+                        "The axis lost steps at a lower speed and came back clean at a higher one.",
+                        "Measure the lost steps again; a loss that repeats at one speed only is a "
+                                + "resonance to keep the axis off, not a feed rate to lower.",
+                        Solutions.Severity.Warning, WIKI_MACHINE_AXES,
+                        String.format("After %.0f mm of travel at %.2f of its feed rate on %s, axis %s "
+                                + "came back %s mm from where it started, but at %s of the feed rate "
+                                + "it came back where it started. A loss at one speed and not above "
+                                + "it is not a speed limit: it is a stepper motor's mid-band "
+                                + "resonance, or the measurement itself - the machine is homed "
+                                + "before each speed when set to, and a homing that lands elsewhere "
+                                + "reads as a loss. Lowering the feed rate would not help. Measure "
+                                + "again; if the loss repeats at the same speed, keep the axis off "
+                                + "that speed.", travel, lowestLosingFactor, when, axis.getName(),
+                                Double.isNaN(worstDrift) ? "more than the camera could see"
+                                        : String.format("%.4f", worstDrift),
+                                String.join(", ", cleanAbove)))
+                                        .measuredBy(TestGroup.LostSteps));
+                continue;
+            }
             double configured = axis.getMotionLimit(1);
-            if (feedRateAtTest > 0 && configured < feedRateAtTest * lowestLosingFactor) {
+            double tested = feedRateAtTest > 0 ? feedRateAtTest : configured;
+            if (configured < tested * lowestLosingFactor) {
                 // Already slowed below the speed that lost steps since the measurement.
                 continue;
             }
-            double offered = (feedRateAtTest > 0 ? feedRateAtTest : configured)
-                    * (highestCleanFactor > 0 ? highestCleanFactor : 0.5);
+            double offered = tested * (highestCleanBelow > 0 ? highestCleanBelow : lowestLosingFactor * 0.5);
+            if (offered >= configured) {
+                // Nothing to lower: what is applied has to change what the check finds.
+                continue;
+            }
+            String drift = Double.isNaN(worstDrift) ? "more than the camera could see"
+                    : String.format("%.4f", worstDrift);
+            String explanation = highestCleanBelow > 0
+                    ? String.format("After %.0f mm of travel at %.2f of its feed rate on %s, axis %s "
+                            + "came back %s mm from where it started, and the controller's "
+                            + "position count did not know. At %.2f of the feed rate it came back "
+                            + "where it started. The offered feed rate is that fraction of the one "
+                            + "it was tested with; if the loss is from acceleration rather than "
+                            + "speed, lowering the acceleration instead would let the feed rate "
+                            + "stay.", travel, lowestLosingFactor, when, axis.getName(), drift,
+                            highestCleanBelow)
+                    : String.format("After %.0f mm of travel at %.2f of its feed rate on %s, axis %s "
+                            + "came back %s mm from where it started, and the controller's "
+                            + "position count did not know. No lower speed was tested, so the "
+                            + "offered feed rate is half the one it lost steps at; if the loss is "
+                            + "from acceleration rather than speed, lowering the acceleration "
+                            + "instead would let the feed rate stay.", travel, lowestLosingFactor,
+                            when, axis.getName(), drift);
             solutions.add(new LengthSettingIssue(axis,
                     "The axis loses steps at the speed it is planned with.",
                     "Lower the feed rate to the highest speed that was measured arriving where "
@@ -1074,14 +1130,7 @@ public class MachineDiagnostics extends AbstractModelObject implements Solutions
                     Solutions.Severity.Error, WIKI_MACHINE_AXES,
                     "Feed rate per second",
                     "The feed rate the axis will be planned with.",
-                    String.format("After %.0f mm of travel at %.2f of its feed rate on %s, axis %s "
-                            + "came back %.4f mm from where it started, and the controller's "
-                            + "position count did not know. At %.2f of the feed rate it came back "
-                            + "where it started. The offered feed rate is that fraction of the one "
-                            + "it was tested with; if the loss is from acceleration rather than "
-                            + "speed, lowering the acceleration instead would let the feed rate "
-                            + "stay.", travel, lowestLosingFactor, when, axis.getName(), worstDrift,
-                            highestCleanFactor),
+                    explanation,
                     axis.getFeedratePerSecond(),
                     new Length(offered, AxesLocation.getUnits()),
                     (value, solved) -> axis.setFeedratePerSecond(value))

@@ -927,12 +927,16 @@ public final class Ui {
         button.putClientProperty(MIN_WIDTH, 38);
     }
 
-    /** The stylesheet's {@code .seg.tight .s}: at least 30 wide, 6 pixel padding. */
+    /**
+     * The stylesheet's {@code .seg.tight .s}: at least 30 wide, 5 pixel padding. The five jog
+     * distances share their row with its label and unit, and at 6 pixels of padding the row was
+     * 2 pixels short of them at the card's full size, 6 at its wide one.
+     */
     public static void segTight(javax.swing.AbstractButton button) {
         seg(button);
         Object style = button.getClientProperty(FlatClientProperties.STYLE);
         button.putClientProperty(FlatClientProperties.STYLE,
-                style + "; minimumWidth: 30; margin: 0,6,0,6"); //$NON-NLS-1$
+                style + "; minimumWidth: 30; margin: 0,5,0,5"); //$NON-NLS-1$
         button.putClientProperty(MIN_WIDTH, 30);
     }
 

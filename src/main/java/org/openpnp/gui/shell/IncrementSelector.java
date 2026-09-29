@@ -56,24 +56,11 @@ public class IncrementSelector extends JPanel {
 
     public IncrementSelector() {
         // The stylesheet's .seg: 3 pixel padding, 2 pixel gaps, 24 pixel segments each as wide as
-        // its distance, at least 38.
-        setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 2, 0) {
-            @Override
-            public java.awt.Dimension preferredLayoutSize(java.awt.Container target) {
-                // FlowLayout pads the row with a gap at either end; the stylesheet does not.
-                java.awt.Dimension size = super.preferredLayoutSize(target);
-                size.width -= 2 * getHgap();
-                return size;
-            }
-
-            @Override
-            public void layoutContainer(java.awt.Container target) {
-                super.layoutContainer(target);
-                for (Component c : target.getComponents()) {
-                    c.setLocation(c.getX() - getHgap(), c.getY());
-                }
-            }
-        });
+        // its distance, at least 38. One row, whatever the width: this was a FlowLayout that
+        // reported its width without the gaps at its ends and then wanted them when it laid out,
+        // so that given exactly the width it asked for it wrapped the fifth segment under the
+        // others, where the row's height cut it off.
+        setLayout(new OneRow());
         setOpaque(false);
         setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 3, 3, 3));
         ButtonGroup group = new ButtonGroup();
@@ -117,6 +104,86 @@ public class IncrementSelector extends JPanel {
      */
     public Component getFocusTarget() {
         return buttons[level - 1];
+    }
+
+    /** As wide as its segments and no wider: a row with room to spare does not stretch it. */
+    @Override
+    public java.awt.Dimension getMaximumSize() {
+        return getPreferredSize();
+    }
+
+    /** The segments side by side, 2 pixels apart, each as wide as it asks, in one row. */
+    private static final class OneRow implements java.awt.LayoutManager {
+        private static final int GAP = 2;
+
+        @Override
+        public void addLayoutComponent(String name, Component component) {
+        }
+
+        @Override
+        public void removeLayoutComponent(Component component) {
+        }
+
+        @Override
+        public java.awt.Dimension preferredLayoutSize(java.awt.Container target) {
+            Insets insets = target.getInsets();
+            int width = 0;
+            int height = 0;
+            int shown = 0;
+            for (Component c : target.getComponents()) {
+                if (!c.isVisible()) {
+                    continue;
+                }
+                java.awt.Dimension size = c.getPreferredSize();
+                width += size.width;
+                height = Math.max(height, size.height);
+                shown++;
+            }
+            width += Math.max(0, shown - 1) * GAP;
+            return new java.awt.Dimension(width + insets.left + insets.right, height + insets.top + insets.bottom);
+        }
+
+        /** The least a segment is drawn at: its distance still readable, "100" in the small mono. */
+        private static final int LEAST = 24;
+
+        @Override
+        public java.awt.Dimension minimumLayoutSize(java.awt.Container target) {
+            java.awt.Dimension preferred = preferredLayoutSize(target);
+            int shown = 0;
+            for (Component c : target.getComponents()) {
+                shown += c.isVisible() ? 1 : 0;
+            }
+            Insets insets = target.getInsets();
+            return new java.awt.Dimension(Math.min(preferred.width,
+                    shown * LEAST + Math.max(0, shown - 1) * GAP + insets.left + insets.right), preferred.height);
+        }
+
+        /** Each at its width, or all of them a little narrower where the row is short of it. */
+        @Override
+        public void layoutContainer(java.awt.Container target) {
+            Insets insets = target.getInsets();
+            int shown = 0;
+            int wanted = 0;
+            for (Component c : target.getComponents()) {
+                if (c.isVisible()) {
+                    shown++;
+                    wanted += c.getPreferredSize().width;
+                }
+            }
+            int available = target.getWidth() - insets.left - insets.right - Math.max(0, shown - 1) * GAP;
+            double scale = wanted > available && wanted > 0 ? available / (double) wanted : 1;
+            int x = insets.left;
+            int room = target.getHeight() - insets.top - insets.bottom;
+            for (Component c : target.getComponents()) {
+                if (!c.isVisible()) {
+                    continue;
+                }
+                java.awt.Dimension size = c.getPreferredSize();
+                int width = Math.max(LEAST, (int) Math.floor(size.width * scale));
+                c.setBounds(x, insets.top + Math.max(0, (room - size.height) / 2), width, size.height);
+                x += width + GAP;
+            }
+        }
     }
 
     /** The tight segments, for the jog card, where five of them share the row with its label. */

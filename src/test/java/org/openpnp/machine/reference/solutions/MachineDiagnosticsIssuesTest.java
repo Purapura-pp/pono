@@ -3,6 +3,7 @@ package org.openpnp.machine.reference.solutions;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
@@ -70,6 +71,8 @@ public class MachineDiagnosticsIssuesTest {
             "The camera waits a fixed time shorter than the delay of its own frames.";
     private static final String LOSES_STEPS =
             "The axis loses steps at the speed it is planned with.";
+    private static final String LOSES_STEPS_AT_ONE_SPEED =
+            "The axis lost steps at a lower speed and came back clean at a higher one.";
     private static final String Z_HAS_SLACK =
             "The Z axis has slack between moving down and moving up that is not compensated.";
     private static final String MILLIMETRE_IS_NOT_A_MILLIMETRE =
@@ -434,6 +437,61 @@ public class MachineDiagnosticsIssuesTest {
 
         assertEquals(200, millimetres(xAxis.getFeedratePerSecond()),
                 "half the tested feed rate: the highest factor that came back clean");
+    }
+
+    /**
+     * Lost at 0.25, clean at 0.5 and above: the machine seen on 2026-09-21, which was offered its
+     * own feed rate, applied it, and had the same suggestion back after the search.
+     */
+    @Test
+    public void aLossAtOneSpeedWithCleanRunsAboveItIsNotAFeedRateToLower() throws Exception {
+        xAxis.setFeedratePerSecond(new Length(200, LengthUnit.Millimeters));
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setLostSteps(List.of(
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.25, 4054, 0.7229, 200),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.5, 4054, 0.004, 200),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.75, 4054, -0.006, 200),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 1.0, 4054, 0.003, 200)));
+
+        List<String> reported = wordings(results);
+
+        assertFalse(reported.contains(LOSES_STEPS), "nothing to apply: the offer would have been the feed rate as it is");
+        Solutions.Issue warning = issue(results, LOSES_STEPS_AT_ONE_SPEED);
+        assertFalse(warning.canBeAccepted());
+        assertNull(warning.getCalibrationStep(), "not a step's to carry out: measured again, or planned around");
+        assertTrue(warning.getExtendedDescription().contains("0.50, 0.75, 1.00"), warning.getExtendedDescription());
+    }
+
+    @Test
+    public void lostStepsAtEveryTestedSpeedOfferHalfTheLowest() throws Exception {
+        xAxis.setFeedratePerSecond(new Length(400, LengthUnit.Millimeters));
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setLostSteps(List.of(
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.25, 4000, 0.9, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.5, 4000, 1.4, 400)));
+
+        Solutions.Issue issue = issue(results, LOSES_STEPS);
+        // The explanation of the case, in whichever language: the one with a clean speed names it.
+        assertTrue(issue.getExtendedDescription().contains("0.9000"), issue.getExtendedDescription());
+        assertFalse(issue.getExtendedDescription().contains("0.50"), issue.getExtendedDescription());
+        issue.setState(Solutions.State.Solved);
+
+        assertEquals(50, millimetres(xAxis.getFeedratePerSecond()), 1e-9, "half of 0.25 of the tested rate");
+        assertFalse(wordings(results).contains(LOSES_STEPS), "what was applied silences the check");
+    }
+
+    @Test
+    public void aSpeedAtWhichTheFiducialWasLostCountsAsLost() throws Exception {
+        xAxis.setFeedratePerSecond(new Length(400, LengthUnit.Millimeters));
+        MachineDiagnosticsResults results = new MachineDiagnosticsResults();
+        results.setLostSteps(List.of(
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 0.5, 4000, 0.004, 400),
+                new MachineDiagnosticsResults.LostSteps(xAxis.getId(), 1.0, 4000, Double.NaN, 400)));
+
+        Solutions.Issue issue = issue(results, LOSES_STEPS);
+        issue.setState(Solutions.State.Solved);
+
+        assertEquals(200, millimetres(xAxis.getFeedratePerSecond()), 1e-9);
     }
 
     @Test
