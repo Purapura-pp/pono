@@ -47,6 +47,8 @@ public class CalibrationRunnerTest {
     private final class Step extends Solutions.Issue {
         private boolean fails;
         private int accepted;
+        /** The real cause a failing step reports through CalibrationProgress, as the calibrations do. */
+        private Throwable reportedCause;
 
         Step(CalibrationStep kind, Object subject, String wording) {
             super(machine, wording, "Do it.", Solutions.Severity.Warning, null);
@@ -55,6 +57,13 @@ public class CalibrationRunnerTest {
 
         Step failing() {
             fails = true;
+            return this;
+        }
+
+        /** Fails, having first reported this the way a calibration reports from its machine task. */
+        Step reporting(Throwable cause) {
+            fails = true;
+            reportedCause = cause;
             return this;
         }
     }
@@ -98,6 +107,9 @@ public class CalibrationRunnerTest {
             Step fakeStep = (Step) issue;
             fakeStep.accepted++;
             if (fakeStep.fails) {
+                if (fakeStep.reportedCause != null) {
+                    CalibrationProgress.failed(fakeStep.reportedCause);
+                }
                 throw new Exception("it did not work");
             }
             CalibrationProgress.decision("because it had to");
@@ -283,6 +295,48 @@ public class CalibrationRunnerTest {
         CalibrationRunner.Session again = new CalibrationRunner(fake, null).run(List.of(key), Set.of(), Set.of(key));
         assertEquals(CalibrationRunner.Outcome.Done, again.getResult(key).getOutcome());
         assertEquals(1, subPixel.accepted, "the issue it was done with is accepted again");
+    }
+
+    @Test
+    public void theReportRecordsWhatEachPhaseFoundAndWhyItChose() throws Exception {
+        add(CalibrationStep.ControllerLimits, machine, "Controller limits.");
+        String key = key(CalibrationStep.ControllerLimits);
+
+        CalibrationRunner.Session session = new CalibrationRunner(fake, null).run(List.of(key), Set.of());
+
+        assertEquals(CalibrationRunner.Outcome.Done, session.getResult(key).getOutcome());
+        CalibrationRunner.StepTrace trace = session.getTrace(key);
+        assertNotNull(trace, "the step's phases are kept for the report");
+        assertEquals("because it had to", trace.getDecision());
+        String report = Files.readString(new File(session.getReportDirectory(), "report.txt").toPath(),
+                StandardCharsets.UTF_8);
+        assertTrue(report.contains("measured Firmware"), report);
+        assertTrue(report.contains("because it had to"), report);
+        assertTrue(report.contains("phase"), report);
+    }
+
+    @Test
+    public void aFailureIsReportedByItsRealCauseWithThePhaseAndAStack() throws Exception {
+        add(CalibrationStep.ControllerLimits, machine, "Controller limits.")
+                .reporting(new IllegalStateException("the camera saw nothing"));
+        String key = key(CalibrationStep.ControllerLimits);
+
+        CalibrationRunner.Session session = new CalibrationRunner(fake, null).run(List.of(key), Set.of());
+
+        assertEquals(CalibrationRunner.Outcome.Failed, session.getResult(key).getOutcome());
+        // The real cause, not the bare "the issue did not end up solved".
+        assertTrue(session.getFailure().contains("the camera saw nothing"), session.getFailure());
+        assertEquals("the camera saw nothing", session.getFailureCause().getMessage());
+        CalibrationRunner.StepTrace trace = session.getTrace(key);
+        assertNotNull(trace);
+        assertTrue(trace.getFailedPhase() >= 0, "the phase it stopped in is marked");
+        File dir = session.getReportDirectory();
+        String report = Files.readString(new File(dir, "report.txt").toPath(), StandardCharsets.UTF_8);
+        assertTrue(report.contains("the camera saw nothing"), report);
+        assertTrue(report.contains("stopped here"), report);
+        String failure = Files.readString(new File(dir, "failure.txt").toPath(), StandardCharsets.UTF_8);
+        assertTrue(failure.contains("the camera saw nothing"), failure);
+        assertTrue(failure.contains("IllegalStateException"), failure);
     }
 
     @Test

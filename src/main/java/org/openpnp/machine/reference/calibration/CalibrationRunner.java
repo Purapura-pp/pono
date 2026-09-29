@@ -31,8 +31,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -206,6 +208,50 @@ public class CalibrationRunner {
         }
     }
 
+    /** What a step did while it ran, phase by phase, kept for the report so a failure says where. */
+    public static final class StepTrace {
+        private final List<PhaseTrace> phases = new ArrayList<>();
+        private String decision;
+        private int failedPhase = -1;
+
+        public List<PhaseTrace> getPhases() {
+            return Collections.unmodifiableList(phases);
+        }
+
+        public String getDecision() {
+            return decision;
+        }
+
+        /** The index into {@link #getPhases()} of the phase the step failed in, or -1. */
+        public int getFailedPhase() {
+            return failedPhase;
+        }
+    }
+
+    /** One phase of a step: its number, its name, and every line it reported while it ran. */
+    public static final class PhaseTrace {
+        private final int index;
+        private final String name;
+        private final List<String> details = new ArrayList<>();
+
+        PhaseTrace(int index, String name) {
+            this.index = index;
+            this.name = name;
+        }
+
+        public int getIndex() {
+            return index;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public List<String> getDetails() {
+            return Collections.unmodifiableList(details);
+        }
+    }
+
     /** One session: its backup, its report and what happened to each step. */
     public static final class Session {
         private final Date started = new Date();
@@ -213,8 +259,10 @@ public class CalibrationRunner {
         private File reportDirectory;
         private final List<File> measurements = new ArrayList<>();
         private final List<Result> results = new ArrayList<>();
+        private final Map<String, StepTrace> traces = new LinkedHashMap<>();
         private boolean stopped;
         private String failure;
+        private Throwable failureCause;
 
         public Date getStarted() {
             return started;
@@ -245,6 +293,16 @@ public class CalibrationRunner {
         /** Why the session ended early, or null if it went through. */
         public String getFailure() {
             return failure;
+        }
+
+        /** The exception the failure came from, with its stack, or null. */
+        public Throwable getFailureCause() {
+            return failureCause;
+        }
+
+        /** What the step with this key did while it ran, or null if it did not get that far. */
+        public StepTrace getTrace(String key) {
+            return traces.get(key);
         }
 
         public Result getResult(String key) {
@@ -538,15 +596,25 @@ public class CalibrationRunner {
                 record(session, step, Outcome.Done, "", changes, began); //$NON-NLS-1$
             }
             catch (Exception e) {
-                String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                Logger.warn(e, "Calibration step {} failed.", step.getTitle()); //$NON-NLS-1$
+                // The calibrations run on a machine task and hear the outcome themselves, so the
+                // exception that reaches here is often only "the issue did not end up solved"; the
+                // real cause came through CalibrationProgress.failed while the task ran.
+                Throwable cause = progress.failure != null ? progress.failure : e;
+                String message = cause.getMessage() == null ? cause.getClass().getSimpleName() : cause.getMessage();
+                Logger.warn(cause, "Calibration step {} failed.", step.getTitle()); //$NON-NLS-1$
+                progress.markFailed();
                 record(session, step, Outcome.Failed, message, Collections.emptyList(), began);
                 session.failure = step.getTitle() + ": " + message; //$NON-NLS-1$
+                session.failureCause = cause;
                 break;
             }
             finally {
+                session.traces.put(key, progress.trace);
                 CalibrationProgress.detach(progress);
                 personCancel = null;
+                // Keep the report on disk up with the run, so a step that hangs or crashes the
+                // program still leaves what came before it.
+                writeReport(session);
             }
         }
         writeReport(session);
@@ -643,6 +711,11 @@ public class CalibrationRunner {
         private final String key;
         private final CalibrationStep kind;
         private volatile int phase = -1;
+        /** What the step did, kept for the report; a failure marks the phase it stopped in. */
+        private final StepTrace trace = new StepTrace();
+        private PhaseTrace current;
+        /** The real cause, when a calibration failed on its own machine task, or null. */
+        private volatile Throwable failure;
 
         /** @param kind The step, or null for a measurement on its own. */
         Progress(String key, CalibrationStep kind) {
@@ -654,6 +727,10 @@ public class CalibrationRunner {
         public void phase(int index) {
             if (index != phase) {
                 phase = index;
+                String name = kind != null && index >= 0 && index < kind.getPhases().size()
+                        ? kind.getPhases().get(index).getName() : null;
+                current = new PhaseTrace(index, name);
+                trace.phases.add(current);
                 listener.phase(key, index);
             }
         }
@@ -704,6 +781,11 @@ public class CalibrationRunner {
 
         @Override
         public void detail(String text) {
+            if (current == null) {
+                current = new PhaseTrace(phase, null);
+                trace.phases.add(current);
+            }
+            current.details.add(text);
             listener.detail(key, text);
         }
 
@@ -714,7 +796,18 @@ public class CalibrationRunner {
 
         @Override
         public void decision(String text) {
+            trace.decision = text;
             listener.decision(key, text);
+        }
+
+        @Override
+        public void failed(Throwable t) {
+            failure = t;
+        }
+
+        /** Marks, for the report, the phase the step was in when it failed. */
+        void markFailed() {
+            trace.failedPhase = phase;
         }
 
         @Override
@@ -841,10 +934,57 @@ public class CalibrationRunner {
                 for (String change : result.getChanges()) {
                     out.println("         " + change); //$NON-NLS-1$
                 }
+                writeTrace(out, session.traces.get(result.getKey()));
             }
         }
         catch (IOException e) {
             Logger.warn(e, "The calibration report could not be written to {}.", file); //$NON-NLS-1$
+        }
+        writeFailure(session);
+    }
+
+    /** How many of a phase's lines to keep in the report; a step test alone has a hundred. */
+    private static final int TRACE_LINES = 8;
+
+    /** The phases a step went through, the one it stopped in marked, and why it chose what it chose. */
+    private static void writeTrace(PrintWriter out, StepTrace trace) {
+        if (trace == null || trace.getPhases().isEmpty()) {
+            return;
+        }
+        int total = trace.getPhases().size();
+        for (PhaseTrace phase : trace.getPhases()) {
+            boolean stopped = trace.getFailedPhase() == phase.getIndex();
+            out.println(String.format("         phase %d/%d %s%s", phase.getIndex() + 1, total, //$NON-NLS-1$
+                    phase.getName() == null ? "" : phase.getName(), stopped ? "  <- stopped here" : "")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+            List<String> details = phase.getDetails();
+            int from = Math.max(0, details.size() - TRACE_LINES);
+            if (from > 0) {
+                out.println(String.format("             ... %d earlier lines", from)); //$NON-NLS-1$
+            }
+            for (int i = from; i < details.size(); i++) {
+                out.println("             " + details.get(i)); //$NON-NLS-1$
+            }
+        }
+        if (trace.getDecision() != null) {
+            out.println("         decision: " + trace.getDecision()); //$NON-NLS-1$
+        }
+    }
+
+    /** The stack of what failed, beside the report, so the cause is not lost to a one-line message. */
+    private void writeFailure(Session session) {
+        if (session.reportDirectory == null || session.failureCause == null) {
+            return;
+        }
+        File file = new File(session.reportDirectory, "failure.txt"); //$NON-NLS-1$
+        try (PrintWriter out = new PrintWriter(Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8))) {
+            if (session.failure != null) {
+                out.println(session.failure);
+                out.println();
+            }
+            session.failureCause.printStackTrace(out);
+        }
+        catch (IOException e) {
+            Logger.warn(e, "The calibration failure could not be written to {}.", file); //$NON-NLS-1$
         }
     }
 
